@@ -104,6 +104,7 @@ void PSCGModel::initialIteration(){
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
 	    subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
+	    subproblemSolvers[tS]->updateSolnInfo();
 	    subproblemSolvers[tS]->setXToVertex();
 	    subproblemSolvers[tS]->setYToVertex();
 
@@ -161,7 +162,7 @@ void PSCGModel::performColGenStep(){
 
 		//Solve Lagrangian MIP
 		subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
-		
+		subproblemSolvers[tS]->updateSolnInfo();
 		//updateTimer.addTime(updateTimeThisStep);
 
 		//Acumulate the values for the Lagrangian subproblems

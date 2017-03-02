@@ -60,12 +60,14 @@ int main(int argc, char **argv) {
 
 	PSCGModel model(&par);
 	//model.upBranchAllSPsAt(9,1.0);
+#if 0
 	model.upBranchAllSPsAt(1,1.0);
 	model.upBranchAllSPsAt(3,1.0);
 	model.upBranchAllSPsAt(5,1.0);
 	model.upBranchAllSPsAt(7,1.0);
 	model.upBranchAllSPsAt(9,1.0);
 	model.downBranchAllSPsAt(11,0.0);
+#endif
 
 	
 	//******************Decision Variable and Data Storage Setup**********************
@@ -132,6 +134,7 @@ int main(int argc, char **argv) {
 #else
 		model.regularIteration();
 #endif
+		//cout << "Proc " << mpiRank << " solution is feasible: " << model.checkZHasFullRecourse() << endl;
 
 
 		//****************** Check Termination Conditions **********************

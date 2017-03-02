@@ -75,6 +75,7 @@ vector<double*> y_current;
 double* z_current;// = new double[n1];
 double* z_local;// = new double[n1];
 double* totalSoln_; //new double[n1+n2];
+vector<double> constrVec_; //This is filled with the value of Ax
 
 //initialising zˆ0=0
 #if 0
@@ -123,6 +124,14 @@ int numIntVars_;
 int *intVar_;
 char *colType_;
 
+double *origVarLB_;
+double *origVarUB_;
+
+/** Incumbent objective value. */
+double incObjValue_;
+/** Incumbent */
+double *incumbent_;
+
 // Termination conditions
 int totalNoGSSteps;
 
@@ -157,6 +166,7 @@ PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),l
 
 	assignSubproblems();
 	setupSolvers();
+	
 }
 
 ~PSCGModel(){
@@ -169,13 +179,18 @@ PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),l
 	}
 	delete[] z_current;
 	delete[] z_local;
+	delete [] origVarLB_;
+	delete [] origVarUB_;
+	delete [] incumbent_;
 	delete [] totalSoln_;
 }
+
 void setMPIParams(int rank, int size){
 	mpiRank=rank;
 	mpiSize=size;
 	mpiHead=(mpiRank==0);
 }
+
 void assignSubproblems(){
 	for (int tS = 0; tS < nS; tS++) {
 		//scenarioAssign[tS] = tS % mpiSize;
@@ -199,6 +214,9 @@ void initialiseModel(){
 	    n2 = pdBodur.get_n2();
 	    nS = pdBodur.get_nS();
 	    totalSoln_=new double[n1+n2];
+	    colType_ = new char[n1];
+	    intVar_ = new int[n1];
+	    numIntVars_=0;
 	    break;
 	  case 2:
 	    smpsModel.readSmps(par->filename.c_str());
@@ -226,9 +244,24 @@ void initialiseModel(){
 	}
 	z_current = new double[n1];
 	z_local = new double[n1];
+	origVarLB_ = new double[n1];
+	origVarUB_ = new double[n1];
+	incumbent_ = new double[n1];
 	//initialising zˆ0=0
 	for (int i = 0; i < n1; i++) {
     	    z_current[i] = 0;
+	}
+	switch( ftype ){
+	  case 1:
+	    //TODO: initialise origVarBds.
+	    break;
+	  case 2:
+	    smpsModel.copyCoreColLower(origVarLB_,0);
+	    smpsModel.copyCoreColUpper(origVarUB_,0);
+	    break;
+	  default:
+	    throw(-1);
+	    break;
 	}
 }
 
@@ -245,6 +278,7 @@ void downBranchAllSPsAt(int index, double bound){
 	subproblemSolvers[tS]->downBranchOnVar(index, bound);
     }
 }
+
 
 void initialIteration();
 
@@ -338,25 +372,34 @@ bool checkInteger(double value) const {
     }
 }
 
-bool checkZIsFeasForScen(int tS){
-    const CoinPackedMatrix *mat = dynamic_cast<PSCGModelScen_SMPS*>(subproblemSolvers[tS])->getOSI()->getMatrixByCol();
+bool checkZIsFeasForScen1(int tS){
     memcpy(totalSoln_,z_current,n1*sizeof(double));
     double *ySoln = subproblemSolvers[tS]->getYVertex();
     memcpy(totalSoln_+n1,ySoln,n2*sizeof(double));
-    
-    return false;
+    return subproblemSolvers[tS]->checkSolnForFeasibility(totalSoln_, constrVec_);
 }
+bool checkZIsFeasForScen2(int tS){
+    subproblemSolvers[tS]->solveFeasibilityProblemWithXFixedToZ(z_current, origVarLB_, origVarUB_,colType_);
+    //subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_current, omega_current[tS], origVarLB_, origVarUB_,colType_);
+    return (subproblemSolvers[tS]->getSolverStatus()==DSPDD_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==DSPDD_ITER_LIM);
+}
+//int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
+
+
 bool checkZHasFullRecourse(){
-    return false;
+    for(int tS=0; tS<nNodeSPs; tS++){
+	if(!checkZIsFeasForScen2(tS)) return false;
+    }
+    return true;
 }
 
 
 //********************** Serious Step Condition (SSC) **********************
 bool shouldTerminate(){
-	return (ALVal + 0.5*discrepNorm  - currentLagrLB < SSC_DEN_TOL);
+    return (ALVal + 0.5*discrepNorm  - currentLagrLB < SSC_DEN_TOL);
 }
 double computeSSCVal(){
-     return (LagrLB-currentLagrLB)/(ALVal + 0.5*discrepNorm - currentLagrLB);
+    return (LagrLB-currentLagrLB)/(ALVal + 0.5*discrepNorm - currentLagrLB);
 }
 		
 void updateOmega(double SSCVal){

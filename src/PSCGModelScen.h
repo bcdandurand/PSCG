@@ -22,12 +22,12 @@ ILOSTLBEGIN
 
 class PSCGModelScen{
 public:
-PSCGModelScen():n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),
+PSCGModelScen():n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),LagrBd(0.0),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
 //copy constructor
-PSCGModelScen(const PSCGModelScen &other):n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),
+PSCGModelScen(const PSCGModelScen &other):n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),LagrBd(0.0),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
@@ -55,9 +55,15 @@ void finishInitialisation();
 }
 
 virtual int solveLagrangianProblem(const double* omega)=0;
+virtual int solveFeasibilityProblem()=0;
+int getSolverStatus(){return solverStatus_;}
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes)=0;
+virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
+virtual void setSolverStatus()=0;
 virtual void upBranchOnVar(int varIndex, double bound)=0;
 virtual void downBranchOnVar(int varIndex, double bound)=0;
 virtual void printColTypesFirstStage(){;}
+virtual void printColBds(){;}
 
 void updateVertexHistory(){
 	for(int i=0; i<n1; i++) {
@@ -91,6 +97,10 @@ void updateVertexHistory(){
 
 	nVertices++;
 }
+virtual bool updateSolnInfo()=0;
+
+virtual void fixXToZ(const double *z)=0;
+virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes)=0;
 
 void fixWeightToZero(int index){
     if(index >=0 && index < nVertices){
@@ -168,6 +178,10 @@ void updateALValues(const double *omega, const double *z, const double *scaling_
 }
 double getALVal(){return ALVal;}
 double getSqrNormDiscr(){return sqrNormDiscr;}
+virtual bool checkSolnForFeasibility(const double *soln, vector<double> &constrVec){
+printColTypesFirstStage();
+    return false;
+}
 
 protected:
 
@@ -210,6 +224,7 @@ IloNumVarArray mpAuxVariables;
 
 double ALVal;
 double sqrNormDiscr;
+int solverStatus_;
 
 };
 
@@ -225,6 +240,60 @@ PSCGModelScen_SMPS(const PSCGModelScen_SMPS &other):PSCGModelScen(other),LagrMIP
 int initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scenario);
 
 virtual int solveLagrangianProblem(const double* omega);
+virtual int solveFeasibilityProblem();
+virtual void setSolverStatus(){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+
+    	if (osi->isAbandoned()) {
+#if 0
+        std::cout << "BOUND: is abandoned" << std::endl;
+#endif
+        	solverStatus_ = DSPDD_ABANDONED;
+    	}
+    	else if (osi->isProvenOptimal()) {
+#if 0
+        std::cout << "BOUND: is lp optimal" << std::endl;
+#endif
+        	solverStatus_ = DSPDD_OPTIMAL;
+        	//DSPDDNodeDesc *desc = dynamic_cast<DSPDDNodeDesc*>(desc_);
+
+
+    	}
+	else if (osi->isProvenPrimalInfeasible()) {
+#if 0
+        std::cout << "BOUND: is primal inf" << std::endl;
+#endif
+        	solverStatus_ = DSPDD_PRIMAL_INF;
+    	}
+    	else if (osi->isProvenDualInfeasible()) {
+#if 0
+        std::cout << "BOUND: is dual inf" << std::endl;
+#endif
+        	solverStatus_ = DSPDD_DUAL_INF;
+    	}
+    	else if (osi->isPrimalObjectiveLimitReached()) {
+#if 0
+        	std::cout << "BOUND: is primal limit" << std::endl;
+#endif
+        	solverStatus_ = DSPDD_PRIMAL_LIM;
+    	}
+    	else if (osi->isDualObjectiveLimitReached()) {
+#if 0
+        std::cout << "BOUND: is dual limit" << std::endl;
+#endif
+        	solverStatus_ = DSPDD_DUAL_LIM;
+    	}
+    	else if (osi->isIterationLimitReached()) {
+#if 0
+        std::cout << "BOUND: is iter limit" << std::endl;
+#endif
+        	solverStatus_ = DSPDD_ITER_LIM;
+    	}
+    	else {
+        	std::cout << "UNKNOWN SOLVER STATUS" << std::endl;
+        	assert(0);
+    	}
+}
 
 virtual void upBranchOnVar(int varIndex, double bound){
     if(varIndex >= 0 && varIndex < n1+n2){
@@ -241,19 +310,107 @@ virtual void downBranchOnVar(int varIndex, double bound){
 const char* getColTypes(){
     return LagrMIPInterface_->getColType();
 } 
+
 virtual void printColTypesFirstStage(){
     for(int i=0; i<n1; i++){
-	if(LagrMIPInterface_->getColType()[i]==0)
-	    cout << " C";
-	else if(LagrMIPInterface_->getColType()[i]==1)
-	    cout << " B";
-	else if(LagrMIPInterface_->getColType()[i]==2)
-	    cout << " I";
+	printColTypeFirstStage(i);
     }
     cout << endl;
 }
+virtual void printColTypeFirstStage(int i){
+	if(getColTypes()[i]==0)
+	    cout << " C";
+	else if(getColTypes()[i]==1)
+	    cout << " B";
+	else if(getColTypes()[i]==2)
+	    cout << " I";
+}
+virtual void printColumnBound(int i){
+	cout << " (" << LagrMIPInterface_->getColLower()[i] << "," << LagrMIPInterface_->getColUpper()[i] << ")";
+}
+virtual void printColBds(){
+	for(int i=0; i<n1; i++) printColumnBound(i);
+	cout << endl;
+}
 
 OsiCpxSolverInterface* getOSI(){return LagrMIPInterface_;}
+
+virtual bool checkSolnForFeasibility(const double *soln, vector<double> &constrVec){
+    const CoinPackedMatrix *mat = LagrMIPInterface_->getMatrixByCol();
+    if(mat->getNumRows() > constrVec.size()) constrVec.resize(mat->getNumRows());
+    double *constrVals = constrVec.data();
+    const double* rowLHS = LagrMIPInterface_->getRowLower();
+    const double* rowRHS = LagrMIPInterface_->getRowUpper();
+    mat->times(soln,constrVals);
+    for(int ii=0; ii<mat->getNumRows(); ii++){
+	if( !( (rowLHS[ii] <=  constrVals[ii]+1.0e-6) && (constrVals[ii]-1.0e-6 <= rowRHS[ii]) ) ) 
+	{
+#if 0
+for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
+#endif
+	    return false;
+	}
+    }
+    return true;
+}
+
+virtual void fixXToZ(const double *z){
+   for(int ii=0; ii<n1; ii++){
+      LagrMIPInterface_->setContinuous(ii);
+      LagrMIPInterface_->setColBounds(ii,z[ii],z[ii]);
+   }
+   return; 
+}
+
+//undo the fixing of fixXToZ()
+virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes){
+   for(int ii=0; ii<n1; ii++){
+      //cout << "  " << colTypes[ii];
+      if(colTypes[ii]=='I' || colTypes[ii]=='B'){
+	 LagrMIPInterface_->setInteger(ii);
+      }
+      else{
+	 LagrMIPInterface_->setContinuous(ii);
+      }
+      LagrMIPInterface_->setColBounds(ii,origLBs[ii],origUBs[ii]);
+   }
+   //cout << endl;
+   return;
+}
+
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes){
+//cout << "*********" << endl;
+//printColTypesFirstStage();
+//printColBds();
+   fixXToZ(z);
+//printColTypesFirstStage();
+//printColBds();
+   solverStatus_ = solveLagrangianProblem(omega);
+   unfixX(origLBs, origUBs, colTypes); 
+//printColTypesFirstStage();
+//printColBds();
+   return solverStatus_;
+}
+virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
+   fixXToZ(z);
+   solverStatus_ = solveFeasibilityProblem();
+   unfixX(origLBs, origUBs, colTypes); 
+   return solverStatus_;
+}
+
+virtual bool updateSolnInfo(){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+	if(solverStatus_==DSPDD_OPTIMAL || solverStatus_==DSPDD_ITER_LIM){	
+		if(solverStatus_==DSPDD_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+		const double* solution = osi->getColSolution();
+		LagrBd = osi->getObjValue()*osi->getObjSense();
+		memcpy(x_vertex,solution,n1*sizeof(double));
+		memcpy(y_vertex,solution+n1,n2*sizeof(double));
+	}
+	else{
+		cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+	}
+}
 
 private:
 OsiCpxSolverInterface *LagrMIPInterface_;
@@ -269,6 +426,34 @@ cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env
 
 void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
 virtual int solveLagrangianProblem(const double* omega);
+virtual int solveFeasibilityProblem();
+virtual void setSolverStatus(){
+    solverStatus_ = DSPDD_OPTIMAL;
+}
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes){
+   fixXToZ(z);
+   int solveStatus = solveLagrangianProblem(omega);
+   unfixX(origLBs, origUBs, colTypes); 
+}
+virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
+   fixXToZ(z);
+   int solveStatus = solveFeasibilityProblem();
+   unfixX(origLBs, origUBs, colTypes); 
+}
+virtual void fixXToZ(const double *z){
+//TODO: set the xVariables to be continuous
+    for(int ii=0; ii<n1; ii++){
+	xVariables[ii].setBounds(z[ii],z[ii]);
+    }
+}
+virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes){
+//TODO: set the xVariables back to their original types
+    for(int ii=0; ii<n1; ii++){
+	xVariables[ii].setBounds(origLBs[ii],origUBs[ii]);
+    }
+}
+
+
 
 virtual void upBranchOnVar(int varIndex, double bound){
     if(varIndex >=0 && varIndex < n1){
@@ -288,6 +473,19 @@ virtual void downBranchOnVar(int varIndex, double bound){
     }
 }
 
+virtual bool updateSolnInfo(){
+    if(solverStatus_==DSPDD_OPTIMAL || solverStatus_==DSPDD_ITER_LIM){	
+	if(solverStatus_==DSPDD_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+	for(int ii=0; ii<n1; ii++) x_vertex[ii] = cplexMIP.getValue(xVariables[ii]);
+	//for(int ii=0; ii<n1; ii++) cout << " (" << cplexMIP.getValue(xVariables[ii]) << ","<<x_vertex[ii] << ")";
+	//cout << endl;
+	for(int jj=0; jj<n2; jj++) y_vertex[jj] = cplexMIP.getValue(yVariables[jj]);
+	LagrBd = cplexMIP.getObjValue();
+    }
+    else{
+	cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+    }
+}
 
 private:
 IloCplex cplexMIP;

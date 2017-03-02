@@ -137,10 +137,10 @@ void PSCGModelScen::finishInitialisation() {
 	     cerr << "PSCGModelScen::finishInitialisation(): n1==0 and n2==0, returning...." << endl;
 	     return;
 	}
-	x = new double[n1];
-	y = new double[n2];
 	x_vertex = new double[n1];
 	y_vertex = new double[n2];
+	x = new double[n1];
+	y = new double[n2];
 	//x_vertex.add(n1,0.0);
 	//y_vertex.add(n2,0.0);
 		
@@ -187,14 +187,37 @@ int PSCGModelScen_Bodur::solveLagrangianProblem(const double *omega) {
 		throw(-1);
 	}
 
-	for(int ii=0; ii<n1; ii++) cplexMIP.getValue(xVariables[ii], x_vertex[ii]);
-	for(int jj=0; jj<n2; jj++) cplexMIP.getValue(yVariables[jj], y_vertex[jj]);
-	
-	LagrBd = cplexMIP.getObjValue();
 	
 	return 0;
 }
 #endif
+int PSCGModelScen_Bodur::solveFeasibilityProblem(){
+	
+	for (int i = 0; i < n1; i++) {
+		//omega[i] = omega[i];
+	        slpObjective.setLinearCoef(xVariables[i], 0.0);
+	}
+	for (int i = 0; i < n2; i++) {
+		//omega[i] = omega[i];
+	        slpObjective.setLinearCoef(yVariables[i], 0.0);
+	}
+		
+	if (!cplexMIP.solve()) {
+		env.error() << "Failed to optimize in solveInitial" << endl;
+		throw(-1);
+	}
+
+	//for(int ii=0; ii<n1; ii++) cplexMIP.getValue(xVariables[ii], x_vertex[ii]);
+	//for(int jj=0; jj<n2; jj++) cplexMIP.getValue(yVariables[jj], y_vertex[jj]);
+	
+	//LagrBd = cplexMIP.getObjValue();
+	for (int i = 0; i < n2; i++) {
+		//omega[i] = omega[i];
+	        slpObjective.setLinearCoef(yVariables[i], d_vec[i]);
+	}
+	
+	return 0;
+}
 
 // Given a scenario index and a dual variable, find the anticipative solution for first and second stage variables.
 int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
@@ -207,23 +230,60 @@ int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
 
 	osi->branchAndBound();
 	
-	const double* solution = osi->getColSolution();
+	setSolverStatus();
+
 	
-	LagrBd = osi->getObjValue();
 	
+	return solverStatus_;
+}
+
+int PSCGModelScen_SMPS::solveFeasibilityProblem(){
+
+	OsiCpxSolverInterface* osi = LagrMIPInterface_;
+	
+#if 1
 	for (int i = 0; i < n1; i++) {
-		x_vertex[i] = solution[i];
+		osi->setObjCoeff(i, 0.0);
 	}
-	
-	for (int j = 0; j < n2; j++) {
-		y_vertex[j] = solution[n1+j];
+	for (int i = n1; i < n1+n2; i++) {
+		osi->setObjCoeff(i, 0.0);
 	}
+#endif
+
+	osi->branchAndBound();
 	
-	if (osi->isProvenOptimal() == false) {
+	setSolverStatus();
+
+	if(solverStatus_==DSPDD_OPTIMAL || solverStatus_==DSPDD_ITER_LIM){	
+		if(solverStatus_==DSPDD_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+		const double* solution = osi->getColSolution();
+for(int ii=0; ii<n1; ii++){
+cout << " (" << solution[ii] << ")";
+}
+cout << endl;
+#if 0
+		const double* solution = osi->getColSolution();
+		LagrBd = osi->getObjValue()*osi->getObjSense();
+	
+		for (int i = 0; i < n1; i++) {
+			x_vertex[i] = solution[i];
+		}
+	
+		for (int j = 0; j < n2; j++) {
+			y_vertex[j] = solution[n1+j];
+		}
+#endif
+	}
+	else{
 		cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
 	}
+#if 1
+	for (int i = n1; i < n1+n2; i++) {
+		osi->setObjCoeff(i, d[i-n1]);
+	}
+#endif
 	
-	return 0;
+	return solverStatus_;
 }
 
 

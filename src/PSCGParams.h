@@ -24,6 +24,20 @@
         ( std::ostringstream() << std::dec << x ) ).str()
 #define DEFAULT_MAX_OUTER_LOOP 20 //TODO have this automatically update the help text below. Probably overkill though.
 
+enum SolverReturnStatus {
+DSPDD_OK=0,
+DSPDD_OPTIMAL=0,
+DSPDD_ABANDONED,
+DSPDD_PRIMAL_INF,
+DSPDD_DUAL_INF,
+DSPDD_PRIMAL_LIM,
+DSPDD_DUAL_LIM,
+DSPDD_ITER_LIM,
+DSPDD_ERR=100,
+DSPDD_INF=200,
+DSPDD_UNBOUND=201,
+DSPDD_UNKNOWN=202
+};
 
 
 class PSCGParams{

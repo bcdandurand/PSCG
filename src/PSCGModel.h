@@ -21,7 +21,10 @@
 #include "TssModel.h"
 #include "PSCGModelScen.h"
 #include "PSCGParams.h"
+#include "AlpsModel.h"
+#include "AlpsKnowledge.h"
 #include "BcpsModel.h"
+#include "PSCGTreeNode.h"
 
 #define smallNumber 0.000001
 #define SSC_PARAM 0.1
@@ -50,11 +53,16 @@ BINARY,
 INTEGER
 };
 
+enum BRANCH_TYPE{
+UP=0,
+DOWN
+};
+
 // If you want to add a flag, search ADDFLAG in this file and the corresponding .cpp file and follow instructions.
 
 // ADDFLAG : Add the variable here
 
-class PSCGModel{
+class PSCGModel : public BcpsModel{
 public:
 PSCGParams *par;
 TssModel smpsModel;
@@ -138,7 +146,7 @@ int totalNoGSSteps;
 ProblemDataBodur pdBodur;
 
 PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0){
+	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),BcpsModel(){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -174,10 +182,10 @@ PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),l
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 		delete [] scaling_matrix[tS];
 		delete [] omega_tilde[tS];
-		delete [] omega_current[tS];
+		//delete [] omega_current[tS];
 		delete subproblemSolvers[tS];
 	}
-	delete[] z_current;
+	//delete[] z_current;
 	delete[] z_local;
 	delete [] origVarLB_;
 	delete [] origVarUB_;
@@ -242,15 +250,17 @@ void initialiseModel(){
 	    throw(-1);
 	    break;
 	}
-	z_current = new double[n1];
+	//z_current = new double[n1];
 	z_local = new double[n1];
 	origVarLB_ = new double[n1];
 	origVarUB_ = new double[n1];
 	incumbent_ = new double[n1];
 	//initialising zˆ0=0
+#if 0
 	for (int i = 0; i < n1; i++) {
     	    z_current[i] = 0;
 	}
+#endif
 	switch( ftype ){
 	  case 1:
 	    //TODO: initialise origVarBds.
@@ -279,6 +289,45 @@ void downBranchAllSPsAt(int index, double bound){
     }
 }
 
+void restoreOriginalVarBounds(){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	subproblemSolvers[tS]->unfixX(origVarLB_,origVarUB_);
+    }
+}
+void installSubproblem(double* z, vector<double*> &omega, int *indices, int *fixTypes, double *bds, int nFix){
+    restoreOriginalVarBounds();
+    for(int ii=0; ii<nFix; ii++){
+	switch( fixTypes[ii] ){
+	    case UP:
+		//up-branch
+		upBranchAllSPsAt(indices[ii],bds[ii]);
+		break;
+	    case DOWN:
+		//down-branch
+		downBranchAllSPsAt(indices[ii],bds[ii]);
+		break;
+	}
+    }
+    //TODO: resolve ownership questions for current_z, current_omega
+    readZIntoModel(z);
+    readOmegaIntoModel(omega);
+}
+void readZIntoModel(double* z){
+    z_current=z;
+}
+void readOmegaIntoModel(vector<double*> &omega){
+//cout << "nNodeSPs " << nNodeSPs << " size of vec " << omega.size() << endl;
+    for(int tS=0; tS<nNodeSPs; tS++) omega_current[tS]=omega[tS];
+}
+
+#if 0
+AlpsTreeNode* createRoot(){
+    PSCGTreeNode *root = new PSCGTreeNode;
+    PSCGNodeDesc *desc = new PSCGNodeDesc(this);
+    root->setDesc(desc);
+    return root;
+}
+#endif
 
 void initialIteration();
 
@@ -291,6 +340,14 @@ void regularIteration(){
 	#if KIWIEL_PENALTY 
 	 computeKiwielPenaltyUpdate(SSCVal);
 	#endif
+}
+
+double computeBound(int nIters){
+    initialIteration();
+    for(int ii=0; ii<nIters; ii++){
+	regularIteration();
+    }
+    return LagrLB;
 }
 
 void solveContinuousMPs(){
@@ -332,7 +389,7 @@ void updateZ(){
 	    }
 	}
 	#ifdef USING_MPI
-		MPI_Allreduce(z_local, z_current, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	    MPI_Allreduce(z_local, z_current, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	#else
 	    for (int i=0; i<n1; i++) z_current[i] = z_local[i]; //Only one node, trivially set z_local = z_current
 	#endif
@@ -448,6 +505,7 @@ void printZ(){
 
 	printf("]\n");
 }
+
 
 //*** Helper functions.
 //Frobenius norm

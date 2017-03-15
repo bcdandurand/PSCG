@@ -100,6 +100,7 @@ void updateVertexHistory(){
 virtual bool updateSolnInfo()=0;
 
 virtual void fixXToZ(const double *z)=0;
+virtual void unfixX(const double* origLBs, const double* origUBs)=0;
 virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes)=0;
 
 void fixWeightToZero(int index){
@@ -362,7 +363,16 @@ virtual void fixXToZ(const double *z){
    return; 
 }
 
-//undo the fixing of fixXToZ()
+//undo the fixing of fixXToZ(), for when there is no need to reset variable types
+virtual void unfixX(const double* origLBs, const double* origUBs){
+   for(int ii=0; ii<n1; ii++){
+      LagrMIPInterface_->setColBounds(ii,origLBs[ii],origUBs[ii]);
+   }
+   //cout << endl;
+   return;
+
+}
+//undo the fixing of fixXToZ(), includes resetting variable types
 virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes){
    for(int ii=0; ii<n1; ii++){
       //cout << "  " << colTypes[ii];
@@ -444,6 +454,11 @@ virtual void fixXToZ(const double *z){
 //TODO: set the xVariables to be continuous
     for(int ii=0; ii<n1; ii++){
 	xVariables[ii].setBounds(z[ii],z[ii]);
+    }
+}
+virtual void unfixX(const double* origLBs, const double* origUBs){
+    for(int ii=0; ii<n1; ii++){
+	xVariables[ii].setBounds(origLBs[ii],origUBs[ii]);
     }
 }
 virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes){

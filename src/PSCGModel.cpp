@@ -88,11 +88,11 @@ void PSCGModel::setupSolvers(){
 	    pr.push_back(subproblemSolvers[tS]->getProbabilities());
 	    scaling_matrix.push_back(new double[n1]);
 	    omega_tilde.push_back(new double[n1]);
-	    omega_current.push_back(new double[n1]);
+	    omega_current.push_back(NULL);
 	    
 	    for (int i = 0; i < n1; i++) {
 		scaling_matrix[tS][i] = penC ;
-		omega_current[tS][i] = 0.0;
+		//omega_current[tS][i] = 0.0;
 	    }
 	    subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
 	}

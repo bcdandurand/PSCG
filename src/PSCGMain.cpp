@@ -9,6 +9,8 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 #include "PSCGModelScen.h"
 #include "Stopwatch.h"
 #include "TssModel.h"
+#include "PSCGNodeDesc.h"
+//#include "AlpsKnowledgeBrokerSerial.h"
 
 #define OUTER_LOOP_TERMINATION 1e-10
 #define TIME_TYPES 2
@@ -19,7 +21,7 @@ using namespace std;
 
 
 int main(int argc, char **argv) {
-
+#if 1
 	//******************Wall Timing Setup****************
 
 	//Start timing. More refined timing is possible for debugging.
@@ -59,6 +61,19 @@ int main(int argc, char **argv) {
 	
 
 	PSCGModel model(&par);
+	double *z = new double[model.n1];
+	vector<double*> omega;
+	for(int tS=0; tS<model.nNodeSPs; tS++){
+	    omega.push_back(new double[model.n1]);
+	    for(int ii=0;ii<model.n1; ii++) omega[tS][ii]=0.0;
+	}
+	//model.readZIntoModel(z);
+	//model.readOmegaIntoModel(omega);
+	PSCGNodeDesc *desc = new PSCGNodeDesc(&model);
+	desc->installSubproblemFromNodeDesc();
+	//model.installSubproblem(z,omega,NULL,NULL,NULL,0);
+	//AlpsKnowledgeBrokerSerial broker(model);
+	//broker.search(model);
 	//model.upBranchAllSPsAt(9,1.0);
 #if 0
 	model.upBranchAllSPsAt(1,1.0);
@@ -108,32 +123,7 @@ int main(int argc, char **argv) {
 
 
 		//int innerStep = 0;
-#if 0
-		interpTimer.start();
-		model.solveContinuousMPs();
-		interpTimer.stop();
-		interpTimer.addTime(totalTimeQP);
-
-		//cout << "Done with step " << step << " QSP updates from node " << mpiRank << endl;
-		//clock_t start2 = clock();
-		updateTimer.start();
-		model.performColGenStep();
-		updateTimer.stop();
-		updateTimer.addTime(totalTimeMIP);
-
-		//Z UPDATE
-		double SSCVal = model.computeSSCVal();
-		model.updateOmega(SSCVal);
-		#if KIWIEL_PENALTY 
-		 model.computeKiwielPenaltyUpdate(SSCVal);
-		#endif
-		//****************** Timing **********************
-
-		//totalTimer.stop();
-		//totalTimer.addTime(totalTimeThisStep);
-#else
 		model.regularIteration();
-#endif
 		//cout << "Proc " << mpiRank << " solution is feasible: " << model.checkZHasFullRecourse() << endl;
 
 
@@ -154,18 +144,6 @@ int main(int argc, char **argv) {
 		if (mpiHead) {
 			printf("\nStep %d\n", step);
 			model.printStatus();
-			//printf("QFDES\tDescent on first inner step: %0.9g\n", descent);
-			//printf("QFLOB\tExplicit Lagrangian Lower Bound: %0.9g\n", LagrLB_Explicit);
-			#if 0
-				printf("QFTIM\tTime: %-7.3f %-7.3f\n", totalTimeThisStep[0], totalTimeThisStep[1]);
-				printf("QFSPT\tTime spent on update subproblems by this process: %-7.3f %-7.3f\n", updateTimeThisStep[0], updateTimeThisStep[1]);
-				#ifdef USING_MPI
-					printf("QFCMT\tTime spent on communication: %-7.3f %-7.3f\n", commsTimeThisStep[0], commsTimeThisStep[1]);
-					printf("QFBLK\tTime spent blocked by this process: %-7.3f %-7.3f\n", blockedTimeThisStep[0], blockedTimeThisStep[1]);
-				#endif
-				printf("QFLBT\tAdditional time spent on bound calculation: %-7.3f %-7.3f\n", boundTimeThisStep[0], boundTimeThisStep[1]);
-				printf("QFINT\tTime spent interpolating vertices: %-7.3f %-7.3f\n", interpTimeThisStep[0], interpTimeThisStep[1]);
-			#endif
 
 
 			if(par.verbose || terminate) {
@@ -235,6 +213,8 @@ int main(int argc, char **argv) {
 		<< mpiSize << " node,  " << model.totalNoGSSteps << " GS steps,  Lag. LB: " << model.currentLagrLB << endl;
 		std::cout << "RUN:SUCCESS" << std::endl;
 	}
+	delete [] z;
+#endif
 	return 0;
 }
 

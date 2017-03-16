@@ -31,9 +31,9 @@
 #include "BcpsObjectPool.h"
 #include "BcpsTreeNode.h"
 
-//#include "BcpsNodeDesc.h"
+#include "BcpsNodeDesc.h"
 #include "PSCGNodeDesc.h"
-#if 0
+#if 1
 #include "PSCGModel.h"
 
 class BcpsModel;
@@ -66,19 +66,19 @@ class PSCGTreeNode : public BcpsTreeNode {
  public:
 
     /** Default constructor. */
-    PSCGTreeNode() 
-        : 
-        BcpsTreeNode() 
+#if 1
+    PSCGTreeNode() : BcpsTreeNode() 
         { init(); }
+#endif
     
     /** Useful constructor. */
-    PSCGTreeNode(PSCGModel* m) {
+    PSCGTreeNode(PSCGModel* m) : BcpsTreeNode() {
         init();
         desc_ = new PSCGNodeDesc(m);
     }
 
     /** Useful constructor. */
-    PSCGTreeNode(AlpsNodeDesc *&desc) {
+    PSCGTreeNode(AlpsNodeDesc *&desc) : BcpsTreeNode() {
         init();
         desc_ = desc;
         desc = NULL;

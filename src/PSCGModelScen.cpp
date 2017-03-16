@@ -254,8 +254,8 @@ int PSCGModelScen_SMPS::solveFeasibilityProblem(){
 	
 	setSolverStatus();
 
-	if(solverStatus_==DSPDD_OPTIMAL || solverStatus_==DSPDD_ITER_LIM){	
-		if(solverStatus_==DSPDD_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+	if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
+		if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
 		const double* solution = osi->getColSolution();
 for(int ii=0; ii<n1; ii++){
 cout << " (" << solution[ii] << ")";

@@ -10,7 +10,7 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 #include "Stopwatch.h"
 #include "TssModel.h"
 #include "PSCGNodeDesc.h"
-//#include "AlpsKnowledgeBrokerSerial.h"
+#include "AlpsKnowledgeBrokerSerial.h"
 
 #define OUTER_LOOP_TERMINATION 1e-10
 #define TIME_TYPES 2
@@ -69,11 +69,13 @@ int main(int argc, char **argv) {
 	}
 	//model.readZIntoModel(z);
 	//model.readOmegaIntoModel(omega);
-	PSCGNodeDesc *desc = new PSCGNodeDesc(&model);
-	desc->installSubproblemFromNodeDesc();
+	//PSCGNodeDesc *desc = new PSCGNodeDesc(&model);
+	//desc->installSubproblemFromNodeDesc();
 	//model.installSubproblem(z,omega,NULL,NULL,NULL,0);
-	//AlpsKnowledgeBrokerSerial broker(model);
-	//broker.search(model);
+	AlpsKnowledgeBrokerSerial broker(model);
+cout << "Begining search...." << endl;
+	broker.search(&model);
+cout << "...Ending search." << endl;
 	//model.upBranchAllSPsAt(9,1.0);
 #if 0
 	model.upBranchAllSPsAt(1,1.0);

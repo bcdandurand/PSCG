@@ -24,7 +24,7 @@
 #include "AlpsModel.h"
 #include "AlpsKnowledge.h"
 #include "BcpsModel.h"
-#include "PSCGTreeNode.h"
+#include "AlpsTreeNode.h"
 
 #define smallNumber 0.000001
 #define SSC_PARAM 0.1
@@ -320,13 +320,8 @@ void readOmegaIntoModel(vector<double*> &omega){
     for(int tS=0; tS<nNodeSPs; tS++) omega_current[tS]=omega[tS];
 }
 
-#if 0
-AlpsTreeNode* createRoot(){
-    PSCGTreeNode *root = new PSCGTreeNode;
-    PSCGNodeDesc *desc = new PSCGNodeDesc(this);
-    root->setDesc(desc);
-    return root;
-}
+#if 1
+virtual AlpsTreeNode* createRoot();
 #endif
 
 void initialIteration();
@@ -438,7 +433,7 @@ bool checkZIsFeasForScen1(int tS){
 bool checkZIsFeasForScen2(int tS){
     subproblemSolvers[tS]->solveFeasibilityProblemWithXFixedToZ(z_current, origVarLB_, origVarUB_,colType_);
     //subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_current, omega_current[tS], origVarLB_, origVarUB_,colType_);
-    return (subproblemSolvers[tS]->getSolverStatus()==DSPDD_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==DSPDD_ITER_LIM);
+    return (subproblemSolvers[tS]->getSolverStatus()==PSCG_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==PSCG_ITER_LIM);
 }
 //int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
 

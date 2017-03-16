@@ -45,6 +45,7 @@
 //#include "PSCGHelp.h"
 //#include "PSCGObjectInt.h"
 #include "PSCGParams.h"
+#include "PSCGTreeNode.h"
 //#include "PSCGSolution.h"
 //#include "PSCGVariable.h"
 
@@ -92,8 +93,8 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     // Check if this can be fathomed by objective cutoff.
     //------------------------------------------------------
     
-    model->setActiveNode(this);
-    model->addNumNodes();
+    //model->setActiveNode(this);
+    //model->addNumNodes();
     
     //------------------------------------------------------
     // Get model information and parameters.
@@ -101,7 +102,7 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
 
 
     // Mark if this node is root or not.
-    model->isRoot_ = isRoot;
+    //model->isRoot_ = isRoot;
 
     //======================================================
     // Restore, load and solve the subproblem.
@@ -249,7 +250,7 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     // End of process()
     //------------------------------------------------------
     
-    model->isRoot_ = false;
+    //model->isRoot_ = false;
     return status;
 }
 
@@ -784,7 +785,7 @@ int PSCGTreeNode::bound(BcpsModel *model)
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
     
 
-    m->computeBound(5);
+    m->computeBound(30);
 #if 0
     if (m->solver()->isAbandoned()) {
 	status = PSCG_LP_ABANDONED;
@@ -1313,7 +1314,7 @@ int PSCGTreeNode::installSubProblem(BcpsModel *m)
 int 
 PSCGTreeNode::generateConstraints(PSCGModel *model, OsiCuts & cutPool) 
 {
-    int status = PSCG_LP_OPTIMAL;
+    int status = PSCG_OPTIMAL;
 #if 0
     int i, numCGs;
     int preNumRowCons = 0;
@@ -1803,6 +1804,7 @@ PSCGTreeNode::decode(AlpsEncoded& encoded) const
     
     // Unpack Alps portion.
     treeNode = new PSCGTreeNode(nodeDesc);
+#if 0
     treeNode->decodeAlps(encoded);
     
     // Unpack Bcps portion.
@@ -1816,7 +1818,7 @@ PSCGTreeNode::decode(AlpsEncoded& encoded) const
 	// Set bo in treeNode.
 	treeNode->setBranchObject(bo);
     }
-    
+#endif 
     // Nothing to unpack for PSCG portion.
     
     return treeNode;
@@ -2125,7 +2127,7 @@ PSCGTreeNode::convertToRelative()
 }
 
 //#############################################################################
-
+#if 0
 bool 
 PSCGTreeNode::parallel(PSCGModel *model, 
 		       OsiCuts *newCutSet,
@@ -2166,7 +2168,7 @@ PSCGTreeNode::parallel(PSCGModel *model,
 #endif 
     return parallel;
 }
-
+#endif
 //#############################################################################
 
 

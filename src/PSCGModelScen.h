@@ -249,14 +249,14 @@ virtual void setSolverStatus(){
 #if 0
         std::cout << "BOUND: is abandoned" << std::endl;
 #endif
-        	solverStatus_ = DSPDD_ABANDONED;
+        	solverStatus_ = PSCG_ABANDONED;
     	}
     	else if (osi->isProvenOptimal()) {
 #if 0
         std::cout << "BOUND: is lp optimal" << std::endl;
 #endif
-        	solverStatus_ = DSPDD_OPTIMAL;
-        	//DSPDDNodeDesc *desc = dynamic_cast<DSPDDNodeDesc*>(desc_);
+        	solverStatus_ = PSCG_OPTIMAL;
+        	//PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
 
     	}
@@ -264,31 +264,31 @@ virtual void setSolverStatus(){
 #if 0
         std::cout << "BOUND: is primal inf" << std::endl;
 #endif
-        	solverStatus_ = DSPDD_PRIMAL_INF;
+        	solverStatus_ = PSCG_PRIMAL_INF;
     	}
     	else if (osi->isProvenDualInfeasible()) {
 #if 0
         std::cout << "BOUND: is dual inf" << std::endl;
 #endif
-        	solverStatus_ = DSPDD_DUAL_INF;
+        	solverStatus_ = PSCG_DUAL_INF;
     	}
     	else if (osi->isPrimalObjectiveLimitReached()) {
 #if 0
         	std::cout << "BOUND: is primal limit" << std::endl;
 #endif
-        	solverStatus_ = DSPDD_PRIMAL_LIM;
+        	solverStatus_ = PSCG_PRIMAL_LIM;
     	}
     	else if (osi->isDualObjectiveLimitReached()) {
 #if 0
         std::cout << "BOUND: is dual limit" << std::endl;
 #endif
-        	solverStatus_ = DSPDD_DUAL_LIM;
+        	solverStatus_ = PSCG_DUAL_LIM;
     	}
     	else if (osi->isIterationLimitReached()) {
 #if 0
         std::cout << "BOUND: is iter limit" << std::endl;
 #endif
-        	solverStatus_ = DSPDD_ITER_LIM;
+        	solverStatus_ = PSCG_ITER_LIM;
     	}
     	else {
         	std::cout << "UNKNOWN SOLVER STATUS" << std::endl;
@@ -410,8 +410,8 @@ virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *
 
 virtual bool updateSolnInfo(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
-	if(solverStatus_==DSPDD_OPTIMAL || solverStatus_==DSPDD_ITER_LIM){	
-		if(solverStatus_==DSPDD_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+	if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
+		if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
 		const double* solution = osi->getColSolution();
 		LagrBd = osi->getObjValue()*osi->getObjSense();
 		memcpy(x_vertex,solution,n1*sizeof(double));
@@ -438,7 +438,7 @@ void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
 virtual int solveLagrangianProblem(const double* omega);
 virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
-    solverStatus_ = DSPDD_OPTIMAL;
+    solverStatus_ = PSCG_OPTIMAL;
 }
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes){
    fixXToZ(z);
@@ -489,8 +489,8 @@ virtual void downBranchOnVar(int varIndex, double bound){
 }
 
 virtual bool updateSolnInfo(){
-    if(solverStatus_==DSPDD_OPTIMAL || solverStatus_==DSPDD_ITER_LIM){	
-	if(solverStatus_==DSPDD_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+    if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
+	if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
 	for(int ii=0; ii<n1; ii++) x_vertex[ii] = cplexMIP.getValue(xVariables[ii]);
 	//for(int ii=0; ii<n1; ii++) cout << " (" << cplexMIP.getValue(xVariables[ii]) << ","<<x_vertex[ii] << ")";
 	//cout << endl;

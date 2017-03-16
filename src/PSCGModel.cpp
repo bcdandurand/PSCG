@@ -8,6 +8,7 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 #include "ProblemDataBodur.h"
 #include "PSCGModelScen.h"
 #include "TssModel.h"
+#include "PSCGTreeNode.h"
 
 
 
@@ -216,6 +217,13 @@ void computeFeasibleStartingPoint(int tS, double* x, double* yFeasible) {
 	//subproblemSolvers.solveForSecondStage(&question, &answer);
 }
 
+AlpsTreeNode* PSCGModel::createRoot(){
+    PSCGTreeNode *root = new PSCGTreeNode;
+    PSCGNodeDesc *desc = new PSCGNodeDesc(this);
+    root->setDesc(desc);
+    root->setExplicit(1);
+    return root;
+}
 //******************Command line paramater handler functions**********************
 
 

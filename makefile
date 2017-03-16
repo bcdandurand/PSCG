@@ -18,8 +18,8 @@ MPIDIRDSP = /nfs2/b216449/mpich-install/lib
 DSPDIR = /homes/bcdandurand/DSP
 SRC = ./src
 OBJDIR = ./obj
-OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
-OBJS_serial = $(OBJDIR)/PSCGMain_serial.o $(OBJDIR)/$(ALG)_serial.o $(OBJDIR)/$(SOLVER)_serial.o $(OBJDIR)/ProblemDataBodur_serial.o 
+OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/PSCGTreeNode.o $(OBJDIR)/ProblemDataBodur.o 
+OBJS_serial = $(OBJDIR)/PSCGMain_serial.o $(OBJDIR)/$(ALG)_serial.o $(OBJDIR)/$(SOLVER)_serial.o $(OBJDIR)/PSCGTreeNode_serial.o $(OBJDIR)/ProblemDataBodur_serial.o 
 BIN = ./bin
 #CPLEXDIR      = /usr/local/ibm/ILOG/CPLEX_Studio125/cplex
 #CONCERTDIR    = /usr/local/ibm/ILOG/CPLEX_Studio125/concert
@@ -35,6 +35,7 @@ CXX = mpicxx
 
 # C++ Compiler options
 CXXFLAGS = -O3 -g
+#CXXFLAGS = -g -O3 -pipe -DNDEBUG -pedantic-errors -Wparentheses -Wreturn-type -Wcast-qual -Wall -Wpointer-arith -Wwrite-strings -Wconversion -Wno-unknown-pragmas -Wno-long-long   -DBCPS_BUILD 
 #CXXFLAGS = -O3 
 
 # Stochastic data directory
@@ -63,6 +64,7 @@ DSPLIBS = -L$(DSPDIR)/build/lib -lDsp
 
 COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi -lOsiClp -lOsiCommonTests  
 ALPSLIBS = -L$(ALPSDIR)/lib -lAlps -lBcps 
+#ALPSLIBS = -L$(ALPSDIR)/lib -lBcps 
 
 CPLEXLIBR = -DIL_STD -DILOSTRICTPOD $(CPPFLAGS) $(LDFLAGS) -L$(CPLEXDIR)/lib/$(SYSTEM)/$(LIBFORMAT) \
 	-lilocplex -lcplex -L$(CONCERTDIR)/lib/$(SYSTEM)/$(LIBFORMAT) -lconcert 
@@ -73,6 +75,9 @@ OTHERLIBS = -lstdc++ -lm -lpthread
 ALG = PSCGModel
 #SOLVER = CPLEXsolverSCG
 SOLVER = PSCGModelScen
+
+SRCFILES = $(SRC)/PSCGMain.cpp $(SRC)/$(ALG).cpp $(SRC)/$(ALG).h $(SRC)/$(SOLVER).cpp $(SRC)/$(SOLVER).h $(SRC)/PSCGNodeDesc.h $(SRC)/PSCGTreeNode.cpp $(SRC)/PSCGTreeNode.h $(SRC)/ProblemDataBodur.cpp $(SRC)/ProblemDataBodur.h 
+	
 	
 all: all_parallel all_serial	
 
@@ -80,36 +85,32 @@ all_parallel: $(ALG)
 
 all_serial: $(ALG)_Serial
 
-$(ALG): $(SRC)/PSCGMain.cpp $(SRC)/$(ALG).cpp $(SRC)/$(ALG).h $(SRC)/$(SOLVER).cpp $(SRC)/$(SOLVER).h $(SRC)/ProblemDataBodur.cpp 
 
-	$(CXX) -c -o $(OBJDIR)/PSCGMain.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
-
-	$(CXX) -c -o $(OBJDIR)/$(ALG).o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+$(ALG): $(SRCFILES) 
+	$(CXX) -c -o $(OBJDIR)/PSCGMain.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+	
+	$(CXX) -c -o $(OBJDIR)/$(ALG).o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) 
 	
 	$(CXX) -c -o $(OBJDIR)/$(SOLVER).o $(SRC)/$(SOLVER).cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
+	$(CXX) -c -o $(OBJDIR)/PSCGTreeNode.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGTreeNode.cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+	
 	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL) 
 	
-	#$(CXX) -c -o $(OBJDIR)/ProblemDataSMPS.o $(SRC)/ProblemDataSMPS.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL) 
+	mpicxx -o $(BIN)/$(ALG) $(OBJS) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
 	
-	mpicxx -o $(BIN)/$(ALG) $(OBJS) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
+$(ALG)_Serial: $(SRCFILES)
+	$(CXX) -c -o $(OBJDIR)/PSCGMain_serial.o $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS)  $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
-$(ALG)_Serial: $(SRC)/PSCGMain.cpp $(SRC)/$(ALG).cpp $(SRC)/$(ALG).h $(SRC)/$(SOLVER).cpp $(SRC)/ProblemDataBodur.cpp
+	$(CXX) -c -o $(OBJDIR)/$(ALG)_serial.o $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+	
+	$(CXX) -c -o $(OBJDIR)/$(SOLVER)_serial.o $(SRC)/$(SOLVER).cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+	
+	$(CXX) -c -o $(OBJDIR)/PSCGTreeNode_serial.o $(INCL) $(SRC)/PSCGTreeNode.cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+	
+	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur_serial.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+	
+	$(CXX) -o $(BIN)/$(ALG)_serial $(OBJS_serial) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) 
 
-	$(CXX) -c -o $(OBJDIR)/PSCGMain_serial.o $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-
-	$(CXX) -c -o $(OBJDIR)/$(ALG)_serial.o $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-	
-	$(CXX) -c -o $(OBJDIR)/$(SOLVER)_serial.o $(SRC)/$(SOLVER).cpp \
-	$(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-	
-	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur_serial.o $(SRC)/ProblemDataBodur.cpp \
-	$(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-	
-	#$(CXX) -c -o $(OBJDIR)/ProblemDataSMPS_serial.o $(SRC)/ProblemDataSMPS.cpp \
-	#$(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-	
-	$(CXX) -o $(BIN)/$(ALG)_serial $(OBJS_serial) \
-	$(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) 
 clean:
 	rm -f $(BIN)/$(ALG) $(BIN)/$(ALG)_serial $(OBJDIR)/*.o

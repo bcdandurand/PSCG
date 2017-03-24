@@ -108,7 +108,7 @@ cout << "...Ending search." << endl;
 
 	//totalTimer.stop();
 	//totalTimer.addTime(totalTimeThisStep);
-	model.initialIteration();
+	//model.initialIteration();
 
 	//*******************************************************************
 	//******************Outer FWPH Loop Begins Here**********************
@@ -125,7 +125,7 @@ cout << "...Ending search." << endl;
 
 
 		//int innerStep = 0;
-		model.regularIteration();
+		//model.regularIteration();
 		//cout << "Proc " << mpiRank << " solution is feasible: " << model.checkZHasFullRecourse() << endl;
 
 
@@ -142,7 +142,7 @@ cout << "...Ending search." << endl;
 		#endif
 
 		//****************** Output **********************
-
+#if 0
 		if (mpiHead) {
 			printf("\nStep %d\n", step);
 			model.printStatus();
@@ -152,6 +152,7 @@ cout << "...Ending search." << endl;
 				model.printZ();
 			}	
 		}
+#endif
 		
 
 		if (terminate) {
@@ -207,7 +208,8 @@ cout << "...Ending search." << endl;
 				{ printf("which is: %0.2f minutes\n", cpuTime/60); }
 		}
 		
-		printf("Lower bound: %0.9f\n", model.currentLagrLB);
+		//printf("Lower bound: %0.9f\n", model.currentLagrLB);
+		printf("Lower bound: %0.9f\n", model.getIncumbentVal());
 		printf("\n");
 
 		//Summary: walltime, no. iterations, ave. walltime, no. procs., no. GSIts, currentLagrLB

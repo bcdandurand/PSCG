@@ -24,20 +24,25 @@
         ( std::ostringstream() << std::dec << x ) ).str()
 #define DEFAULT_MAX_OUTER_LOOP 20 //TODO have this automatically update the help text below. Probably overkill though.
 
-enum SolverReturnStatus {
-PSCG_OK=0,
-PSCG_OPTIMAL=0,
-PSCG_ABANDONED,
-PSCG_PRIMAL_INF,
-PSCG_DUAL_INF,
-PSCG_PRIMAL_LIM,
-PSCG_DUAL_LIM,
-PSCG_ITER_LIM,
-PSCG_ERR=100,
-PSCG_INF=200,
-PSCG_UNBOUND=201,
-PSCG_UNKNOWN=202
+enum Statuses{
+    SP_STATUS=0,
+    Z_STATUS
 };
+
+enum SPStatuses{
+    SP_OPT=0, //PSCG termination criteria met
+    SP_ITER_LIM, //otherwise feasible
+    SP_INFEAS //at least one subproblem is infeasible
+};
+
+enum Z_Statuses{
+    Z_OPT=0, //z is not only feasible, but optimal (PSCG meets termination criteria)
+    Z_FEAS, //z is feasible (has both recourse and integer feas)
+    Z_REC_INFEAS, //z has recourse (but its integer feas unknown)
+    Z_INT_INFEAS, //z is integer feas (but its recourse is unknown)
+    Z_INFEAS //z is infeasible by both feasibility qualities
+};
+
 
 
 class PSCGParams{

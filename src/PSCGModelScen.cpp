@@ -176,10 +176,15 @@ void PSCGModelScen::finishInitialisation() {
 
 #if 1
 int PSCGModelScen_Bodur::solveLagrangianProblem(const double *omega) {
-
-	for (int i = 0; i < n1; i++) {
-		//omega[i] = omega[i];
+	if(omega!=NULL){
+	  for (int i = 0; i < n1; i++) {
 	        slpObjective.setLinearCoef(xVariables[i], c_vec[i]+omega[i]);
+	  }
+	}
+	else{
+	  for (int i = 0; i < n1; i++) {
+	        slpObjective.setLinearCoef(xVariables[i], c_vec[i]);
+	  }
 	}
 		
 	if (!cplexMIP.solve()) {
@@ -223,9 +228,15 @@ int PSCGModelScen_Bodur::solveFeasibilityProblem(){
 int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
-	
-	for (int i = 0; i < n1; i++) {
+	if(omega!=NULL){
+	  for (int i = 0; i < n1; i++) {
 		osi->setObjCoeff(i, c[i] + omega[i]);
+	  }
+	}
+	else{
+	  for (int i = 0; i < n1; i++) {
+		osi->setObjCoeff(i, c[i]);
+	  }
 	}
 
 	osi->branchAndBound();

@@ -58,6 +58,25 @@ UP=0,
 DOWN
 };
 
+#if 0
+enum SolverReturnStatus {
+  PSCG_OK=0,
+  PSCG_OPTIMAL=0,
+  PSCG_ABANDONED,
+  PSCG_PRIMAL_INF_INT, //z does not satisfy integrality
+  PSCG_PRIMAL_INF_REC, //z does not have recourse
+  PSCG_PRIMAL_INF, //z both does not satisfy integrality and does not have recourse
+  PSCG_DUAL_INF,
+  PSCG_PRIMAL_LIM,
+  PSCG_DUAL_LIM,
+  PSCG_ITER_LIM,
+  PSCG_ERR=100,
+  PSCG_INF=200,
+  PSCG_UNBOUND=201,
+  PSCG_UNKNOWN=202
+};
+#endif
+
 // If you want to add a flag, search ADDFLAG in this file and the corresponding .cpp file and follow instructions.
 
 // ADDFLAG : Add the variable here
@@ -82,9 +101,13 @@ vector<double*> y_current;
 
 double* z_current;// = new double[n1];
 double* z_local;// = new double[n1];
+double* z_incumbent_; //this should be the last feasible z with best obj
 double* totalSoln_; //new double[n1+n2];
 vector<double> constrVec_; //This is filled with the value of Ax
 
+vector<int> spSolverStatuses_;
+
+int modelStatus_[2];
 //initialising zˆ0=0
 #if 0
 for (int i = 0; i < n1; i++) {
@@ -98,6 +121,7 @@ double LagrLB_Local;
 double LagrLB;
 double currentLagrLB;
 double ALVal;
+double incumbentVal_;
 
 // Norms
 double discrepNorm;
@@ -131,6 +155,7 @@ bool mpiHead;
 int numIntVars_;
 int *intVar_;
 char *colType_;
+int infeasIndex_;
 
 double *origVarLB_;
 double *origVarUB_;
@@ -138,15 +163,14 @@ double *origVarUB_;
 /** Incumbent objective value. */
 double incObjValue_;
 /** Incumbent */
-double *incumbent_;
 
 // Termination conditions
 int totalNoGSSteps;
 
 ProblemDataBodur pdBodur;
 
-PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),BcpsModel(){
+PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),incumbentVal_(ALPS_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
+	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),infeasIndex_(-1),BcpsModel(){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -186,10 +210,10 @@ PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),l
 		delete subproblemSolvers[tS];
 	}
 	//delete[] z_current;
-	delete[] z_local;
+	delete [] z_local;
+	delete [] z_incumbent_;
 	delete [] origVarLB_;
 	delete [] origVarUB_;
-	delete [] incumbent_;
 	delete [] totalSoln_;
 }
 
@@ -204,6 +228,7 @@ void assignSubproblems(){
 		//scenarioAssign[tS] = tS % mpiSize;
 		if( (tS % mpiSize)==mpiRank ){
 		    scenariosToThisModel.push_back(tS);
+		    spSolverStatuses_.push_back(-1);
 		}
 	}
 }
@@ -252,9 +277,9 @@ void initialiseModel(){
 	}
 	//z_current = new double[n1];
 	z_local = new double[n1];
+	z_incumbent_ = new double[n1];
 	origVarLB_ = new double[n1];
 	origVarUB_ = new double[n1];
-	incumbent_ = new double[n1];
 	//initialising zˆ0=0
 #if 0
 	for (int i = 0; i < n1; i++) {
@@ -294,9 +319,15 @@ void restoreOriginalVarBounds(){
 	subproblemSolvers[tS]->unfixX(origVarLB_,origVarUB_);
     }
 }
-void installSubproblem(double* z, vector<double*> &omega, int *indices, int *fixTypes, double *bds, int nFix){
+void clearSPVertexHistory(){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	subproblemSolvers[tS]->clearVertexHistory();
+    }
+}
+void installSubproblem(double* z, vector<double*> &omega, double lb, vector<int> &indices, vector<int> &fixTypes, vector<double> &bds, int nFix){
     restoreOriginalVarBounds();
     for(int ii=0; ii<nFix; ii++){
+cout << "Branching at index " << indices[ii] << "...";
 	switch( fixTypes[ii] ){
 	    case UP:
 		//up-branch
@@ -307,11 +338,19 @@ void installSubproblem(double* z, vector<double*> &omega, int *indices, int *fix
 		downBranchAllSPsAt(indices[ii],bds[ii]);
 		break;
 	}
+cout << "new bounds: " << bds[ii] << endl;
     }
     //TODO: resolve ownership questions for current_z, current_omega
     readZIntoModel(z);
     readOmegaIntoModel(omega);
+    currentLagrLB=lb;
 }
+double *getZ(){return z_current;}
+vector<double*>& getOmega(){return omega_current;}
+double *getIncumbentZ(){return z_incumbent_;}
+double getIncumbentVal(){return incumbentVal_;}
+int getInfeasIndex(){return infeasIndex_;}
+
 void readZIntoModel(double* z){
     z_current=z;
 }
@@ -335,15 +374,33 @@ void regularIteration(){
 	#if KIWIEL_PENALTY 
 	 computeKiwielPenaltyUpdate(SSCVal);
 	#endif
+printIntegralityViolations();
 }
 
 double computeBound(int nIters){
     initialIteration();
-    for(int ii=0; ii<nIters; ii++){
+    int maxNLoopIters = 5;
+    int loopIter = 0;
+    do
+    {
+      for(int ii=0; ii<nIters; ii++){
 	regularIteration();
+      }
+      updateModelStatus();
+      loopIter++;
     }
-    return LagrLB;
+    while(getZStatus()==Z_REC_INFEAS && loopIter < maxNLoopIters);
+#if 0
+    if(getZStatus()==Z_REC_INFEAS){
+	modelStatus_[Z_STATUS]=Z_FEAS;
+    }
+#endif
+printStatus();
+    return currentLagrLB;
 }
+
+double getBound(){return currentLagrLB;}
+void setBound(double bd){currentLagrLB=bd;}
 
 void solveContinuousMPs(){
 	for(int itGS=0; itGS < fixInnerStep; itGS++) { //The inner loop has a fixed number of occurences
@@ -394,12 +451,14 @@ int numIntInfeas()
 {
 #if 1
     int numIntegerInfs = 0;
+    infeasIndex_=-1;
     //int i = -1;
 //printZ(); 
     for (int i = 0; i < numIntVars_; ++i) {
       if ( ! checkInteger(z_current[intVar_[i]]) ) {
 //cout << "numIntVars_ " << numIntVars_ << " i = " << i << " index " << intVar_[i] << endl;
 	++numIntegerInfs;
+	if(infeasIndex_==-1){infeasIndex_=intVar_[i];} //Just take the first violation index found, for now.
       }
     }
 #endif
@@ -435,19 +494,115 @@ bool checkZIsFeasForScen2(int tS){
     //subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_current, omega_current[tS], origVarLB_, origVarUB_,colType_);
     return (subproblemSolvers[tS]->getSolverStatus()==PSCG_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==PSCG_ITER_LIM);
 }
+bool checkZIsFeasForScen3(int tS){
+    //subproblemSolvers[tS]->solveFeasibilityProblemWithXFixedToZ(z_current, origVarLB_, origVarUB_,colType_);
+    subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_current, omega_current[tS], origVarLB_, origVarUB_,colType_);
+    return (subproblemSolvers[tS]->getSolverStatus()==PSCG_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==PSCG_ITER_LIM);
+}
+
+bool checkForCutoff(){
+cout << incumbentVal_ << " <= " << currentLagrLB << "???" << endl;
+    return (incumbentVal_ <= currentLagrLB);
+}
+
+double evaluateFeasibleZ(){
+cout << "Begin evaluateFeasibleZ()" << endl;
+    assert(modelStatus_[Z_STATUS]==Z_FEAS || modelStatus_[Z_STATUS]==Z_OPT);
+    if(incumbentVal_ > currentLagrLB){ 
+	incumbentVal_=currentLagrLB;
+	memcpy( z_incumbent_, z_current, n1*sizeof(double) );
+    }
+cout << "End evaluateFeasibleZ()" << endl;
+    return incumbentVal_;
+}
 //int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
 
-
-bool checkZHasFullRecourse(){
+bool checkZIsFeasForCurrentY(){
     for(int tS=0; tS<nNodeSPs; tS++){
-	if(!checkZIsFeasForScen2(tS)) return false;
+	if(!checkZIsFeasForScen1(tS)){ 
+	    modelStatus_[Z_STATUS]=Z_REC_INFEAS;
+	    return false;
+	}
     }
     return true;
 }
 
+bool checkZHasFullRecourse(){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	if(!checkZIsFeasForScen2(tS)){ 
+	    modelStatus_[Z_STATUS]=Z_REC_INFEAS;
+	    return false;
+	}
+    }
+    return true;
+}
+
+bool solveRecourseProblemGivenFixedZ();	
+
+void updateModelStatus(){
+cout << "Begin updateModelStatus()" << endl;
+#if 0
+enum Statuses{
+    SP_STATUS=0,
+    Z_STATUS
+};
+
+enum SPStatuses{
+    SP_OPT=0, //PSCG termination criteria met
+    SP_ITER_LIM, //otherwise feasible
+    SP_INFEAS //at least one subproblem is infeasible
+};
+
+enum Z_Statuses{
+    Z_OPT=0,
+    Z_FEAS, //z is feasible (has both recourse and integer feas)
+    Z_REC_INFEAS, //z has recourse (but its integer feas unknown)
+    Z_INT_INFEAS, //z is integer feas (but its recourse is unknown)
+    Z_INFEAS //z is infeasible by both feasibility qualities
+};
+#endif
+    modelStatus_[SP_STATUS] = SP_ITER_LIM;
+    //modelStatus_[Z_STATUS] = Z_FEAS;
+    for(int tS=0; tS<nNodeSPs; tS++){
+	if(spSolverStatuses_[tS]==SP_INFEAS){
+	    modelStatus_[SP_STATUS]=SP_INFEAS;
+	    modelStatus_[Z_STATUS]=Z_INFEAS;
+	    return;
+	}
+    }
+    bool PSCGTerm = shouldTerminate();
+    if(modelStatus_[SP_STATUS]!=SP_INFEAS && PSCGTerm){
+	modelStatus_[SP_STATUS]=SP_OPT;
+    }
+    modelStatus_[Z_STATUS]=Z_FEAS;
+    checkZIsFeasForCurrentY();
+    //checkZHasFullRecourse();
+    if(numIntInfeas() > 0){
+	if(modelStatus_[Z_STATUS]==Z_REC_INFEAS){
+	    modelStatus_[Z_STATUS]=Z_INFEAS;
+	}
+	else{
+	    modelStatus_[Z_STATUS]=Z_INT_INFEAS;
+	}
+    }
+    if(modelStatus_[Z_STATUS]==Z_FEAS){
+	evaluateFeasibleZ();
+	if(PSCGTerm){
+	    modelStatus_[Z_STATUS]=Z_OPT;
+	}
+    }
+cout << "End updateModelStatus()" << endl;
+}
+
+int getSPStatus(){return modelStatus_[SP_STATUS];}
+void setSPStatus(int stat){modelStatus_[SP_STATUS]=stat;}
+int getZStatus(){return modelStatus_[Z_STATUS];}
+void setZStatus(int stat){modelStatus_[Z_STATUS]=stat;}
+
 
 //********************** Serious Step Condition (SSC) **********************
 bool shouldTerminate(){
+cout << "shouldTerminate(): " << (ALVal + 0.5*discrepNorm  - currentLagrLB) << endl;;
     return (ALVal + 0.5*discrepNorm  - currentLagrLB < SSC_DEN_TOL);
 }
 double computeSSCVal(){
@@ -464,7 +619,7 @@ void updateOmega(double SSCVal){
 	    currentLagrLB = LagrLB;
 	}
 	else {
-	    if(mpiRank==0) cout << "Null step taken." << endl;
+	    //if(mpiRank==0) cout << "Null step taken." << endl;
 	}
 }
 
@@ -499,6 +654,14 @@ void printZ(){
 	}
 
 	printf("]\n");
+}
+void printIntegralityViolations(){
+    for(int ii=0; ii<numIntVars_; ii++){
+	if(!checkInteger(z_current[intVar_[ii]])){
+	    cout << " (" << intVar_[ii] << "," << z_current[intVar_[ii]] << ")";
+	}
+    }
+    cout << endl;
 }
 
 

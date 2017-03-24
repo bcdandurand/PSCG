@@ -104,7 +104,7 @@ void PSCGModel::initialIteration(){
 	double LagrLB_Local = 0.0;
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
-	    subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
+	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
 	    subproblemSolvers[tS]->updateSolnInfo();
 	    subproblemSolvers[tS]->setXToVertex();
 	    subproblemSolvers[tS]->setYToVertex();
@@ -141,6 +141,57 @@ void PSCGModel::initialIteration(){
 	}
 	
 	currentLagrLB = LagrLB;
+}
+bool PSCGModel::solveRecourseProblemGivenFixedZ(){	
+	LagrLB_Local = 0.0;
+	bool isFeas=true;
+	for (int tS = 0; tS < nNodeSPs; tS++) {
+
+		//****************** Compute Next Vertex **********************
+		// Find next vertex and Lagrangian lower bound
+		
+		//Solve Lagrangian MIP
+		subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_current, NULL, origVarLB_, origVarUB_, colType_);
+                if(!(subproblemSolvers[tS]->getSolverStatus()==PSCG_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==PSCG_ITER_LIM)){isFeas=false;}
+		subproblemSolvers[tS]->updateSolnInfo();
+		//updateTimer.addTime(updateTimeThisStep);
+
+		//Acumulate the values for the Lagrangian subproblems
+		LagrLB_Local += pr[tS]*subproblemSolvers[tS]->getLagrBd();//FWSPoptvalk;}
+#if 0
+	 	if(useVertexHistory){
+		    subproblemSolvers[tS]->updateVertexHistory();
+		    if (nVerticesUsed > 0 && subproblemSolvers[tS]->getNumVertices() > nVerticesUsed) {
+			subproblemSolvers[tS]->removeBackVertex();
+		        //subproblemSolvers[tS]->fixWeightToZero( subproblemSolvers[tS]->getNumVertices() - nVerticesUsed-1);
+		    }
+		}
+#endif
+	}
+	#ifdef USING_MPI
+	if (mpiSize > 1) {
+
+		localReduceBuffer[0]=LagrLB_Local;
+
+		MPI_Allreduce(localReduceBuffer, reduceBuffer, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+		LagrLB = reduceBuffer[0];
+	}
+	#endif
+
+	if (mpiSize == 1) {
+		LagrLB = LagrLB_Local;
+		ALVal = ALVal_Local;
+		discrepNorm = localDiscrepNorm;
+		//cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
+	}
+        if(isFeas){
+	if(incumbentVal_ > LagrLB){ 
+	    incumbentVal_=LagrLB;
+	    memcpy( z_incumbent_, z_current, n1*sizeof(double) );
+        }
+	}
+	return isFeas;
 }
 
 void PSCGModel::performColGenStep(){	
@@ -191,7 +242,7 @@ void PSCGModel::performColGenStep(){
 		LagrLB = reduceBuffer[0];
 		ALVal = reduceBuffer[1];
 		discrepNorm = reduceBuffer[2];
-		if(mpiRank==0){ cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;}
+		//if(mpiRank==0){ cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;}
 
 		//commsTimer.stop();
 		//commsTimer.addTime(commsTimeThisStep);
@@ -202,7 +253,7 @@ void PSCGModel::performColGenStep(){
 		LagrLB = LagrLB_Local;
 		ALVal = ALVal_Local;
 		discrepNorm = localDiscrepNorm;
-		cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
+		//cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
 	}
 
 }

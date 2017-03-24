@@ -46,18 +46,17 @@ class PSCGNodeDesc : public BcpsNodeDesc {
     double *z_;
     int zLen_;
     vector<double* > omega_;
-    int *newBdInds_;
-    int *newBdTypes_; //0 UP branch, setting LB; 1 DOWN branch, setting UB 
-    double *newBds_;
+    vector<int> newBdInds_;
+    vector<int> newBdTypes_; //0 UP branch, setting LB; 1 DOWN branch, setting UB 
+    vector<double> newBds_;
     int nNewBds_;
  public:
-#if 1
     /** Default constructor. */
-    PSCGNodeDesc() : BcpsNodeDesc(),z_(NULL),newBdInds_(NULL),newBdTypes_(NULL),newBds_(NULL),nNewBds_(0){;}
+    PSCGNodeDesc() : BcpsNodeDesc(),z_(NULL),newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0){;}
 
     /** Useful constructor. */
     PSCGNodeDesc(PSCGModel *m) :
-	BcpsNodeDesc(m),z_(NULL),newBdInds_(NULL),newBdTypes_(NULL),newBds_(NULL),nNewBds_(0)
+	BcpsNodeDesc(m),z_(NULL),newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0)
 	{
 	    zLen_ = m->n1;
 	    z_ = new double[m->n1];
@@ -74,12 +73,73 @@ class PSCGNodeDesc : public BcpsNodeDesc {
 	for(int ii=0; ii<omega_.size(); ii++){
 	    if(omega_[ii]) delete [] omega_[ii];
 	}
-	if(newBdInds_) delete [] newBdInds_;
-	if(newBdTypes_) delete [] newBdTypes_;
-	if(newBds_) delete [] newBds_;
+	//if(newBdInds_) delete [] newBdInds_;
+	//if(newBdTypes_) delete [] newBdTypes_;
+	//if(newBds_) delete [] newBds_;
+    }
+    vector<int>& getNewBdInds(){return newBdInds_;}
+    vector<int>& getNewBdTypes(){return newBdTypes_;}
+    vector<double>& getNewBds(){return newBds_;}
+    void updateZ(PSCGModel *m){
+	memcpy(z_,m->getZ(),(m->n1)*sizeof(double));
+    }
+    void updateOmega(PSCGModel *m){
+	vector<double*> &omega = m->getOmega();
+	for(int tS=0; tS<m->nNodeSPs; tS++){
+	    memcpy(omega_[tS],omega[tS],(m->n1)*sizeof(double));
+	}
+    }
+    void updateBd(PSCGModel *m){lbd_=m->getBound();}
+
+    void assignNewBds(PSCGNodeDesc *parentNode){
+	vector<int> &bdInds = parentNode->getNewBdInds();
+	vector<int> &bdTypes = parentNode->getNewBdTypes();
+	vector<double> &bds = parentNode->getNewBds();
+	assignNewBds(bdInds,bdTypes,bds);
+    }
+    void assignNewBds(vector<int> &bdInds, vector<int> &bdTypes, vector<double> &bds){
+	newBdInds_.clear();
+	newBdTypes_.clear();
+	newBds_.clear();
+
+	newBdInds_=bdInds;
+	newBdTypes_=bdTypes;
+	newBds_=bds;
+	nNewBds_ = newBdInds_.size();
+    }
+    void addNewBd(int ind, int type, double bd){
+	newBdInds_.push_back(ind);
+	newBdTypes_.push_back(type);
+	newBds_.push_back(bd);
+	nNewBds_++;
+    }
+    void addNewBd(int ind, int type){
+	newBdInds_.push_back(ind);
+	newBdTypes_.push_back(type);
+	if(type==UP){ newBds_.push_back((int)ceil(z_[ind]));}
+	else{newBds_.push_back((int)floor(z_[ind]));}
+	nNewBds_++;
+    }
+    PSCGNodeDesc *createChildNodeDescUp(int ind){
+	PSCGModel *model = dynamic_cast<PSCGModel*>(this->model_);
+	PSCGNodeDesc *child = new PSCGNodeDesc(model);
+	child->assignNewBds(this);
+	child->updateZ(model);
+	child->updateOmega(model);
+	child->addNewBd(ind, UP);
+	return child;
+    }
+    PSCGNodeDesc *createChildNodeDescDown(int ind){
+	PSCGModel *model = dynamic_cast<PSCGModel*>(this->model_);
+	PSCGNodeDesc *child = new PSCGNodeDesc(model);
+	child->assignNewBds(this);
+	child->updateZ(model);
+	child->updateOmega(model);
+	child->addNewBd(ind, DOWN);
+	return child;
     }
     
-#endif
+    
  protected:
 
     /** Pack blis portion of node description into an encoded. */
@@ -148,7 +208,7 @@ class PSCGNodeDesc : public BcpsNodeDesc {
 	return status;
     }
     void installSubproblemFromNodeDesc(){
-	dynamic_cast<PSCGModel*>(model_)->installSubproblem(z_, omega_, newBdInds_, newBdTypes_, newBds_, nNewBds_);
+	dynamic_cast<PSCGModel*>(model_)->installSubproblem(z_, omega_, lbd_, newBdInds_, newBdTypes_, newBds_, nNewBds_);
     }
     
 };

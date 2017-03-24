@@ -20,6 +20,28 @@
 
 ILOSTLBEGIN
 
+#if 1
+enum SolverReturnStatus {
+  PSCG_OK=0,
+  PSCG_OPTIMAL=0,
+  PSCG_OPT_INT_FEAS,
+  PSCG_INT_FEAS,
+  PSCG_ABANDONED,
+  PSCG_PRIMAL_INF_INT, //z does not satisfy integrality
+  PSCG_PRIMAL_INF_REC, //z does not have recourse
+  PSCG_PRIMAL_INF_INT_REC, //z both does not satisfy integrality and does not have recourse
+  PSCG_PRIMAL_INF, //z both does not satisfy integrality and does not have recourse
+  PSCG_DUAL_INF,
+  PSCG_PRIMAL_LIM,
+  PSCG_DUAL_LIM,
+  PSCG_ITER_LIM,
+  PSCG_ERR=100,
+  PSCG_INF=200,
+  PSCG_UNBOUND=201,
+  PSCG_UNKNOWN=202
+};
+#endif
+
 class PSCGModelScen{
 public:
 PSCGModelScen():n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
@@ -96,6 +118,30 @@ void updateVertexHistory(){
 	}
 
 	nVertices++;
+}
+void clearVertexHistory(){
+  while(nVertices >0){
+    removeBackVertex();
+  }
+#if 0
+	for(int i=0; i<n1; i++) {
+	   xVertices[i].clear();
+	}
+
+	for(int i=0; i<n2; i++) { 
+	   yVertices[i].clear();
+	}
+	baseWeightObj.clear();
+	mpWeightVariables//.clear();
+	mpVertexConstraints[i]
+	weightSoln//.clear();
+	weightObjective//.clear();
+	nVertices=0;
+
+		mpWeightVariables[0].end();
+		mpWeightVariables.remove(0);
+		weightObjective.remove(0);
+#endif
 }
 virtual bool updateSolnInfo()=0;
 
@@ -501,6 +547,7 @@ virtual bool updateSolnInfo(){
 	cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
     }
 }
+
 
 private:
 IloCplex cplexMIP;

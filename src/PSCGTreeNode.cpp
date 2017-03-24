@@ -118,9 +118,50 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     // Extract info from this node and load subproblem into lp solver.
     //------------------------------------------------------
     
+    cout << "Number of nodes left: " << this->getKnowledgeBroker()->getNumNodeLeftSystem() << endl;;
     installSubProblem(model);
-    status = bound(model);
-    setStatus(AlpsNodeStatusFathomed);
+    bound(model); //node statuses are set here
+    int sp_status = model->getSPStatus();
+    int z_status = model->getZStatus();
+cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
+    if(sp_status==SP_INFEAS){
+	setStatus(AlpsNodeStatusFathomed);
+	model->clearSPVertexHistory();
+	cout << "Fathomed due to infeasibility" << endl;
+    }
+    else{
+      if(model->checkForCutoff()){
+	setStatus(AlpsNodeStatusFathomed);
+	model->clearSPVertexHistory();
+	cout << "Fathomed by bound" << endl;
+      }
+      else if(z_status==Z_OPT){
+        model->evaluateFeasibleZ();
+	setStatus(AlpsNodeStatusFathomed);
+	model->clearSPVertexHistory();
+	//store solution, update cutoff if appropriate
+	cout << "Fathomed by optimality" << endl;
+      }
+      else if(z_status==Z_FEAS){
+        model->evaluateFeasibleZ();
+	//setStatus(AlpsNodeStatusFathomed);
+	setStatus(AlpsNodeStatusEvaluated);
+	cout << "Node still needs more processing...." << endl;
+      }
+      else if(z_status==Z_REC_INFEAS){
+	setStatus(AlpsNodeStatusEvaluated);
+	if(model->solveRecourseProblemGivenFixedZ()){	
+            model->setZStatus(Z_FEAS);
+	}
+	cout << "Integrality satsified at node, but not recourse. Node still needs more processing...." << endl;
+	cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
+      }
+      else{//Need to branch
+	setStatus(AlpsNodeStatusPregnant);
+	model->clearSPVertexHistory();
+	cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << "." << endl;
+      }
+    }
 
 #if 0
     while (keepOn && (pass < maxPass)) {
@@ -251,6 +292,7 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     //------------------------------------------------------
     
     //model->isRoot_ = false;
+cout << endl;
     return status;
 }
 
@@ -259,7 +301,7 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
 std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> >
 PSCGTreeNode::branch()
 {
-
+cout << "Begin branch()" << endl;
     //------------------------------------------------------
     // Change one var hard bound and record the change in nodedesc:
     // THINK: how about constraint bounds? When to update?
@@ -270,445 +312,26 @@ PSCGTreeNode::branch()
 
     double objVal = getQuality();
 
-    PSCGNodeDesc* childDesc = NULL;  
-      
     std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> > 
 	childNodeDescs;
     
     PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());    
-#if 0
-    int numCols = model->getNumCols();
+    PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
-
-#ifdef PSCG_DEBUG_MORE
-    // Debug survived old constraints.
-    int currNumOldCons = model->getNumOldConstraints();
-    for (int k = 0; k < currNumOldCons; ++k) {
-	PSCGConstraint *aCon = model->oldConstraints()[k];
-	assert(aCon);
-	std::cout << "BRANCH: DBG: "
-		  << "k=" << k << ", len=" << aCon->getSize()
-		  << ", node=" << index_ << std::endl;
-    }
-#endif
-
-    //------------------------------------------------------
-    // Get branching object. TODO: Assume integer branching object. 
-    //------------------------------------------------------
-    
-    PSCGBranchObjectInt *branchObject =
-	dynamic_cast<PSCGBranchObjectInt *>(branchObject_);
-    int objInd = branchObject->getObjectIndex();
-
-    double bValue = branchObject->getValue();
-
-    PSCGObjectInt *obj = dynamic_cast<PSCGObjectInt *>(model->objects(objInd));
-    int branchVar = obj->columnIndex();
-    
-#ifdef PSCG_DEBUG
-    if ( (branchVar < 0) || (branchVar >= numCols) ) {
-	std::cout << "ERROR: BRANCH(): branchVar = " << branchVar 
-		  << "; numCols = " << numCols  << std::endl;
-	throw CoinError("branch index is out of range", 
-			"branch", "PSCGTreeNode");
-    }
-#endif
-
-#ifdef PSCG_DEBUG
-    printf("BRANCH(): on %d, phase %d\n", branchVar, phase);
-    printf("DOWN: lb %g, up %g\n",
-	   branchObject->getDown()[0], branchObject->getDown()[1]);
-    printf("UP  : lb %g, up %g\n",
-	   branchObject->getUp()[0], branchObject->getUp()[1]);
-#endif
-
-    PSCGNodeDesc* thisDesc = dynamic_cast<PSCGNodeDesc*>(desc_);
-
-        
-    //======================================================
-    //------------------------------------------------------
-    // Create down-branch node description.
-    //------------------------------------------------------
-    //======================================================
-    
-    childDesc = new PSCGNodeDesc(model);
-    
-    if (phase == AlpsPhaseRampup) {
-	
-	//--------------------------------------------------
-	// Store a full description since each node will be the root of
-	// a subtree.
-	// NOTE: this desc must be explicit during rampup.
-	//--------------------------------------------------	
-
-	int index, k;
-	int numModify = -1;
-	double value;
-	
-	double *fVarHardLB = new double [numCols];
-	double *fVarHardUB = new double [numCols];
-	int *fVarHardLBInd = new int [numCols];
-	int *fVarHardUBInd = new int [numCols];
-		
-	double *fVarSoftLB = NULL;
-	double *fVarSoftUB = NULL;
-	int *fVarSoftLBInd = NULL;
-	int *fVarSoftUBInd = NULL;
-
-	//--------------------------------------------------
-	// Full hard variable bounds.
-	//--------------------------------------------------
-
-	numModify = thisDesc->getVars()->lbHard.numModify;
-	assert(numModify == numCols);
-	for (k = 0; k < numModify; ++k) {
-	    index = thisDesc->getVars()->lbHard.posModify[k];
-	    assert(index == k);
-	    value = thisDesc->getVars()->lbHard.entries[k];
-	    fVarHardLB[k] = value;
-	    fVarHardLBInd[k] = index;
-	}
-	
-	numModify = thisDesc->getVars()->ubHard.numModify;
-	assert(numModify == numCols);
-	for (k = 0; k < numModify; ++k) {
-	    index = thisDesc->getVars()->ubHard.posModify[k];
-	    assert(index == k);
-	    value = thisDesc->getVars()->ubHard.entries[k];
-	    fVarHardUB[k] = value;
-	    fVarHardUBInd[k] = index;
-	}
-	
-	// Branching bounds.
-	fVarHardLB[branchVar] = branchObject->getDown()[0];
-	fVarHardUB[branchVar] = branchObject->getDown()[1];
-
-
-	childDesc->assignVarHardBound(numCols,
-				      fVarHardLBInd,
-				      fVarHardLB,
-				      numCols,
-				      fVarHardUBInd,
-				      fVarHardUB);
-
-	//--------------------------------------------------
-	// Soft variable bounds.
-	//--------------------------------------------------
-
-	int numSoftVarLowers = thisDesc->getVars()->lbSoft.numModify;
-	assert(numSoftVarLowers >= 0 && numSoftVarLowers <= numCols);
-	if (numSoftVarLowers > 0) {
-	    fVarSoftLB = new double [numSoftVarLowers];
-	    fVarSoftLBInd = new int [numSoftVarLowers];
-	    for (k = 0; k < numSoftVarLowers; ++k) {
-		index = thisDesc->getVars()->lbSoft.posModify[k];
-		value = thisDesc->getVars()->lbSoft.entries[k];
-		fVarSoftLB[k] = value;
-		fVarSoftLBInd[k] = index;
-	    }
-	}
-		    
-	int numSoftVarUppers = thisDesc->getVars()->ubSoft.numModify;
-	assert(numSoftVarUppers >= 0 && numSoftVarUppers <= numCols);
-	if (numSoftVarUppers > 0) {
-	    fVarSoftUB = new double [numSoftVarUppers];
-	    fVarSoftUBInd = new int [numSoftVarUppers];
-	    for (k = 0; k < numSoftVarUppers; ++k) {
-		index = thisDesc->getVars()->ubSoft.posModify[k];
-		value = thisDesc->getVars()->ubSoft.entries[k];
-		fVarSoftUB[k] = value;
-		fVarSoftUBInd[k] = index;
-	    }
-	}
-
-#ifdef PSCG_DEBUG_MORE
-	// Print soft bounds.
-	std::cout << "\nBRANCH: numSoftVarLowers=" << numSoftVarLowers
-		  << ", numSoftVarUppers=" << numSoftVarUppers
-		  << std::endl;
-	for (k = 0; k < numSoftVarLowers; ++k) {
-	    std::cout << "Col[" << fVarSoftLBInd[k] << "]: soft lb="
-		      << fVarSoftLB[k] << std::endl;		    
-	}
-	std::cout << "------------------" << std::endl;
-	for (k = 0; k < numSoftVarUppers; ++k) {
-	    std::cout << "Col[" << fVarSoftUBInd[k] << "]: soft ub="
-		      << fVarSoftUB[k] << std::endl;
-	}
-	std::cout << "------------------" << std::endl << std::endl;
-#endif
-
-	// Assign it anyway so to transfer ownership of memory(fVarSoftLBInd,etc.)
-	childDesc->assignVarSoftBound(numSoftVarLowers, 
-				      fVarSoftLBInd,
-				      fVarSoftLB,
-				      numSoftVarUppers, 
-				      fVarSoftUBInd,
-				      fVarSoftUB);
-
-	//--------------------------------------------------
-	// Full set of non-core constraints.
-	// NOTE: non-core constraints have been saved in description
-	//       when process() during ramp-up.
-	//--------------------------------------------------
-
-	BcpsObject **tempCons = NULL;
-	int tempInt = 0;
-	
-	tempInt = thisDesc->getCons()->numAdd;
-	if (tempInt > 0) {
-	    tempCons = new BcpsObject* [tempInt];
-	    for (k = 0; k < tempInt; ++k) {
-		PSCGConstraint *aCon = dynamic_cast<PSCGConstraint *>
-		    (thisDesc->getCons()->objects[k]);
-                
-		assert(aCon);
-		assert(aCon->getSize() > 0);
-		assert(aCon->getSize() < 100000);
-		PSCGConstraint *newCon = new PSCGConstraint(*aCon);
-		tempCons[k] = newCon;
-	    }
-	}
-	    
-
-#if 0
-	else {
-	    // No cons or only root cons.
-	    tempInt = model->getNumOldConstraints();
-
-	    if (tempInt > 0) {
-		tempCons = new BcpsObject* [tempInt];
-	    }
-	    for (k = 0; k < tempInt; ++k) {
-		PSCGConstraint *aCon = model->oldConstraints()[k];                
-		assert(aCon);
-		assert(aCon->getSize() > 0);
-		assert(aCon->getSize() < 100000);
-		PSCGConstraint *newCon = new PSCGConstraint(*aCon);
-		tempCons[k] = newCon;
-	    }
-	}
-#endif
-
-#ifdef PSCG_DEBUG_MORE
-	std::cout << "BRANCH: down: tempInt=" << tempInt <<std::endl;
-#endif
-	// Fresh desc, safely add.
-	childDesc->setAddedConstraints(tempInt, tempCons);
-    }
-    else {
-	
-	//--------------------------------------------------
-	// Relative: Only need to record hard var bound change. 
-	// NOTE: soft var bound changes are Record after selectBranchObject.
-	//--------------------------------------------------
-	
-	childDesc->setVarHardBound(1,
-				   &branchVar,
-				   &(branchObject->getDown()[0]),
-				   1,
-				   &branchVar,
-				   &(branchObject->getDown()[1]));
-    }
-
-    childDesc->setBranchedDir(-1);
-    childDesc->setBranchedInd(objInd);
-    childDesc->setBranchedVal(bValue);
-
-    // Copy warm start.
-    CoinWarmStartBasis *ws = thisDesc->getBasis();
-    CoinWarmStartBasis *newWs = new CoinWarmStartBasis(*ws);
-    childDesc->setBasis(newWs);
-    
+    assert(model->getInfeasIndex()!=-1);
+    PSCGNodeDesc *childDesc = desc->createChildNodeDescUp(model->getInfeasIndex());
     childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
-					    objVal));
-
-    //======================================================
-    //------------------------------------------------------
-    // Create up-branch node description.
-    //------------------------------------------------------
-    //======================================================
-    
-    childDesc = new PSCGNodeDesc(model);
-
-    if (phase == AlpsPhaseRampup) {
-
-	//--------------------------------------------------
-	// Store a full description since each node will be the root of
-	// a subtree.
-	// NOTE: parent must be explicit during rampup.
-	//--------------------------------------------------	
-
-	int index, k;
-	int numModify = -1;
-	double value;
-	
-	double *fVarHardLB = new double [numCols];
-	double *fVarHardUB = new double [numCols];
-	int *fVarHardLBInd = new int [numCols];
-	int *fVarHardUBInd = new int [numCols];
-		
-	double *fVarSoftLB = NULL;
-	double *fVarSoftUB = NULL;
-	int *fVarSoftLBInd = NULL;
-	int *fVarSoftUBInd = NULL;
-
-	//--------------------------------------------------
-	// Full hard variable bounds.
-	//--------------------------------------------------
-	
-	numModify = thisDesc->getVars()->lbHard.numModify;
-	assert(numModify == numCols);
-	for (k = 0; k < numModify; ++k) {
-	    index = thisDesc->getVars()->lbHard.posModify[k];
-	    assert(index == k);
-	    value = thisDesc->getVars()->lbHard.entries[k];
-	    fVarHardLB[k] = value;
-	    fVarHardLBInd[k] = index;
-	}
-	
-	numModify = thisDesc->getVars()->ubHard.numModify;
-	assert(numModify == numCols);
-	for (k = 0; k < numModify; ++k) {
-	    index = thisDesc->getVars()->ubHard.posModify[k];
-	    assert(index == k);
-	    value = thisDesc->getVars()->ubHard.entries[k];
-	    fVarHardUB[k] = value;
-	    fVarHardUBInd[k] = index;
-	}
-	
-	// Branching bounds.
-	fVarHardLB[branchVar] = branchObject->getUp()[0];
-	fVarHardUB[branchVar] = branchObject->getUp()[1];
-
-	childDesc->assignVarHardBound(numCols,
-				      fVarHardLBInd,
-				      fVarHardLB,
-				      numCols,
-				      fVarHardUBInd,
-				      fVarHardUB);
-
-	//--------------------------------------------------
-	// Soft variable bounds.
-	//--------------------------------------------------
-
-	int numSoftVarLowers = thisDesc->getVars()->lbSoft.numModify;
-	assert(numSoftVarLowers >= 0 && numSoftVarLowers <= numCols);
-	if (numSoftVarLowers > 0) {
-	    fVarSoftLB = new double [numSoftVarLowers];
-	    fVarSoftLBInd = new int [numSoftVarLowers];
-	    for (k = 0; k < numSoftVarLowers; ++k) {
-		index = thisDesc->getVars()->lbSoft.posModify[k];
-		value = thisDesc->getVars()->lbSoft.entries[k];
-		fVarSoftLB[k] = value;
-		fVarSoftLBInd[k] = index;
-	    }
-	}
-		    
-	int numSoftVarUppers = thisDesc->getVars()->ubSoft.numModify;
-	assert(numSoftVarUppers >= 0 && numSoftVarUppers <= numCols);
-	if (numSoftVarUppers > 0) {
-	    fVarSoftUB = new double [numSoftVarUppers];
-	    fVarSoftUBInd = new int [numSoftVarUppers];
-	    for (k = 0; k < numSoftVarUppers; ++k) {
-		index = thisDesc->getVars()->ubSoft.posModify[k];
-		value = thisDesc->getVars()->ubSoft.entries[k];
-		fVarSoftUB[k] = value;
-		fVarSoftUBInd[k] = index;
-	    }
-	}
-
-	// Assign it anyway so to transfer ownership of memory(fVarSoftLBInd,etc.)
-	childDesc->assignVarSoftBound(numSoftVarLowers, 
-				      fVarSoftLBInd,
-				      fVarSoftLB,
-				      numSoftVarUppers, 
-				      fVarSoftUBInd,
-				      fVarSoftUB);
-
-	//--------------------------------------------------
-	// Full set of non-core constraints.
-	// NOTE: non-core constraints have been saved in description
-	//       when process() during ramp-up.
-	//--------------------------------------------------
-	
-	BcpsObject **tempCons = NULL;
-	int tempInt = 0;
-	
-	tempInt = thisDesc->getCons()->numAdd;
-	if (tempInt > 0) {
-	    tempCons = new BcpsObject* [tempInt];
-	
-	    for (k = 0; k < tempInt; ++k) {
-		PSCGConstraint *aCon = dynamic_cast<PSCGConstraint *>
-		    (thisDesc->getCons()->objects[k]);
-	    
-		assert(aCon);
-		assert(aCon->getSize() > 0);
-		assert(aCon->getSize() < 1000);
-		PSCGConstraint *newCon = new PSCGConstraint(*aCon);
-		tempCons[k] = newCon;
-	    }
-	}
-	
-#if 0
-	else {
-	    // No cons or only root cons.
-	    tempInt = model->getNumOldConstraints();
-	    if (tempInt > 0) {
-		tempCons = new BcpsObject* [tempInt];
-	    }
-	    for (k = 0; k < tempInt; ++k) {
-		PSCGConstraint *aCon = model->oldConstraints()[k];                
-		assert(aCon);
-		assert(aCon->getSize() > 0);
-		assert(aCon->getSize() < 1000);
-		PSCGConstraint *newCon = new PSCGConstraint(*aCon);
-		tempCons[k] = newCon;
-	    }
-	}
-#endif
-
-#ifdef PSCG_DEBUG_MORE
-	std::cout << "BRANCH: up: tempInt=" << tempInt <<std::endl;
-#endif
-	// Fresh desc, safely add.
-	childDesc->setAddedConstraints(tempInt, tempCons);
-    }
-    else {
-
-	//--------------------------------------------------
-	// Relative: Only need to record hard var bound change. 
-	// NOTE: soft var bound changes are Record after selectBranchObject.
-	//--------------------------------------------------
-
-	childDesc->setVarHardBound(1,
-				   &branchVar,
-				   &(branchObject->getUp()[0]),
-				   1,
-				   &branchVar,
-				   &(branchObject->getUp()[1]));
-    }
-
-    childDesc->setBranchedDir(1);
-    childDesc->setBranchedInd(objInd);
-    childDesc->setBranchedVal(bValue);
-    
-    // Copy warm start.
-    CoinWarmStartBasis *newWs2 = new CoinWarmStartBasis(*ws);
-    childDesc->setBasis(newWs2);
-    
+					    model->getBound()));
+    childDesc = desc->createChildNodeDescDown(model->getInfeasIndex());
     childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
-					    objVal));  
-
-    // Change node status to branched.
-#endif
+					    model->getBound()));
     status_ = AlpsNodeStatusBranched;
     
+cout << "End branch()" << endl;
     return childNodeDescs;
 }
 
@@ -781,64 +404,23 @@ int PSCGTreeNode::selectBranchObject(PSCGModel *model,
 
 int PSCGTreeNode::bound(BcpsModel *model) 
 {
-    int status = PSCG_OK;
+cout << "Begin bound()" << endl;
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
-    
+    PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
-    m->computeBound(30);
-#if 0
-    if (m->solver()->isAbandoned()) {
-	status = PSCG_LP_ABANDONED;
-    }
-    else if (m->solver()->isProvenOptimal()) {
-	status = PSCG_LP_OPTIMAL;
-        PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-
-        double objValue = m->solver()->getObjValue() *
-            m->solver()->getObjSense();
-        
-        int dir = desc->getBranchedDir();
-        if (dir != 0) {
-            double objDeg = objValue - quality_;
-            int objInd = desc->getBranchedInd();
-            double lpX = desc->getBranchedVal();
-            PSCGObjectInt *intObject = 
-                dynamic_cast<PSCGObjectInt *>(m->objects(objInd));            
-
-            intObject->pseudocost().update(dir, objDeg, lpX);
-        }
-
-        // Update quality of this nodes.
-        quality_ = objValue;
-    }
-    else if (m->solver()->isProvenPrimalInfeasible()) {
-	status = PSCG_LP_PRIMAL_INF;
-    }
-    else if (m->solver()->isProvenDualInfeasible()) {
-	status = PSCG_LP_DUAL_INF;
-    }
-    else if (m->solver()->isPrimalObjectiveLimitReached()) {
-	status = PSCG_LP_PRIMAL_LIM;
-    }
-    else if (m->solver()->isDualObjectiveLimitReached()) {
-	status = PSCG_LP_DUAL_LIM;
-    }
-    else if (m->solver()->isIterationLimitReached()) {
-	status = PSCG_LP_ITER_LIM;
-    }
-    else {
-	std::cout << "UNKNOWN LP STATUS" << std::endl;
-	assert(0);
-    }
-    
-#endif
-    return status;
+    quality_ = m->computeBound(3);
+    desc->updateZ(m);
+    desc->updateOmega(m); 
+    desc->updateBd(m);
+cout << "End bound()" << endl;
+    return 0;
 }
 
 //#############################################################################
 
 int PSCGTreeNode::installSubProblem(BcpsModel *m)
 {
+cout << "Begin installSubProblem()" << endl;
     AlpsReturnStatus status = AlpsReturnStatusOk;
 
     PSCGModel *model = dynamic_cast<PSCGModel *>(m);
@@ -1306,6 +888,7 @@ int PSCGTreeNode::installSubProblem(BcpsModel *m)
 
     }  
 #endif
+cout << "End installSubProblem()" << endl;
     return status;
 }
 

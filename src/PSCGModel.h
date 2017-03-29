@@ -28,7 +28,7 @@
 
 #define smallNumber 0.000001
 #define SSC_PARAM 0.1
-#define SSC_DEN_TOL 1e-10
+#define SSC_DEN_TOL 1e-4
 #define ROUNDING_TOLERANCE 1e-4
 #define DEFAULT_THREADS 1
 #define KIWIEL_PENALTY 0 //set 1 to use Kiwiel (2006) penalty update rule
@@ -108,6 +108,7 @@ vector<double> constrVec_; //This is filled with the value of Ax
 vector<int> spSolverStatuses_;
 
 int modelStatus_[2];
+bool omegaUpdated_;
 //initialising zˆ0=0
 #if 0
 for (int i = 0; i < n1; i++) {
@@ -170,7 +171,7 @@ int totalNoGSSteps;
 ProblemDataBodur pdBodur;
 
 PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),LagrLB_Local(0.0),ALVal_Local(0.0),incumbentVal_(ALPS_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),infeasIndex_(-1),BcpsModel(){
+	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),infeasIndex_(-1),omegaUpdated_(false),BcpsModel(){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -324,7 +325,7 @@ void clearSPVertexHistory(){
 	subproblemSolvers[tS]->clearVertexHistory();
     }
 }
-void installSubproblem(double* z, vector<double*> &omega, double lb, vector<int> &indices, vector<int> &fixTypes, vector<double> &bds, int nFix){
+void installSubproblem(double* z, vector<double*> &omega, double lb, vector<int> &indices, vector<int> &fixTypes, vector<double> &bds, int nFix, int infeasIndex){
     restoreOriginalVarBounds();
     for(int ii=0; ii<nFix; ii++){
 cout << "Branching at index " << indices[ii] << "...";
@@ -338,18 +339,20 @@ cout << "Branching at index " << indices[ii] << "...";
 		downBranchAllSPsAt(indices[ii],bds[ii]);
 		break;
 	}
-cout << "new bounds: " << bds[ii] << endl;
+cout << "new bounds: " << bds[ii] << " with bound type " << fixTypes[ii] << endl;
     }
     //TODO: resolve ownership questions for current_z, current_omega
     readZIntoModel(z);
     readOmegaIntoModel(omega);
     currentLagrLB=lb;
+    infeasIndex_=infeasIndex;
 }
 double *getZ(){return z_current;}
 vector<double*>& getOmega(){return omega_current;}
 double *getIncumbentZ(){return z_incumbent_;}
 double getIncumbentVal(){return incumbentVal_;}
 int getInfeasIndex(){return infeasIndex_;}
+void setInfeasIndex(int ii){infeasIndex_=ii;}
 
 void readZIntoModel(double* z){
     z_current=z;
@@ -363,30 +366,45 @@ void readOmegaIntoModel(vector<double*> &omega){
 virtual AlpsTreeNode* createRoot();
 #endif
 
-void initialIteration();
+int initialIteration();
 
-void regularIteration(){
+int regularIteration(){
 	solveContinuousMPs();
 
-	performColGenStep();
+	int SPStatus=performColGenStep();
 	double SSCVal = computeSSCVal();
 	updateOmega(SSCVal);
 	#if KIWIEL_PENALTY 
 	 computeKiwielPenaltyUpdate(SSCVal);
 	#endif
 printIntegralityViolations();
+	return SPStatus;
 }
 
 double computeBound(int nIters){
-    initialIteration();
-    int maxNLoopIters = 5;
+    int SPStatus=initialIteration();
+    updateModelStatusZ();
+    if(SPStatus==SP_INFEAS){return currentLagrLB;}
+    else if(currentLagrLB >= incumbentVal_){return currentLagrLB;}
+    int maxNLoopIters = 1;
     int loopIter = 0;
     do
     {
+      //if(loopIter>0) {computeScalingPenaltyUpdate(10.0);}
       for(int ii=0; ii<nIters; ii++){
-	regularIteration();
+	SPStatus=regularIteration();
+	printStatus();
+        if(currentLagrLB >= incumbentVal_){
+      	    updateModelStatusZ();
+	    return currentLagrLB;
+	}
+	if(shouldTerminate()){
+      	    updateModelStatusZ();
+	    return currentLagrLB;
+	}
       }
-      updateModelStatus();
+      assert(SPStatus!=SP_INFEAS);
+      updateModelStatusZ();
       loopIter++;
     }
     while(getZStatus()==Z_REC_INFEAS && loopIter < maxNLoopIters);
@@ -428,7 +446,7 @@ void solveContinuousMPs(){
 	}
 }
 
-void performColGenStep();
+int performColGenStep();
 
 
 void updateZ(){
@@ -472,7 +490,7 @@ bool verifyIntegrality()
 
 /** Check if a value is integer. */
 bool checkInteger(double value) const {
-    double integerTolerance = 1.0e-5;
+    double integerTolerance = 1.0e-2;
     double nearest = floor(value + 0.5);
 //cout << " " << fabs(value-nearest);
     if (fabs(value - nearest) <= integerTolerance) {
@@ -539,8 +557,8 @@ bool checkZHasFullRecourse(){
 
 bool solveRecourseProblemGivenFixedZ();	
 
-void updateModelStatus(){
-cout << "Begin updateModelStatus()" << endl;
+void updateModelStatusSP(){
+cout << "Begin updateModelStatusSP()" << endl;
 #if 0
 enum Statuses{
     SP_STATUS=0,
@@ -553,6 +571,30 @@ enum SPStatuses{
     SP_INFEAS //at least one subproblem is infeasible
 };
 
+#endif
+    modelStatus_[SP_STATUS] = SP_ITER_LIM;
+    //modelStatus_[Z_STATUS] = Z_FEAS;
+    for(int tS=0; tS<nNodeSPs; tS++){
+	if(spSolverStatuses_[tS]==SP_INFEAS){
+	    modelStatus_[SP_STATUS]=SP_INFEAS;
+//	    modelStatus_[Z_STATUS]=Z_INFEAS;
+	    return;
+	}
+    }
+    bool PSCGTerm = shouldTerminate();
+    if(modelStatus_[SP_STATUS]!=SP_INFEAS && PSCGTerm){
+	modelStatus_[SP_STATUS]=SP_OPT;
+    }
+cout << "End updateModelStatusSP()" << endl;
+}
+
+void updateModelStatusZ(){
+cout << "Begin updateModelStatusZ()" << endl;
+#if 0
+enum Statuses{
+    SP_STATUS=0,
+    Z_STATUS
+};
 enum Z_Statuses{
     Z_OPT=0,
     Z_FEAS, //z is feasible (has both recourse and integer feas)
@@ -561,19 +603,6 @@ enum Z_Statuses{
     Z_INFEAS //z is infeasible by both feasibility qualities
 };
 #endif
-    modelStatus_[SP_STATUS] = SP_ITER_LIM;
-    //modelStatus_[Z_STATUS] = Z_FEAS;
-    for(int tS=0; tS<nNodeSPs; tS++){
-	if(spSolverStatuses_[tS]==SP_INFEAS){
-	    modelStatus_[SP_STATUS]=SP_INFEAS;
-	    modelStatus_[Z_STATUS]=Z_INFEAS;
-	    return;
-	}
-    }
-    bool PSCGTerm = shouldTerminate();
-    if(modelStatus_[SP_STATUS]!=SP_INFEAS && PSCGTerm){
-	modelStatus_[SP_STATUS]=SP_OPT;
-    }
     modelStatus_[Z_STATUS]=Z_FEAS;
     checkZIsFeasForCurrentY();
     //checkZHasFullRecourse();
@@ -587,11 +616,11 @@ enum Z_Statuses{
     }
     if(modelStatus_[Z_STATUS]==Z_FEAS){
 	evaluateFeasibleZ();
-	if(PSCGTerm){
+	if(modelStatus_[SP_STATUS]==SP_OPT){
 	    modelStatus_[Z_STATUS]=Z_OPT;
 	}
     }
-cout << "End updateModelStatus()" << endl;
+cout << "End updateModelStatusZ()" << endl;
 }
 
 int getSPStatus(){return modelStatus_[SP_STATUS];}
@@ -609,7 +638,7 @@ double computeSSCVal(){
     return (LagrLB-currentLagrLB)/(ALVal + 0.5*discrepNorm - currentLagrLB);
 }
 		
-void updateOmega(double SSCVal){
+bool updateOmega(double SSCVal){
 	if(SSCVal >= SSC_PARAM) {
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		for (int i = 0; i < n1; i++) {
@@ -617,10 +646,13 @@ void updateOmega(double SSCVal){
 		}
 	    }
 	    currentLagrLB = LagrLB;
+    	    omegaUpdated_ = true;
 	}
 	else {
+    	    omegaUpdated_ = false;
 	    //if(mpiRank==0) cout << "Null step taken." << endl;
 	}
+	return omegaUpdated_;
 }
 
 		
@@ -629,6 +661,17 @@ void updateOmega(double SSCVal){
 //penalty from Kiwiel 2006 and Lubin et al.
 void computeKiwielPenaltyUpdate(double SSCVal){	
 	penC = 1.0/min( max( (2.0/penC)*(1.0-SSCVal),  max(1.0/(10.0*penC),1e-4)    ), 10.0/penC);
+	for (int tS = 0; tS < nNodeSPs; tS++) {
+	    subproblemSolvers[tS]->setQuadraticTerm(penC);
+    	    for (int i = 0; i < n1; i++) {
+		scaling_matrix[tS][i] = penC;
+    	    }
+	}
+if(mpiRank==0) cout << "Penalty is now: " << penC << endl;
+}
+void computeScalingPenaltyUpdate(double scaling){	
+	//penC = 1.0/min( max( (2.0/penC)*(1.0-SSCVal),  max(1.0/(10.0*penC),1e-4)    ), 10.0/penC);
+	penC *= scaling;
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 	    subproblemSolvers[tS]->setQuadraticTerm(penC);
     	    for (int i = 0; i < n1; i++) {

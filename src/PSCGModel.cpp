@@ -99,15 +99,24 @@ void PSCGModel::setupSolvers(){
 	}
 }
 
-void PSCGModel::initialIteration(){
+int PSCGModel::initialIteration(){
 	// This is part of the initialisation - initial Lagrangian subproblem computations
 	double LagrLB_Local = 0.0;
+	modelStatus_[SP_STATUS]=SP_ITER_LIM;
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
-	    subproblemSolvers[tS]->updateSolnInfo();
-	    subproblemSolvers[tS]->setXToVertex();
-	    subproblemSolvers[tS]->setYToVertex();
+    	    if(spSolverStatuses_[tS]==PSCG_OPTIMAL || spSolverStatuses_[tS]==PSCG_ITER_LIM){	
+		subproblemSolvers[tS]->updateSolnInfo();
+	    	subproblemSolvers[tS]->setXToVertex();
+	    	subproblemSolvers[tS]->setYToVertex();
+	    }
+	    else{
+	    	    LagrLB = ALPS_DBL_MAX;	    
+		    currentLagrLB = LagrLB;
+	    	    modelStatus_[SP_STATUS]=SP_INFEAS;
+	    	    return SP_INFEAS;
+	    }
 
 	    //updateTimer.stop();
 	    //updateTimer.addTime(updateTimeThisStep);
@@ -121,6 +130,11 @@ void PSCGModel::initialIteration(){
 		    //subproblemSolvers[tS]->fixWeightToZero( subproblemSolvers[tS]->getNumVertices() - nVerticesUsed-1);
 		}
 	    }
+#if 0
+	    for (int i = 0; i < n1; i++) {
+	    	omega_current[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    }
+#endif
 	}
 	
 	//Update of z
@@ -141,6 +155,14 @@ void PSCGModel::initialIteration(){
 	}
 	
 	currentLagrLB = LagrLB;
+#if 0
+	for (int tS = 0; tS < nNodeSPs; tS++) {
+	    for (int i = 0; i < n1; i++) {
+	    	omega_current[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    }
+	}
+#endif
+	return modelStatus_[SP_STATUS];
 }
 bool PSCGModel::solveRecourseProblemGivenFixedZ(){	
 	LagrLB_Local = 0.0;
@@ -152,12 +174,18 @@ bool PSCGModel::solveRecourseProblemGivenFixedZ(){
 		
 		//Solve Lagrangian MIP
 		subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_current, NULL, origVarLB_, origVarUB_, colType_);
-                if(!(subproblemSolvers[tS]->getSolverStatus()==PSCG_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==PSCG_ITER_LIM)){isFeas=false;}
-		subproblemSolvers[tS]->updateSolnInfo();
+		//subproblemSolvers[tS]->updateSolnInfo();
+                if(!(subproblemSolvers[tS]->getSolverStatus()==PSCG_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==PSCG_ITER_LIM))
+		{
+	    	    LagrLB = ALPS_DBL_MAX;	    
+		    isFeas=false;
+		    return isFeas;
+		}
 		//updateTimer.addTime(updateTimeThisStep);
 
 		//Acumulate the values for the Lagrangian subproblems
 		LagrLB_Local += pr[tS]*subproblemSolvers[tS]->getLagrBd();//FWSPoptvalk;}
+//cout << " (" << pr[tS] << "," << subproblemSolvers[tS]->getLagrBd() << ")";
 #if 0
 	 	if(useVertexHistory){
 		    subproblemSolvers[tS]->updateVertexHistory();
@@ -168,6 +196,8 @@ bool PSCGModel::solveRecourseProblemGivenFixedZ(){
 		}
 #endif
 	}
+cout << endl;
+cout << "LagrLB_Local******************************: " << LagrLB_Local << endl;
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
 
@@ -181,8 +211,8 @@ bool PSCGModel::solveRecourseProblemGivenFixedZ(){
 
 	if (mpiSize == 1) {
 		LagrLB = LagrLB_Local;
-		ALVal = ALVal_Local;
-		discrepNorm = localDiscrepNorm;
+		//ALVal = ALVal_Local;
+		//discrepNorm = localDiscrepNorm;
 		//cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
 	}
         if(isFeas){
@@ -194,7 +224,7 @@ bool PSCGModel::solveRecourseProblemGivenFixedZ(){
 	return isFeas;
 }
 
-void PSCGModel::performColGenStep(){	
+int PSCGModel::performColGenStep(){	
 	LagrLB_Local = 0.0;
 	ALVal_Local = 0.0;
 	localDiscrepNorm = 0.0;
@@ -213,8 +243,15 @@ void PSCGModel::performColGenStep(){
 		}
 
 		//Solve Lagrangian MIP
-		subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
-		subproblemSolvers[tS]->updateSolnInfo();
+		spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
+    	        if(spSolverStatuses_[tS]==PSCG_OPTIMAL || spSolverStatuses_[tS]==PSCG_ITER_LIM){	
+		    subproblemSolvers[tS]->updateSolnInfo();
+		}
+		else{
+	    	    LagrLB = ALPS_DBL_MAX;	    
+	    	    modelStatus_[SP_STATUS]=SP_INFEAS;
+	    	    return SP_INFEAS;
+		}
 		//updateTimer.addTime(updateTimeThisStep);
 
 		//Acumulate the values for the Lagrangian subproblems
@@ -228,6 +265,7 @@ void PSCGModel::performColGenStep(){
 		    }
 		}
 	}
+	
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
 		//commsTimer.start();
@@ -255,7 +293,8 @@ void PSCGModel::performColGenStep(){
 		discrepNorm = localDiscrepNorm;
 		//cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
 	}
-
+	updateModelStatusSP();
+	return modelStatus_[SP_STATUS];
 }
 //******************FWPH functions**********************
 

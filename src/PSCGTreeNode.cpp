@@ -62,7 +62,7 @@ PSCGTreeNode::createNewTreeNode(AlpsNodeDesc *&desc) const
     // Set solution estimate for this nodes.
     // solEstimate = quality_ + sum_i{min{up_i, down_i}}
     
-    node->setSolEstimate(solEstimate_);
+    //node->setSolEstimate(solEstimate_);
 
 #ifdef PSCG_DEBUG_MORE
     printf("PSCG:createNewTreeNode: quality=%g, solEstimate=%g\n",
@@ -86,6 +86,7 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     int status = PSCG_OK;
 
     PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
+    PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
     AlpsPhase phase = knowledgeBroker_->getPhase();
     
@@ -130,20 +131,28 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
 	cout << "Fathomed due to infeasibility" << endl;
     }
     else{
-      if(model->checkForCutoff()){
-	setStatus(AlpsNodeStatusFathomed);
-	model->clearSPVertexHistory();
-	cout << "Fathomed by bound" << endl;
-      }
-      else if(z_status==Z_OPT){
+      if(z_status==Z_OPT){
         model->evaluateFeasibleZ();
+	if(model->solveRecourseProblemGivenFixedZ()){	
+            model->setZStatus(Z_FEAS);
+	cout << "Does z nevertheless have recourse? Yes." << endl;
+	}
 	setStatus(AlpsNodeStatusFathomed);
 	model->clearSPVertexHistory();
 	//store solution, update cutoff if appropriate
 	cout << "Fathomed by optimality" << endl;
       }
+      else if(model->checkForCutoff()){
+	setStatus(AlpsNodeStatusFathomed);
+	model->clearSPVertexHistory();
+	cout << "Fathomed by bound" << endl;
+      }
       else if(z_status==Z_FEAS){
         model->evaluateFeasibleZ();
+	if(model->solveRecourseProblemGivenFixedZ()){	
+            model->setZStatus(Z_FEAS);
+	cout << "Does z nevertheless have recourse? Yes." << endl;
+	}
 	//setStatus(AlpsNodeStatusFathomed);
 	setStatus(AlpsNodeStatusEvaluated);
 	cout << "Node still needs more processing...." << endl;
@@ -152,14 +161,16 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
 	setStatus(AlpsNodeStatusEvaluated);
 	if(model->solveRecourseProblemGivenFixedZ()){	
             model->setZStatus(Z_FEAS);
+	cout << "Does z nevertheless have recourse? Yes." << endl;
 	}
 	cout << "Integrality satsified at node, but not recourse. Node still needs more processing...." << endl;
-	cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
+	//cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
       }
       else{//Need to branch
 	setStatus(AlpsNodeStatusPregnant);
+	//desc->updateBranchingIndex(model);
 	model->clearSPVertexHistory();
-	cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << "." << endl;
+	cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << " with z value " << model->getZ()[model->getInfeasIndex()] << endl;
       }
     }
 
@@ -302,6 +313,7 @@ std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> >
 PSCGTreeNode::branch()
 {
 cout << "Begin branch()" << endl;
+//printInstallSubproblem();
     //------------------------------------------------------
     // Change one var hard bound and record the change in nodedesc:
     // THINK: how about constraint bounds? When to update?
@@ -310,25 +322,25 @@ cout << "Begin branch()" << endl;
 
     AlpsPhase phase = knowledgeBroker_->getPhase();
 
-    double objVal = getQuality();
+    //double objVal = getQuality();
 
     std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> > 
 	childNodeDescs;
     
-    PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());    
+    //PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());    
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
-    assert(model->getInfeasIndex()!=-1);
-    PSCGNodeDesc *childDesc = desc->createChildNodeDescUp(model->getInfeasIndex());
+    assert(desc->getBranchingIndex()!=-1);
+    PSCGNodeDesc *childDesc = desc->createChildNodeDescUp(desc->getBranchingIndex());
     childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
-					    model->getBound()));
-    childDesc = desc->createChildNodeDescDown(model->getInfeasIndex());
+					    desc->getLB()));
+    childDesc = desc->createChildNodeDescDown(desc->getBranchingIndex());
     childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
-					    model->getBound()));
+					    desc->getLB()));
     status_ = AlpsNodeStatusBranched;
     
 cout << "End branch()" << endl;
@@ -408,10 +420,11 @@ cout << "Begin bound()" << endl;
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
-    quality_ = m->computeBound(3);
+    quality_ = m->computeBound(20);
     desc->updateZ(m);
     desc->updateOmega(m); 
     desc->updateBd(m);
+    desc->updateBranchingIndex(m);
 cout << "End bound()" << endl;
     return 0;
 }

@@ -73,6 +73,8 @@ int main(int argc, char **argv) {
 	//desc->installSubproblemFromNodeDesc();
 	//model.installSubproblem(z,omega,NULL,NULL,NULL,0);
 	AlpsKnowledgeBrokerSerial broker(model);
+	broker.setNodeSelection(new AlpsNodeSelectionBreadth());
+	broker.setRampUpNodeSelection(new AlpsNodeSelectionBest());
 cout << "Begining search...." << endl;
 	broker.search(&model);
 cout << "...Ending search." << endl;

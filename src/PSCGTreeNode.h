@@ -151,6 +151,19 @@ class PSCGTreeNode : public BcpsTreeNode {
 
     /** Decode a node from an encoded object. */
     virtual AlpsKnowledge* decode(AlpsEncoded&) const;
+
+    //For testing/debugging purposes....
+    void printInstallSubproblem(){
+        PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
+        PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
+	cout << "Printing z: " << endl;
+	for(int ii=0; ii<model->n1; ii++){
+	    cout << " (" << model->getZ()[ii] << "," << desc->getZ()[ii] << ")";
+	}
+	cout << endl;
+	cout << "(" << model->getBound() << "," << desc->getLB() << ")" << endl;
+	cout << "(" << model->getInfeasIndex() << "," << desc->getBranchingIndex() << ")" << endl;
+    }
 };
 #endif
 #endif

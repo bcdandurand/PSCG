@@ -336,9 +336,17 @@ virtual void setSolverStatus(){
 #endif
         	solverStatus_ = PSCG_ITER_LIM;
     	}
-    	else {
-        	std::cout << "UNKNOWN SOLVER STATUS" << std::endl;
-        	assert(0);
+    	else {//handle other cases
+		int errCode = getCPLEXErrorStatus();
+		switch(errCode){
+		  case CPXMIP_INFEASIBLE:
+		      solverStatus_ = PSCG_PRIMAL_INF; 
+		      break;
+		  default:
+        	    std::cout << "UNKNOWN SOLVER STATUS" << std::endl;
+		    std::cout << "CPLEX Error Code is: " << getCPLEXErrorStatus() << endl;
+        	    assert(0);
+		}
     	}
 }
 
@@ -357,6 +365,11 @@ virtual void downBranchOnVar(int varIndex, double bound){
 const char* getColTypes(){
     return LagrMIPInterface_->getColType();
 } 
+
+int getCPLEXErrorStatus(){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+	return CPXgetstat(osi->getEnvironmentPtr(), osi->getLpPtr());
+}
 
 virtual void printColTypesFirstStage(){
     for(int i=0; i<n1; i++){
@@ -389,10 +402,13 @@ virtual bool checkSolnForFeasibility(const double *soln, vector<double> &constrV
     const double* rowLHS = LagrMIPInterface_->getRowLower();
     const double* rowRHS = LagrMIPInterface_->getRowUpper();
     mat->times(soln,constrVals);
+#if 0
+for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
+#endif
     for(int ii=0; ii<mat->getNumRows(); ii++){
 	if( !( (rowLHS[ii] <=  constrVals[ii]+1.0e-6) && (constrVals[ii]-1.0e-6 <= rowRHS[ii]) ) ) 
 	{
-#if 0
+#if 1
 for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
 #endif
 	    return false;
@@ -457,7 +473,7 @@ virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *
 virtual bool updateSolnInfo(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
 	if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
-		if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+		if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver iteration limit reached." << endl;
 		const double* solution = osi->getColSolution();
 		LagrBd = osi->getObjValue()*osi->getObjSense();
 		memcpy(x_vertex,solution,n1*sizeof(double));
@@ -465,6 +481,8 @@ virtual bool updateSolnInfo(){
 	}
 	else{
 		cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+		cerr << "CPLEX error code: " << getCPLEXErrorStatus() << endl;
+	        assert(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM);	
 	}
 }
 
@@ -535,8 +553,9 @@ virtual void downBranchOnVar(int varIndex, double bound){
 }
 
 virtual bool updateSolnInfo(){
+    assert(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM);	
     if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
-	if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+	if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated iteration limit reached." << endl;
 	for(int ii=0; ii<n1; ii++) x_vertex[ii] = cplexMIP.getValue(xVariables[ii]);
 	//for(int ii=0; ii<n1; ii++) cout << " (" << cplexMIP.getValue(xVariables[ii]) << ","<<x_vertex[ii] << ")";
 	//cout << endl;
@@ -544,7 +563,8 @@ virtual bool updateSolnInfo(){
 	LagrBd = cplexMIP.getObjValue();
     }
     else{
-	cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+	cerr << "In updateSolnInfo(): Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
+	assert(0);
     }
 }
 

@@ -133,19 +133,16 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
     else{
       if(z_status==Z_OPT){
         model->evaluateFeasibleZ();
+#if 0
 	if(model->solveRecourseProblemGivenFixedZ()){	
             model->setZStatus(Z_FEAS);
 	cout << "Does z nevertheless have recourse? Yes." << endl;
 	}
+#endif
 	setStatus(AlpsNodeStatusFathomed);
 	model->clearSPVertexHistory();
 	//store solution, update cutoff if appropriate
 	cout << "Fathomed by optimality" << endl;
-      }
-      else if(model->checkForCutoff()){
-	setStatus(AlpsNodeStatusFathomed);
-	model->clearSPVertexHistory();
-	cout << "Fathomed by bound" << endl;
       }
       else if(z_status==Z_FEAS){
         model->evaluateFeasibleZ();
@@ -157,7 +154,7 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
 #endif
 	setStatus(AlpsNodeStatusFathomed);
 	//setStatus(AlpsNodeStatusEvaluated);
-	cout << "Node still needs more processing...." << endl;
+	cout << "Node still needs more processing...(but fathoming anyway)." << endl;
       }
       else if(z_status==Z_REC_INFEAS){
         model->evaluateFeasibleZApprox();
@@ -169,8 +166,13 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
 	cout << "Does z nevertheless have recourse? Yes." << endl;
 	}
 #endif
-	cout << "Integrality satsified at node, but not recourse. Node still needs more processing...." << endl;
+	cout << "Integrality satsified at node, but not recourse. Node still needs more processing...(but fathoming anyway)." << endl;
 	//cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
+      }
+      else if(model->checkForCutoff()){
+	setStatus(AlpsNodeStatusFathomed);
+	model->clearSPVertexHistory();
+	cout << "Fathomed by bound" << endl;
       }
       else{//Need to branch
 	setStatus(AlpsNodeStatusPregnant);

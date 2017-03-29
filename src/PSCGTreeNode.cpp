@@ -149,20 +149,26 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
       }
       else if(z_status==Z_FEAS){
         model->evaluateFeasibleZ();
+#if 0
 	if(model->solveRecourseProblemGivenFixedZ()){	
             model->setZStatus(Z_FEAS);
 	cout << "Does z nevertheless have recourse? Yes." << endl;
 	}
-	//setStatus(AlpsNodeStatusFathomed);
-	setStatus(AlpsNodeStatusEvaluated);
+#endif
+	setStatus(AlpsNodeStatusFathomed);
+	//setStatus(AlpsNodeStatusEvaluated);
 	cout << "Node still needs more processing...." << endl;
       }
       else if(z_status==Z_REC_INFEAS){
-	setStatus(AlpsNodeStatusEvaluated);
+        model->evaluateFeasibleZApprox();
+	setStatus(AlpsNodeStatusFathomed);
+	//setStatus(AlpsNodeStatusEvaluated);
+#if 0
 	if(model->solveRecourseProblemGivenFixedZ()){	
             model->setZStatus(Z_FEAS);
 	cout << "Does z nevertheless have recourse? Yes." << endl;
 	}
+#endif
 	cout << "Integrality satsified at node, but not recourse. Node still needs more processing...." << endl;
 	//cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
       }
@@ -420,7 +426,7 @@ cout << "Begin bound()" << endl;
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
-    quality_ = m->computeBound(20);
+    quality_ = m->computeBound(100);
     desc->updateZ(m);
     desc->updateOmega(m); 
     desc->updateBd(m);

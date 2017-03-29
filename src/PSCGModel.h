@@ -386,10 +386,10 @@ double computeBound(int nIters){
     updateModelStatusZ();
     if(SPStatus==SP_INFEAS){return currentLagrLB;}
     else if(currentLagrLB >= incumbentVal_){return currentLagrLB;}
-    int maxNLoopIters = 1;
+    //int maxNLoopIters = 1;
     int loopIter = 0;
-    do
-    {
+    //do
+    //{
       //if(loopIter>0) {computeScalingPenaltyUpdate(10.0);}
       for(int ii=0; ii<nIters; ii++){
 	SPStatus=regularIteration();
@@ -406,8 +406,8 @@ double computeBound(int nIters){
       assert(SPStatus!=SP_INFEAS);
       updateModelStatusZ();
       loopIter++;
-    }
-    while(getZStatus()==Z_REC_INFEAS && loopIter < maxNLoopIters);
+    //}
+    //while(getZStatus()==Z_REC_INFEAS && loopIter < maxNLoopIters);
 #if 0
     if(getZStatus()==Z_REC_INFEAS){
 	modelStatus_[Z_STATUS]=Z_FEAS;
@@ -531,6 +531,17 @@ cout << "Begin evaluateFeasibleZ()" << endl;
 	memcpy( z_incumbent_, z_current, n1*sizeof(double) );
     }
 cout << "End evaluateFeasibleZ()" << endl;
+    return incumbentVal_;
+}
+
+double evaluateFeasibleZApprox(){
+cout << "Begin evaluateFeasibleZApprox()" << endl;
+    assert(modelStatus_[Z_STATUS]==Z_REC_INFEAS);
+    if(incumbentVal_ > ALVal){ 
+	incumbentVal_=ALVal;
+	memcpy( z_incumbent_, z_current, n1*sizeof(double) );
+    }
+cout << "End evaluateFeasibleZApprox()" << endl;
     return incumbentVal_;
 }
 //int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){

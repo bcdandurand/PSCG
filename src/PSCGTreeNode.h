@@ -30,7 +30,7 @@
 
 #include "BcpsObjectPool.h"
 #include "BcpsTreeNode.h"
-
+#include "BcpsSolution.h"
 #include "BcpsNodeDesc.h"
 #include "PSCGNodeDesc.h"
 #if 1
@@ -113,7 +113,18 @@ class PSCGTreeNode : public BcpsTreeNode {
     
     /** Bounding procedure */
     virtual int bound(BcpsModel *model);
+    int postProcessBound(BcpsModel *model); 
+    void registerSolution(PSCGModel *model){
+	BcpsSolution* ksol =
+                        new BcpsSolution(model->n1,
+                                           model->getZ(),
+                                           model->getIncumbentVal());
+                    getKnowledgeBroker()->addKnowledge(AlpsKnowledgeTypeSolution,
+                                                       ksol,
+                                                       model->getIncumbentVal());
 
+		getKnowledgeBroker()->setPhase(AlpsPhaseSearch);
+    }
     /** Takes the explicit description of the current active node and 
         creates the children's descriptions, which contain information 
         about how the branching is to be done. The stati of the children

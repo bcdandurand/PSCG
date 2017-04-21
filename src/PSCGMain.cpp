@@ -74,7 +74,9 @@ int main(int argc, char **argv) {
 	//model.installSubproblem(z,omega,NULL,NULL,NULL,0);
 	AlpsKnowledgeBrokerSerial broker(model);
 	broker.setNodeSelection(new AlpsNodeSelectionBreadth());
-	broker.setRampUpNodeSelection(new AlpsNodeSelectionBest());
+	//broker.setNodeSelection(new AlpsNodeSelectionBest());
+	broker.setRampUpNodeSelection(new AlpsNodeSelectionDepth());
+        broker.setPhase(AlpsPhaseRampup);
 cout << "Begining search...." << endl;
 	broker.search(&model);
 cout << "...Ending search." << endl;

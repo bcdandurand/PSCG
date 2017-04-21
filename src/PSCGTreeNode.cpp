@@ -86,6 +86,8 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     int status = PSCG_OK;
 
     PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
+    bool isMPIRoot = model->getMPIRank()==0;
+if(isMPIRoot) {cout << "***************BEGINNING OF PROCESSING NODE*******************" << endl;}
     PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
     AlpsPhase phase = knowledgeBroker_->getPhase();
@@ -119,20 +121,21 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     // Extract info from this node and load subproblem into lp solver.
     //------------------------------------------------------
     
-    cout << "Number of nodes left: " << this->getKnowledgeBroker()->getNumNodeLeftSystem() << endl;;
+    if(isMPIRoot) cout << "Number of nodes left: " << this->getKnowledgeBroker()->getNumNodeLeftSystem() << endl;;
     installSubProblem(model);
     bound(model); //node statuses are set here
     int sp_status = model->getSPStatus();
     int z_status = model->getZStatus();
-cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
+    bool feasSolnUpdated=false;
+if(isMPIRoot)cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
     if(sp_status==SP_INFEAS){
 	setStatus(AlpsNodeStatusFathomed);
-	model->clearSPVertexHistory();
-	cout << "Fathomed due to infeasibility" << endl;
+	//model->clearSPVertexHistory();
+	if(isMPIRoot) cout << "Fathomed due to infeasibility" << endl;
     }
     else{
       if(z_status==Z_OPT){
-        model->evaluateFeasibleZ();
+        feasSolnUpdated=model->evaluateFeasibleZ();
 #if 0
 	if(model->solveRecourseProblemGivenFixedZ()){	
             model->setZStatus(Z_FEAS);
@@ -140,48 +143,54 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
 	}
 #endif
 	setStatus(AlpsNodeStatusFathomed);
-	model->clearSPVertexHistory();
+	//model->clearSPVertexHistory();
 	//store solution, update cutoff if appropriate
-	cout << "Fathomed by optimality" << endl;
-      }
-      else if(z_status==Z_FEAS){
-        model->evaluateFeasibleZ();
-#if 0
-	if(model->solveRecourseProblemGivenFixedZ()){	
-            model->setZStatus(Z_FEAS);
-	cout << "Does z nevertheless have recourse? Yes." << endl;
-	}
-#endif
-	setStatus(AlpsNodeStatusFathomed);
-	//setStatus(AlpsNodeStatusEvaluated);
-	cout << "Node still needs more processing...(but fathoming anyway)." << endl;
-      }
-      else if(z_status==Z_REC_INFEAS){
-        model->evaluateFeasibleZApprox();
-	setStatus(AlpsNodeStatusFathomed);
-	//setStatus(AlpsNodeStatusEvaluated);
-#if 0
-	if(model->solveRecourseProblemGivenFixedZ()){	
-            model->setZStatus(Z_FEAS);
-	cout << "Does z nevertheless have recourse? Yes." << endl;
-	}
-#endif
-	cout << "Integrality satsified at node, but not recourse. Node still needs more processing...(but fathoming anyway)." << endl;
-	//cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
+	if(isMPIRoot) cout << "Fathomed by optimality" << endl;
       }
       else if(model->checkForCutoff()){
 	setStatus(AlpsNodeStatusFathomed);
-	model->clearSPVertexHistory();
-	cout << "Fathomed by bound" << endl;
+	//model->clearSPVertexHistory();
+	if(isMPIRoot) cout << "Fathomed by bound" << endl;
+      }
+      else if(z_status==Z_FEAS){
+        feasSolnUpdated=model->evaluateFeasibleZ();
+#if 0
+	if(model->solveRecourseProblemGivenFixedZ()){	
+            model->setZStatus(Z_FEAS);
+	cout << "Does z nevertheless have recourse? Yes." << endl;
+	}
+#endif
+	setStatus(AlpsNodeStatusFathomed);
+	//setStatus(AlpsNodeStatusEvaluated);
+	if(isMPIRoot) cout << "Node still needs more processing...(but fathoming anyway)." << endl;
+      }
+      else if(z_status==Z_REC_INFEAS){
+	//postProcessBound(model);
+        feasSolnUpdated=model->evaluateFeasibleZ();
+	setStatus(AlpsNodeStatusFathomed);
+	//setStatus(AlpsNodeStatusEvaluated);
+#if 0
+	if(model->solveRecourseProblemGivenFixedZ()){	
+            model->setZStatus(Z_FEAS);
+	cout << "Does z nevertheless have recourse? Yes." << endl;
+	}
+#endif
+	if(isMPIRoot) cout << "Integrality satsified at node, but not recourse. Node still needs more processing...(but fathoming anyway)." << endl;
+	//cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
       }
       else{//Need to branch
+        feasSolnUpdated=model->evaluateFeasibleZ();
 	setStatus(AlpsNodeStatusPregnant);
 	//desc->updateBranchingIndex(model);
-	model->clearSPVertexHistory();
-	cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << " with z value " << model->getZ()[model->getInfeasIndex()] << endl;
+	//model->clearSPVertexHistory();
+	if(isMPIRoot) cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << " with z value " << model->getZ()[model->getInfeasIndex()] << endl;
       }
     }
 
+    if(feasSolnUpdated){ 
+if(isMPIRoot) cout << "Should be registering solution" << endl;
+	registerSolution(model);
+    }
 #if 0
     while (keepOn && (pass < maxPass)) {
         ++pass;
@@ -311,7 +320,7 @@ cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
     //------------------------------------------------------
     
     //model->isRoot_ = false;
-cout << endl;
+if(isMPIRoot) {cout << "***************END OF PROCESSING NODE*******************" << endl;}
     return status;
 }
 
@@ -427,15 +436,42 @@ int PSCGTreeNode::bound(BcpsModel *model)
 cout << "Begin bound()" << endl;
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-
-    quality_ = m->computeBound(100);
+    m->setZStatus(Z_UNKNOWN);
+    quality_ = m->computeBound(30,true);
+    m->evaluateXDispersion();
     desc->updateZ(m);
     desc->updateOmega(m); 
     desc->updateBd(m);
     desc->updateBranchingIndex(m);
+if(m->getMPIRank()==0){cout << "Postprocessing (trying to find feasible solution)..." << endl;}
+    if( !(m->getZStatus()==Z_INFEAS || m->getZStatus()==Z_BOUNDED) ){
+      m->postProcess(50);
+      m->updateModelStatusZ();
+    }
+if(m->getMPIRank()==0){cout << "This is now the z was updated during postprocessing: " << endl;}
+m->printZ();
+if(m->getMPIRank()==0){cout << "This is now the z used to branch: " << endl;}
+desc->printZ(m);
 cout << "End bound()" << endl;
     return 0;
 }
+
+#if 0
+int PSCGTreeNode::postProcessBound(BcpsModel *model) 
+{
+cout << "Begin postProcessBound()" << endl;
+    PSCGModel *m = dynamic_cast<PSCGModel *>(model);
+    PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
+
+    quality_ = m->postProcess(50);
+    desc->updateZ(m);
+    desc->updateOmega(m); 
+    desc->updateBd(m);
+    desc->updateBranchingIndex(m);
+cout << "End postProcessBound()" << endl;
+    return 0;
+}
+#endif
 
 //#############################################################################
 

@@ -44,6 +44,7 @@ class PSCGNodeDesc : public BcpsNodeDesc {
     
     double lbd_;
     int branchingIndex_;
+    bool branchingIndexIsInt_;
     double *z_;
     int zLen_;
     vector<double* > omega_;
@@ -51,21 +52,26 @@ class PSCGNodeDesc : public BcpsNodeDesc {
     vector<int> newBdTypes_; //0 UP branch, setting LB; 1 DOWN branch, setting UB 
     vector<double> newBds_;
     int nNewBds_;
+    double origPenalty_;
+
  public:
     /** Default constructor. */
-    PSCGNodeDesc() : BcpsNodeDesc(),z_(NULL),newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0),lbd_(-ALPS_DBL_MAX){;}
+    PSCGNodeDesc() : BcpsNodeDesc(),z_(NULL),newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0),
+	lbd_(-ALPS_DBL_MAX),origPenalty_(1.0),branchingIndex_(-1),branchingIndexIsInt_(false){;}
 
     /** Useful constructor. */
     PSCGNodeDesc(PSCGModel *m) :
-	BcpsNodeDesc(m),z_(NULL),newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0),lbd_(-ALPS_DBL_MAX)
-	{
+	BcpsNodeDesc(m),z_(NULL),newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0),lbd_(-ALPS_DBL_MAX),origPenalty_(1.0),branchingIndex_(-1),branchingIndexIsInt_(false)
+    {
 	    zLen_ = m->n1;
 	    z_ = new double[m->n1];
 	    for(int tS=0; tS<m->nNodeSPs; tS++){
 		omega_.push_back(new double[m->n1]);
 		for(int ii=0;ii<m->n1; ii++) omega_[tS][ii]=0.0;
 	    }
-	}
+	origPenalty_ = m->getPenalty();
+    }
+	
 
 
     /** Destructor. */
@@ -85,12 +91,29 @@ class PSCGNodeDesc : public BcpsNodeDesc {
     vector<double* >& getOmega(){return omega_;}
     double getLB(){return lbd_;}
     int getBranchingIndex(){return branchingIndex_;}
+    double getOrigPenalty(){return origPenalty_;}
+    void setOrigPenalty(double p){origPenalty_=p;}
     void updateZ(PSCGModel *m){
+if(m->getMPIRank()==0){cout << "This should be the z used to branch: " << endl;}
 	memcpy(z_,m->getZ(),(m->n1)*sizeof(double));
+printZ(m);
     }
     void updateZ(const double *z, PSCGModel *m){
+if(m->getMPIRank()==0){cout << "This should be the z used to branch: " << endl;}
 	memcpy(z_,z,(m->n1)*sizeof(double));
+printZ(m);
     }
+void printZ(PSCGModel *m){
+  if(m->getMPIRank()==0){
+	printf("\nPrinting z values for this node:\n[");
+	
+	for (int i = 0; i < m->n1; i++) {
+		printf("%0.10g ", z_[i]);
+	}
+
+	printf("]\n");
+  }
+}
     void updateOmega(PSCGModel *m){
 	vector<double*> &omega = m->getOmega();
 	for(int tS=0; tS<m->nNodeSPs; tS++){
@@ -129,11 +152,25 @@ class PSCGNodeDesc : public BcpsNodeDesc {
 	newBds_.push_back(bd);
 	nNewBds_ = newBdInds_.size();
     }
-    void addNewBd(int ind, int type){
+    void addNewBd(int ind, int type, bool isInt){
 	newBdInds_.push_back(ind);
 	newBdTypes_.push_back(type);
-	if(type==UP){ newBds_.push_back(ceil(z_[ind]));}
-	else if(type==DOWN){newBds_.push_back(floor(z_[ind]));}
+	if(type==UP){ 
+	    if(isInt) {
+		newBds_.push_back(ceil(z_[ind]));
+cout << z_[ind] << " **versus its ceiling** " << ceil(z_[ind]) << endl;
+	    }
+	    else {
+		newBds_.push_back(z_[ind]);
+	    }
+	}
+	else if(type==DOWN){
+	    if(isInt) {
+		newBds_.push_back(floor(z_[ind]));
+cout << z_[ind] << " **versus its floor** " << floor(z_[ind]) << endl;
+	    }
+	    else {newBds_.push_back(z_[ind]);}
+	}
 	assert(type==UP || type==DOWN);
 	nNewBds_ = newBdInds_.size();
     }
@@ -141,18 +178,22 @@ class PSCGNodeDesc : public BcpsNodeDesc {
 	PSCGModel *model = dynamic_cast<PSCGModel*>(this->model_);
 	PSCGNodeDesc *child = new PSCGNodeDesc(model);
 	child->assignNewBds(this);
+	printZ(model);
 	child->updateZ(z_,model);
 	child->updateOmega(omega_,model);
-	child->addNewBd(ind, UP);
+	child->addNewBd(ind, UP, model->indexIsInt(ind));
+	child->setOrigPenalty(origPenalty_);
 	return child;
     }
     PSCGNodeDesc *createChildNodeDescDown(int ind){
 	PSCGModel *model = dynamic_cast<PSCGModel*>(this->model_);
 	PSCGNodeDesc *child = new PSCGNodeDesc(model);
 	child->assignNewBds(this);
+	printZ(model);
 	child->updateZ(z_,model);
 	child->updateOmega(omega_,model);
-	child->addNewBd(ind, DOWN);
+	child->addNewBd(ind, DOWN, model->indexIsInt(ind));
+	child->setOrigPenalty(origPenalty_);
 	return child;
     }
     
@@ -225,7 +266,7 @@ class PSCGNodeDesc : public BcpsNodeDesc {
 	return status;
     }
     void installSubproblemFromNodeDesc(){
-	dynamic_cast<PSCGModel*>(model_)->installSubproblem(z_, omega_, lbd_, newBdInds_, newBdTypes_, newBds_, nNewBds_, branchingIndex_);
+	dynamic_cast<PSCGModel*>(model_)->installSubproblem(z_, omega_, lbd_, newBdInds_, newBdTypes_, newBds_, nNewBds_, branchingIndex_, origPenalty_);
     }
     
 };

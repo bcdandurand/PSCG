@@ -120,7 +120,8 @@ int PSCGModelScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int
 	LagrMIPInterface_->setIntParam(OsiMIPOutputControl,0);
 	if (nThreads >= 0) { LagrMIPInterface_->setIntParam(OsiParallelThreads, nThreads); }
 	if (disableHeuristic) { LagrMIPInterface_->setIntParam(OsiHeurFreq, -1); }
-	LagrMIPInterface_->setDblParam(OsiDualTolerance, 1e-6);
+	LagrMIPInterface_->setDblParam(OsiDualTolerance, 1e-8);
+	setGapTolerances(1e-8,1e-8);
 	LagrMIPInterface_->setHintParam(OsiDoPresolveInInitial,true);
 	LagrMIPInterface_->setHintParam(OsiDoScale,true);
 	LagrMIPInterface_->setHintParam(OsiDoCrash,true);
@@ -158,7 +159,7 @@ void PSCGModelScen::finishInitialisation() {
 	for(int i=0; i<n1; i++) {
 	    mpVertexConstraints.add(IloRange(env, 0.0, 0.0));
  	    mpAuxVariables.add(IloNumVar(mpVertexConstraints[i](-1.0)));
-	    mpAuxVariables[i].setLB(-IloInfinity);
+	    mpAuxVariables[i].setLB(-1.0*IloInfinity);
 	}
 	mpModel.add(mpVertexConstraints);
 
@@ -168,6 +169,7 @@ void PSCGModelScen::finishInitialisation() {
 	
 	if (nThreads >= 0) { cplexMP.setParam(IloCplex::Threads, nThreads); }
 	cplexMP.setOut(env.getNullStream());
+	cplexMP.setWarning(env.getNullStream());
 	cplexMP.extract(mpModel);
 		
 	//cout << "Finish Initialisation: Total memory use for " << tS << ": " << env.getTotalMemoryUsage() << endl;
@@ -238,9 +240,18 @@ int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
 		osi->setObjCoeff(i, c[i]);
 	  }
 	}
-
+	double startLagrBd = COIN_DBL_MAX;
+	double *startSol=new double[n1+n2];
+	if(nVertices>0){
+	    //startSol = new double[n1+n2];
+	    memcpy(startSol,x_vertex,n1*sizeof(double));
+	    memcpy(startSol+n1,y_vertex,n2*sizeof(double));
+	    osi->setColSolution(startSol);
+	    startLagrBd = evaluateVertexSolution(omega);
+	}
 	osi->branchAndBound();
-	LagrBd = osi->getObjValue()*osi->getObjSense();
+	LagrBd = osi->getObjValue();//*osi->getObjSense();
+#if 0
 if(omega==NULL){ 
  cout << "LagrBd " << LagrBd << endl;
  cout << "Printing solution: " << endl;
@@ -249,10 +260,28 @@ if(omega==NULL){
  }
  cout << endl;
 }
+#endif
 	
 	setSolverStatus();
-
+        //if(tS==0) printXBounds();
+        //if(tS==0) printYBounds();
+        if(solverStatus_==PSCG_PRIMAL_INF){ 
+	    LagrBd =  COIN_DBL_MAX;
+	    //osi->unmarkHotStart();
+	}
+	else{
+	    //osi->markHotStart();
+	}
+	if(nVertices>0 && solverStatus_!=PSCG_PRIMAL_INF){
+	  if(startLagrBd + 1e-5 < LagrBd && omega!=NULL){
+	    cout << "Flagging " << LagrBd - startLagrBd << endl;
+	    //assert(startLagrBd >= LagrBd);
+	    osi->setColSolution(startSol);
+	    LagrBd = startLagrBd;
+	  }
+	}
 	
+	delete [] startSol;
 	
 	return solverStatus_;
 }
@@ -314,7 +343,8 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 	double denominator = 0.0;
 	
 	for (int i = 0; i < n1; i++) {
-		numerator -= (c[i] + omega[i] + scaling_vector[i] * (x[i] - z[i])) * (x_vertex[i] - x[i]);
+		if(omega==NULL){numerator -= (c[i] + scaling_vector[i] * (x[i] - z[i])) * (x_vertex[i] - x[i]);}
+		else{numerator -= (c[i] + omega[i] + scaling_vector[i] * (x[i] - z[i])) * (x_vertex[i] - x[i]);}
 		denominator += (x_vertex[i] - x[i]) * scaling_vector[i] * (x_vertex[i] - x[i]);
 	}
 	
@@ -343,18 +373,25 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 }
 
 void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z) {
-
+   try{
 	IloNum weightObj0(0.0);
 	for (int wI = 0; wI < nVertices; wI++) {
 		weightObjective[wI] = baseWeightObj[wI];
-	
-		for (int i = 0; i < n1; i++) {
+		if(omega!=NULL){	
+		    for (int i = 0; i < n1; i++) {
 			weightObjective[wI] += xVertices[i][wI] * omega[i];
+		    }
 		}
 	}
-	
-	for (int i = 0; i < n1; i++) {
+	if(omega!=NULL){	
+	    for (int i = 0; i < n1; i++) {
 		weightObj0 += x[i] * (c[i] + omega[i]);
+	    }
+	}
+	else{	
+	    for (int i = 0; i < n1; i++) {
+		weightObj0 += x[i] * (c[i]);
+	    }
 	}
 
 	for (int j = 0; j < n2; j++) {
@@ -371,11 +408,25 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 
 	//cout << cplexQP.getModel() << endl;
 	//cplexQP.exportModel("mymodel.lp");
+	//cplexMP.presolve(IloCplex::Dual);
+	//cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
+		//cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
+	//cout << mpModel << endl;
+	//printVertices();
 	if (!cplexMP.solve()) {
 		//cout << "Num vars: " << cplexQP.getNcols() << endl;
 		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
 		env.error() << "Failed to optimize in update step" << endl;
-		throw(-1);
+		//cout << mpModel << endl;
+		//cplexMP.refineConflict();
+		//cout << cplexMP.getConflict() << endl;
+		cout << "Refreshing solution..." << endl;
+		refresh();
+		//throw(-1);
+	}
+	if(cplexMP.getCplexStatus()!=IloCplex::Optimal) {
+		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
+		printVertices();
 	}
 
 	cplexMP.getValues(weightSoln, mpWeightVariables);
@@ -404,6 +455,13 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 			y[j] += weightSoln[wI] * yVertices[j][wI];
 		}
 	}
+   }
+   catch(IloException& e){
+	//cout << "MPSolve error: " << e.getMessage() << endl;
+	cout << "Exception caught...Refreshing solution..." << endl;
+	refresh();
+	e.end();
+   }
 }
 
 

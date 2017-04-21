@@ -40,7 +40,9 @@ enum Z_Statuses{
     Z_FEAS, //z is feasible (has both recourse and integer feas)
     Z_REC_INFEAS, //z has recourse (but its integer feas unknown)
     Z_INT_INFEAS, //z is integer feas (but its recourse is unknown)
-    Z_INFEAS //z is infeasible by both feasibility qualities
+    Z_INFEAS, //z is infeasible by both feasibility qualities
+    Z_BOUNDED, //indicates status of z is irrelevant due to fathoming by bound
+    Z_UNKNOWN
 };
 
 

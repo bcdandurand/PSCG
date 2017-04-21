@@ -9,6 +9,7 @@
 #include "OsiCpxSolverInterface.hpp"
 #include "PSCGParams.h"
 #include "ProblemDataBodur.h"
+//#include "CoinUtils.h"
 
 #define ptrModel IloModel*
 #define ptrRange IloRange*
@@ -42,16 +43,73 @@ enum SolverReturnStatus {
 };
 #endif
 
+
 class PSCGModelScen{
+
+protected:
+
+int n1;
+int n2;
+int nS;
+int tS; //scenario
+bool initialised;
+
+IloEnv env;
+bool disableHeuristic;
+int nThreads;
+double pr;
+double *c;
+double *d;
+
+double LagrBd;
+double gapVal;
+
+double *x;
+double *y;
+
+int nVertices;
+int maxNVertices;
+int oldestVertexIndex;
+double* x_vertex;
+double* y_vertex;
+double* x_vertex_opt;
+double* y_vertex_opt;
+vector< vector<double> > xVertices; //row ordered
+vector< vector<double> > yVertices;
+
+IloCplex cplexMP;
+IloModel mpModel;
+IloNumArray weightSoln;//(env, nVertices);
+IloNumArray weightObjective;
+vector<double> baseWeightObj;
+IloExpr quadraticTerm;
+IloObjective mpObjective;
+IloRangeArray mpWeightConstraints;
+IloRangeArray mpVertexConstraints;
+IloNumVar mpWeight0;
+IloNumVarArray mpWeightVariables;
+IloNumVarArray mpAuxVariables;
+
+double ALVal;
+double sqrNormDiscr;
+int solverStatus_;
+
+
 public:
-PSCGModelScen():n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),LagrBd(0.0),
-mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
+PSCGModelScen():
+n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
+x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),x_vertex_opt(NULL),y_vertex_opt(NULL),oldestVertexIndex(-1),
+weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(0.0),
+mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
+mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
 //copy constructor
-PSCGModelScen(const PSCGModelScen &other):n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),LagrBd(0.0),
-mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
+PSCGModelScen(const PSCGModelScen &other):
+n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
+x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),
+weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(0.0),
+mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
+mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
 //void initialiseBodur(ProblemDataBodur &pdBodur, SMIP_fileRequest* probSpecs, int scenario);
 //int initialiseSMPS(SMIP_fileRequest* probSpecs, int scenario);
@@ -65,6 +123,9 @@ void finishInitialisation();
   delete [] d;
   delete [] x_vertex;
   delete [] y_vertex;
+  delete [] x_vertex_opt;
+  delete [] y_vertex_opt;
+
   mpModel.end();
   mpObjective.end();
   mpWeightConstraints.end();
@@ -84,14 +145,95 @@ virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *
 virtual void setSolverStatus()=0;
 virtual void upBranchOnVar(int varIndex, double bound)=0;
 virtual void downBranchOnVar(int varIndex, double bound)=0;
+void updateOptSoln(){
+   if(x_vertex_opt==NULL) x_vertex_opt = new double[n1];
+   if(y_vertex_opt==NULL) y_vertex_opt = new double[n2];
+   memcpy(x_vertex_opt,x_vertex,n1*sizeof(double));
+   memcpy(y_vertex_opt,y_vertex,n2*sizeof(double));
+}
+double evaluateVertexOptSolution(const double* omega){
+    double retVal=0.0;
+    if(omega==NULL) {for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*x_vertex_opt[ii];}
+    else {for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*x_vertex_opt[ii];}
+    for(int jj=0; jj<n2; jj++) retVal+= d[jj]*y_vertex_opt[jj];
+    return retVal;
+}
+double evaluateVertexSolution(const double* omega){
+    double retVal=0.0;
+    if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*x_vertex[ii];}
+    else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*x_vertex[ii];}
+    for(int jj=0; jj<n2; jj++) retVal+= d[jj]*y_vertex[jj];
+    return retVal;
+}
+double evaluateSolution(const double* omega){
+    double retVal=0.0;
+    if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*x[ii];}
+    else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*x[ii];}
+    for(int jj=0; jj<n2; jj++) retVal+= d[jj]*y[jj];
+    return retVal;
+}
+double evaluateSolution(const double* omega, const double *z, const double *scaling_vector){
+//TODO
+    double retVal=0.0;
+    if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*x[ii];}
+    else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*x[ii];}
+    for(int jj=0; jj<n2; jj++) retVal+= d[jj]*y[jj];
+    return retVal;
+}
+void evaluateVertexHistory(const double *omega){
+    double retVal;
+    for(int vv=0; vv<nVertices; vv++){
+    	retVal=0.0;
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[ii][vv];}
+    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[ii][vv];}
+    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[jj][vv];
+	cout << "\tVertex " << vv << " results in a value of " << retVal << endl;
+    }
+//virtual void setColSolution(const double *colsol) = 0;
+}
+void compareLagrBds(const double* omega){
+   cout << LagrBd << " ***versus*** " << evaluateVertexSolution(omega) << endl;
+}
 virtual void printColTypesFirstStage(){;}
 virtual void printColBds(){;}
+#if 1
+bool roundIfClose(double &toBeRounded){
+    if(fabs(toBeRounded-floor(toBeRounded)) < 1e-6){ 
+	toBeRounded = floor(toBeRounded);
+	return true;
+    }
+    if(fabs(ceil(toBeRounded)-toBeRounded) < 1e-6){ 
+	toBeRounded = ceil(toBeRounded);
+	return true;
+    }
+    return false;
+}
+#endif
 
-void updateVertexHistory(){
+//x,y,x_vertex, and y_vertex should all be set to something meaningful
+double updateGapVal(const double *omega){
+  gapVal=0.0;
+  if(omega==NULL){for(int ii=0; ii<n1; ii++) {gapVal-= (c[ii])*(x_vertex[ii]-x[ii]);}}
+  else{for(int ii=0; ii<n1; ii++) {gapVal-= (c[ii]+omega[ii])*(x_vertex[ii]-x[ii]);}}
+  for(int jj=0; jj<n2; jj++) {gapVal-= d[jj]*(y_vertex[jj]-y[jj]);}
+  return gapVal;
+}
+
+double getGapVal(){return gapVal;}
+
+double computeXDispersion(const double *z){
+    double disp = 0.0;
+    for(int ii=0; ii<n1; ii++){
+	disp+= (x_vertex[ii]-z[ii])*(x_vertex[ii]-z[ii]);
+    }
+    return disp;
+}
+
+void addVertex(){
+    if(nVertices==maxNVertices){
 	for(int i=0; i<n1; i++) {
 	   xVertices[i].push_back(x_vertex[i]);
 	}
-
 	for(int i=0; i<n2; i++) { 
 	   yVertices[i].push_back(y_vertex[i]);
 	}
@@ -118,12 +260,110 @@ void updateVertexHistory(){
 	}
 
 	nVertices++;
+	maxNVertices++;
+    }
+    else{ //nVertices<maxNVertices
+	assert(nVertices < maxNVertices);
+	replaceVertexAtIndex(nVertices);
+	nVertices++;
+    }
+    if(oldestVertexIndex==-1) oldestVertexIndex=0;
 }
+
+void replaceVertexAtIndex(int iii){
+
+	//mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
+	//mpWeightVariables[nVertices].setBounds(0.0,1.0);
+	assert(iii>=0);
+	assert(iii<maxNVertices);
+	for(int i=0; i<n1; i++) {
+	   xVertices[i][iii] = x_vertex[i];
+	}
+	for(int i=0; i<n2; i++) { 
+	   yVertices[i][iii] = y_vertex[i];
+	}
+
+	for(int i=0; i<n1; i++) {
+	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], x_vertex[i]);
+	}
+
+	baseWeightObj[iii]=0.0; //.push_back(0.0);
+	//weightSoln.add(0.0);
+	weightObjective[iii]=0.0;//.add(0.0);
+
+	for (int i = 0; i < n1; i++) {
+		baseWeightObj[iii] += x_vertex[i] * c[i];
+	}
+
+	for (int j = 0; j < n2; j++) {
+		baseWeightObj[iii] += y_vertex[j] * d[j];
+	}
+	mpWeightVariables[iii].setBounds(0.0,1.0);
+
+}
+
+void replaceOldestVertex(){
+//cout << "Oldest vertex index was: " << oldestVertexIndex;
+    replaceVertexAtIndex(oldestVertexIndex);
+    oldestVertexIndex = (++oldestVertexIndex)%nVertices;
+//cout << " ...but is now " << oldestVertexIndex << endl;
+}
+
+void zeroOutVertexAtIndex(int iii){
+#if 0
+	for(int i=0; i<n1; i++) {
+	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], 0.0);
+	}
+#endif
+	//baseWeightObj[iii]=0.0 //.push_back(0.0);
+	//weightSoln.add(0.0);
+	//weightObjective[iii]=0.0//.add(0.0);
+	mpWeightVariables[iii].setBounds(0.0,0.0);
+}
+
+void clearVertexHistory(){
+  for(int v=0; v<maxNVertices; v++) zeroOutVertexAtIndex(v);
+  nVertices=0;
+}
+
+void printVertices(){
+  assert(nVertices>0);
+  for(int ii=0; ii<n1; ii++){
+      for(int vv=0; vv<nVertices; vv++){
+	cout << " " << xVertices[ii][vv];
+      }
+      cout << endl;
+  }
+}
+
+void printX(){
+ assert(n1>0);
+ for(int ii=0; ii<n1; ii++){
+  cout << " " << x[ii];
+ }
+ cout << endl;
+}
+
+void printY(){
+ assert(n2>0);
+ for(int jj=0; jj<n2; jj++){
+  cout << " " << y[jj];
+ }
+ cout << endl;
+}
+
+virtual void printXBounds(){
+    cout << "printXBounds() default: doing nothing..." << endl;
+}
+virtual void printYBounds(){
+    cout << "printYBounds() default: doing nothing..." << endl;
+}
+
+#if 0
 void clearVertexHistory(){
   while(nVertices >0){
     removeBackVertex();
   }
-#if 0
 	for(int i=0; i<n1; i++) {
 	   xVertices[i].clear();
 	}
@@ -141,11 +381,15 @@ void clearVertexHistory(){
 		mpWeightVariables[0].end();
 		mpWeightVariables.remove(0);
 		weightObjective.remove(0);
-#endif
 }
+#endif
 virtual bool updateSolnInfo()=0;
 
-virtual void fixXToZ(const double *z)=0;
+virtual void fixVarAt(int index, double fixVal){
+    cout << "fixVarAt() is doing nothing..." << endl;
+}
+//virtual void fixXToZ(const double *z)=0;
+virtual void fixXToZ(const double *z, const char* colTypes)=0;
 virtual void unfixX(const double* origLBs, const double* origUBs)=0;
 virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes)=0;
 
@@ -202,10 +446,23 @@ int getNumVertices(){return nVertices;}
 double * getX(){return x;}
 double * getY(){return y;}
 double * getXVertex(){return x_vertex;}
+double * getXVertexOpt(){return x_vertex_opt;}
 double * getYVertex(){return y_vertex;}
+double * getYVertexOpt(){return y_vertex_opt;}
 
 void setXToVertex(){for(int i=0;i<n1;i++) x[i]=x_vertex[i];}
 void setYToVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex[i];}
+void setXToOptVertex(){for(int i=0;i<n1;i++) x[i]=x_vertex_opt[i];}
+void setYToOptVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex_opt[i];}
+
+void refresh(){
+    clearVertexHistory();
+    memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
+    memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
+    addVertex();
+    setXToOptVertex();
+    setYToOptVertex();
+}
 
 double getLagrBd(){return LagrBd;}
 double getProbabilities(){return pr;}
@@ -215,7 +472,8 @@ void updateALValues(const double *omega, const double *z, const double *scaling_
     sqrNormDiscr = 0.0;
     for(int ii=0; ii<n1; ii++) {
 		sqrNormDiscr += scaling_vector[ii]*(x[ii]-z[ii])*(x[ii]-z[ii]);
-		ALVal += (c[ii]+omega[ii])*x[ii];
+		if(omega==NULL){ALVal += (c[ii])*x[ii];}
+		else{ALVal += (c[ii]+omega[ii])*x[ii];}
     }
     ALVal += 0.5*sqrNormDiscr;
     
@@ -230,48 +488,6 @@ printColTypesFirstStage();
     return false;
 }
 
-protected:
-
-int n1;
-int n2;
-int nS;
-int tS; //scenario
-bool initialised;
-
-IloEnv env;
-bool disableHeuristic;
-int nThreads;
-double pr;
-double *c;
-double *d;
-
-double LagrBd;
-
-double *x;
-double *y;
-
-int nVertices;
-double* x_vertex;
-double* y_vertex;
-vector< vector<double> > xVertices; //row ordered
-vector< vector<double> > yVertices;
-
-IloCplex cplexMP;
-IloModel mpModel;
-IloNumArray weightSoln;//(env, nVertices);
-IloNumArray weightObjective;
-vector<double> baseWeightObj;
-IloExpr quadraticTerm;
-IloObjective mpObjective;
-IloRangeArray mpWeightConstraints;
-IloRangeArray mpVertexConstraints;
-IloNumVar mpWeight0;
-IloNumVarArray mpWeightVariables;
-IloNumVarArray mpAuxVariables;
-
-double ALVal;
-double sqrNormDiscr;
-int solverStatus_;
 
 };
 
@@ -285,6 +501,10 @@ PSCGModelScen_SMPS():PSCGModelScen(),LagrMIPInterface_(NULL){;}
 PSCGModelScen_SMPS(const PSCGModelScen_SMPS &other):PSCGModelScen(other),LagrMIPInterface_(NULL){;}
 
 int initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scenario);
+
+virtual void fixVarAt(int index, double fixVal){
+      LagrMIPInterface_->setColBounds(index,fixVal,fixVal);
+}
 
 virtual int solveLagrangianProblem(const double* omega);
 virtual int solveFeasibilityProblem();
@@ -371,6 +591,27 @@ int getCPLEXErrorStatus(){
 	return CPXgetstat(osi->getEnvironmentPtr(), osi->getLpPtr());
 }
 
+int setGapTolerances(double absGap, double relGap){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+	CPXsetdblparam( osi->getEnvironmentPtr(), CPX_PARAM_EPAGAP, absGap );
+	return CPXsetdblparam( osi->getEnvironmentPtr(), CPX_PARAM_EPGAP, relGap );
+}
+
+virtual void printXBounds(){
+cout << "Printing subproblem bounds: " << endl;
+  for(int ii=0; ii<n1; ii++){
+      cout << " (" << LagrMIPInterface_->getColLower()[ii] << "," << LagrMIPInterface_->getColUpper()[ii] << ")";
+  }
+  cout << endl;
+}
+virtual void printYBounds(){
+cout << "Printing subproblem bounds: " << endl;
+  for(int ii=0; ii<n2; ii++){
+      cout << " (" << LagrMIPInterface_->getColLower()[n1+ii] << "," << LagrMIPInterface_->getColUpper()[n1+ii] << ")";
+  }
+  cout << endl;
+}
+
 virtual void printColTypesFirstStage(){
     for(int i=0; i<n1; i++){
 	printColTypeFirstStage(i);
@@ -408,7 +649,7 @@ for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constr
     for(int ii=0; ii<mat->getNumRows(); ii++){
 	if( !( (rowLHS[ii] <=  constrVals[ii]+1.0e-6) && (constrVals[ii]-1.0e-6 <= rowRHS[ii]) ) ) 
 	{
-#if 1
+#if 0
 for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
 #endif
 	    return false;
@@ -417,10 +658,24 @@ for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constr
     return true;
 }
 
+#if 0
 virtual void fixXToZ(const double *z){
    for(int ii=0; ii<n1; ii++){
       LagrMIPInterface_->setContinuous(ii);
       LagrMIPInterface_->setColBounds(ii,z[ii],z[ii]);
+   }
+   return; 
+}
+#endif
+virtual void fixXToZ(const double *z, const char* colTypes){
+   for(int ii=0; ii<n1; ii++){
+      //LagrMIPInterface_->setContinuous(ii);
+      if(colTypes[ii]=='I' || colTypes[ii]=='B'){
+          LagrMIPInterface_->setColBounds(ii,round(z[ii]),round(z[ii]));
+      }
+      else{
+          LagrMIPInterface_->setColBounds(ii,z[ii],z[ii]);
+      }
    }
    return; 
 }
@@ -454,19 +709,20 @@ virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, c
 //cout << "*********" << endl;
 //printColTypesFirstStage();
 //printColBds();
-   fixXToZ(z);
+   fixXToZ(z,colTypes);
 //printColTypesFirstStage();
 //printColBds();
    solverStatus_ = solveLagrangianProblem(omega);
-   unfixX(origLBs, origUBs, colTypes); 
+   //unfixX(origLBs, origUBs, colTypes); 
+   unfixX(origLBs, origUBs); 
 //printColTypesFirstStage();
 //printColBds();
    return solverStatus_;
 }
 virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
-   fixXToZ(z);
+   fixXToZ(z,colTypes);
    solverStatus_ = solveFeasibilityProblem();
-   unfixX(origLBs, origUBs, colTypes); 
+   unfixX(origLBs, origUBs); 
    return solverStatus_;
 }
 
@@ -478,6 +734,10 @@ virtual bool updateSolnInfo(){
 		LagrBd = osi->getObjValue()*osi->getObjSense();
 		memcpy(x_vertex,solution,n1*sizeof(double));
 		memcpy(y_vertex,solution+n1,n2*sizeof(double));
+		//for(int ii=0; ii<n1; ii++){ roundIfClose(x_vertex[ii]);}
+		//for(int ii=0; ii<n2; ii++){ roundIfClose(y_vertex[ii]);}
+		for(int ii=0; ii<n1; ii++){ (x_vertex[ii]);}
+		for(int ii=0; ii<n2; ii++){ (y_vertex[ii]);}
 	}
 	else{
 		cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
@@ -485,6 +745,7 @@ virtual bool updateSolnInfo(){
 	        assert(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM);	
 	}
 }
+
 
 private:
 OsiCpxSolverInterface *LagrMIPInterface_;
@@ -505,16 +766,24 @@ virtual void setSolverStatus(){
     solverStatus_ = PSCG_OPTIMAL;
 }
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes){
-   fixXToZ(z);
+   fixXToZ(z,colTypes);
    int solveStatus = solveLagrangianProblem(omega);
-   unfixX(origLBs, origUBs, colTypes); 
+   unfixX(origLBs, origUBs); 
 }
 virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
-   fixXToZ(z);
+   fixXToZ(z,colTypes);
    int solveStatus = solveFeasibilityProblem();
-   unfixX(origLBs, origUBs, colTypes); 
+   unfixX(origLBs, origUBs); 
 }
+#if 0
 virtual void fixXToZ(const double *z){
+//TODO: set the xVariables to be continuous
+    for(int ii=0; ii<n1; ii++){
+	xVariables[ii].setBounds(z[ii],z[ii]);
+    }
+}
+#endif
+virtual void fixXToZ(const double *z, const char* colTypes){;
 //TODO: set the xVariables to be continuous
     for(int ii=0; ii<n1; ii++){
 	xVariables[ii].setBounds(z[ii],z[ii]);

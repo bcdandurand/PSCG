@@ -3,12 +3,14 @@
 
 double get_wall_time()
 {
+#if 1
     struct timeval time;
     if (gettimeofday(&time,NULL)){
         //  Handle error
         return 0;
     }
     return (double)time.tv_sec + (double)time.tv_usec * .000001;
+#endif
 }
 
 double get_cpu_time()

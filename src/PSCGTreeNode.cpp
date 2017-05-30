@@ -28,10 +28,6 @@
 #include <vector>
 
 #include "CoinUtility.hpp"
-//#include "OsiRowCut.hpp"
-//#include "OsiColCut.hpp"
-//#include "OsiRowCutDebugger.hpp"
-//#include "OsiCuts.hpp"
 
 #include "AlpsKnowledge.h"
 #include "AlpsEnumProcessT.h"
@@ -40,14 +36,8 @@
 
 #include "BcpsBranchStrategy.h"
 
-//#include "PSCGBranchObjectInt.h"
-//#include "PSCGConstraint.h"
-//#include "PSCGHelp.h"
-//#include "PSCGObjectInt.h"
 #include "PSCGParams.h"
 #include "PSCGTreeNode.h"
-//#include "PSCGSolution.h"
-//#include "PSCGVariable.h"
 
 #define REMOVE_SLACK 1
 
@@ -59,10 +49,6 @@ PSCGTreeNode::createNewTreeNode(AlpsNodeDesc *&desc) const
     // Create a new tree node
     PSCGTreeNode *node = new PSCGTreeNode(desc);
 
-    // Set solution estimate for this nodes.
-    // solEstimate = quality_ + sum_i{min{up_i, down_i}}
-    
-    //node->setSolEstimate(solEstimate_);
 
 #ifdef PSCG_DEBUG_MORE
     printf("PSCG:createNewTreeNode: quality=%g, solEstimate=%g\n",
@@ -85,241 +71,75 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
 {
     int status = PSCG_OK;
 
+    //------------------------------------------------------
+    // Get model information and parameters.
+    //------------------------------------------------------
     PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
     bool isMPIRoot = model->getMPIRank()==0;
 if(isMPIRoot) {cout << "***************BEGINNING OF PROCESSING NODE*******************" << endl;}
     PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-
-    AlpsPhase phase = knowledgeBroker_->getPhase();
-    
     //------------------------------------------------------
     // Check if this can be fathomed by objective cutoff.
     //------------------------------------------------------
+    if(quality_ >= this->getKnowledgeBroker()->getIncumbentValue()){
+	setStatus(AlpsNodeStatusFathomed);
+	if(isMPIRoot){ 
+	    cout << "Fathomed by bound" << endl;
+	    cout << "***************END OF PROCESSING NODE*******************" << endl;
+	}
+    	return status;
+    }
     
-    //model->setActiveNode(this);
-    //model->addNumNodes();
-    
     //------------------------------------------------------
-    // Get model information and parameters.
-    //------------------------------------------------------
-
-
-    // Mark if this node is root or not.
-    //model->isRoot_ = isRoot;
-
-    //======================================================
-    // Restore, load and solve the subproblem.
-    // (1) LP infeasible
-    //     a. set status to be fathom.
-    // (2) LP feasible
-    //     a. MILP feasible. Check whether need update incumbent.
-    //     b. LP feasible but not MIP feasible. Check whether can be 
-    //        fathomed, if not, choose a branch variable.
-    //======================================================
-
-    //------------------------------------------------------
-    // Extract info from this node and load subproblem into lp solver.
+    // Extract info from this node and load subproblem into MIP solver.
     //------------------------------------------------------
     
     if(isMPIRoot) cout << "Number of nodes left: " << this->getKnowledgeBroker()->getNumNodeLeftSystem() << endl;;
+    // Restore, load and solve the subproblem.
     installSubProblem(model);
+
+
+    //------------------------------------------------------
+    // Compute the bound.
+    //------------------------------------------------------
+    desc->printZBounds(model);
     bound(model); //node statuses are set here
-    int sp_status = model->getSPStatus();
+    
+
     int z_status = model->getZStatus();
-    bool feasSolnUpdated=false;
-if(isMPIRoot)cout << "Statuses: (" << sp_status << "," << z_status << ")" << endl;
-    if(sp_status==SP_INFEAS){
+    if( model->getZStatus()==Z_UNKNOWN ){
+      if(chooseBranchingObject(model)==-1){
 	setStatus(AlpsNodeStatusFathomed);
-	//model->clearSPVertexHistory();
-	if(isMPIRoot) cout << "Fathomed due to infeasibility" << endl;
-    }
-    else{
-      if(z_status==Z_OPT){
-        feasSolnUpdated=model->evaluateFeasibleZ();
-#if 0
-	if(model->solveRecourseProblemGivenFixedZ()){	
-            model->setZStatus(Z_FEAS);
-	cout << "Does z nevertheless have recourse? Yes." << endl;
-	}
-#endif
-	setStatus(AlpsNodeStatusFathomed);
-	//model->clearSPVertexHistory();
-	//store solution, update cutoff if appropriate
 	if(isMPIRoot) cout << "Fathomed by optimality" << endl;
       }
-      else if(model->checkForCutoff()){
-	setStatus(AlpsNodeStatusFathomed);
-	//model->clearSPVertexHistory();
-	if(isMPIRoot) cout << "Fathomed by bound" << endl;
-      }
-      else if(z_status==Z_FEAS){
-        feasSolnUpdated=model->evaluateFeasibleZ();
-#if 0
-	if(model->solveRecourseProblemGivenFixedZ()){	
-            model->setZStatus(Z_FEAS);
-	cout << "Does z nevertheless have recourse? Yes." << endl;
-	}
-#endif
-	setStatus(AlpsNodeStatusFathomed);
-	//setStatus(AlpsNodeStatusEvaluated);
-	if(isMPIRoot) cout << "Node still needs more processing...(but fathoming anyway)." << endl;
-      }
-      else if(z_status==Z_REC_INFEAS){
-	//postProcessBound(model);
-        feasSolnUpdated=model->evaluateFeasibleZ();
-	setStatus(AlpsNodeStatusFathomed);
-	//setStatus(AlpsNodeStatusEvaluated);
-#if 0
-	if(model->solveRecourseProblemGivenFixedZ()){	
-            model->setZStatus(Z_FEAS);
-	cout << "Does z nevertheless have recourse? Yes." << endl;
-	}
-#endif
-	if(isMPIRoot) cout << "Integrality satsified at node, but not recourse. Node still needs more processing...(but fathoming anyway)." << endl;
-	//cout << "Does z nevertheless have recourse? " << model->checkZHasFullRecourse() << endl;
-      }
-      else{//Need to branch
-        feasSolnUpdated=model->evaluateFeasibleZ();
+      else{
+        //desc->updateZ(model);
+        desc->updateBranchingZVals(model);
 	setStatus(AlpsNodeStatusPregnant);
-	//desc->updateBranchingIndex(model);
-	//model->clearSPVertexHistory();
-	if(isMPIRoot) cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << " with z value " << model->getZ()[model->getInfeasIndex()] << endl;
+	if(isMPIRoot) cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << " with z value " << model->getBranchingZVals()[0] << endl;
       }
+
+    //------------------------------------------------------
+    // Try to find a feasible solution, improve the incumbent value 
+    //------------------------------------------------------
+      if(isMPIRoot) cout << "Searching for feasible solution, improvement on incumbent value..." << endl;
+      model->findPrimalFeasSoln(100);
     }
-
-    if(feasSolnUpdated){ 
-if(isMPIRoot) cout << "Should be registering solution" << endl;
-	registerSolution(model);
-    }
-#if 0
-    while (keepOn && (pass < maxPass)) {
-        ++pass;
-        keepOn = false;
-        
-        //--------------------------------------------------
-        // Bounding to get the quality of this node.
-        //--------------------------------------------------
-        
-        status = bound(model);
-	if (pass == 1) {
-	    int iter = model->solver()->getIterationCount();
-	    model->addNumIterations(iter);
-	}
-        
-        switch(status) {
-        case PSCG_LP_OPTIMAL:
-            // Check if IP feasible 
-            feasibleIP = false;//model->feasibleSolution(numIntInfs, numObjInfs);
-            
-            if (feasibleIP) {         
-                // IP feasible 
-		
-		if (quality_ < cutoff) {  
-                    // Better than incumbent
-                    // Update cutoff
-                    cutoff = getKnowledgeBroker()->getIncumbentValue();
-                }
-                setStatus(AlpsNodeStatusFathomed);
-		//break;
-            }
-            else {
-                cutoff = getKnowledgeBroker()->getIncumbentValue();
-                if (quality_ > cutoff) {
-                    setStatus(AlpsNodeStatusFathomed);
-		    //break;
-                }
-                needBranch = true;
-                reducedCostFix(model);
-                
-                //------------------------------------------
-                // Check if tailoff
-                //------------------------------------------
-
-                if (pass > 1) {
-                    improvement = quality_ - preObjValue;
-                    if (improvement > tailOffTol) {
-                        // NOTE: still need remove slacks, although
-                        //       tailoff.
-                        keepOn = true;
-                    }
-                    
-#ifdef PSCG_DEBUG_MORE
-                    std::cout << "PROCESS: pass["<< pass << "], improvement=" 
-                              << improvement << ", tailOffTol=" << tailOffTol
-                              << std::endl;
-#endif
-                }
-                else {
-                    keepOn = true;
-                }
-                // Update previous objective value.
-                preObjValue = quality_;
-
-                if ( genConsHere &&
-                     //(improvement > tailOffTol) && 
-                     //(numRows > numStartRows) ) {
-                     (numRows > numCoreRows) ) {   
-                 
-		    
-                    
-                }
-            }
-            
-            break;
-        case PSCG_LP_ABANDONED:
-#ifdef PSCG_DEBUG
-            assert(0);
-#endif
-            status = PSCG_ERR_LP;
-            goto TERM_PROCESS;
-        case PSCG_LP_DUAL_INF:
-            // FIXME: maybe also primal infeasible
-#ifdef PSCG_DEBUG
-	    assert(0);
-#endif
-            status = PSCG_UNBOUND;
-            goto TERM_PROCESS;
-        case PSCG_LP_PRIMAL_INF:
-            setStatus(AlpsNodeStatusFathomed);
-            quality_ = -ALPS_OBJ_MAX;       // Remove it as soon as possilbe
-            goto TERM_PROCESS;
-        case PSCG_LP_DUAL_LIM:
-            setStatus(AlpsNodeStatusFathomed);
-            quality_ = -ALPS_OBJ_MAX;       // Remove it as soon as possilbe
-            goto TERM_PROCESS;
-        case PSCG_LP_PRIMAL_LIM:
-        case PSCG_LP_ITER_LIM:
-            /* Can say much, need branch */
-            needBranch = true;
-#ifdef PSCG_DEBUG
-            assert(0);
-#endif
-            goto TERM_BRANCH;
-            break;
-        default:
-#ifdef PSCG_DEBUG
-            std::cout << "PROCESS: unknown status "  <<  status << std::endl;
-            assert(0);
-#endif
-            break;
+    else{
+        if(model->getZStatus()==Z_INFEAS){
+	    if(isMPIRoot) cout << "Fathomed due to infeasibility" << endl;
         }
-
-        //--------------------------------------------------
-        // Apply heuristics.
-        //--------------------------------------------------
-        
-        //--------------------------------------------------
-        // Generate constraints.
-        //--------------------------------------------------
-        
+	else{ //z_status==Z_BOUNDED
+	    if(isMPIRoot) cout << "Fathomed by bound" << endl;
+        }
+	setStatus(AlpsNodeStatusFathomed);
     }
-#endif 
     
     //------------------------------------------------------
     // End of process()
     //------------------------------------------------------
+model->printNodeStats();
     
-    //model->isRoot_ = false;
 if(isMPIRoot) {cout << "***************END OF PROCESSING NODE*******************" << endl;}
     return status;
 }
@@ -329,7 +149,7 @@ if(isMPIRoot) {cout << "***************END OF PROCESSING NODE*******************
 std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> >
 PSCGTreeNode::branch()
 {
-cout << "Begin branch()" << endl;
+//cout << "Begin branch()" << endl;
 //printInstallSubproblem();
     //------------------------------------------------------
     // Change one var hard bound and record the change in nodedesc:
@@ -339,12 +159,10 @@ cout << "Begin branch()" << endl;
 
     AlpsPhase phase = knowledgeBroker_->getPhase();
 
-    //double objVal = getQuality();
 
     std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> > 
 	childNodeDescs;
     
-    //PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());    
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
     assert(desc->getBranchingIndex()!=-1);
@@ -352,132 +170,41 @@ cout << "Begin branch()" << endl;
     childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
-					    desc->getLB()));
+					    quality_));
     childDesc = desc->createChildNodeDescDown(desc->getBranchingIndex());
     childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
-					    desc->getLB()));
+					    quality_));
     status_ = AlpsNodeStatusBranched;
     
-cout << "End branch()" << endl;
+//cout << "End branch()" << endl;
     return childNodeDescs;
 }
 
 //#############################################################################
 
-/* FIXME: need rewrite from scratch */
-/* 0: find a branch var, -1 no branch var (should not happen) */
-
-int PSCGTreeNode::selectBranchObject(PSCGModel *model, 
-                                     bool& foundSol, 
-                                     int numPassesLeft) 
-{
-    int bStatus = 0;
-#if 0
-    if(branchObject_) {
-        delete branchObject_;
-        branchObject_ = NULL;
-    }
-    
-    //------------------------------------------------------
-    // Get branching strategy.
-    //------------------------------------------------------
-
-    BcpsBranchStrategy *strategy = model->branchStrategy();
-    if (!strategy) {
-        throw CoinError("No branch strategy.", "process()","PSCGTreeNode");
-    }
-
-    //------------------------------------------------------
-    // Create branching object candidates.
-    //-----------------------------------------------------
-    
-    bStatus = strategy->createCandBranchObjects(numPassesLeft,
-                                                model->getCutoff());
-    
-    //------------------------------------------------------
-    // Select the best branching objects.
-    //-----------------------------------------------------
-    
-    if (bStatus >= 0) {
-        
-       branchObject_ = strategy->bestBranchObject();
-
-       if (branchObject_) {
-	  // Move best branching object to node.
-
-#ifdef PSCG_DEBUG_MORE
-	  std::cout << "SELECTBEST: Set branching obj" << std::endl;
-#endif
-       }
-       else {
-#ifdef PSCG_DEBUG
-	  std::cout << "ERROR: Can't find branching object" << std::endl;
-#endif
-	  assert(0);
-       }
-
-       // Set guessed solution value
-       // solEstimate_ = quality_ + sumDeg;
-    }
-    
-    if (!model->branchStrategy()) {
-        delete strategy;
-    }
-#endif
-    return bStatus;
-}
 
 //#############################################################################
 
 int PSCGTreeNode::bound(BcpsModel *model) 
 {
-cout << "Begin bound()" << endl;
+//cout << "Begin bound()" << endl;
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-    m->setZStatus(Z_UNKNOWN);
-    quality_ = m->computeBound(30,true);
-    m->evaluateXDispersion();
-    desc->updateZ(m);
-    desc->updateOmega(m); 
-    desc->updateBd(m);
-    desc->updateBranchingIndex(m);
-if(m->getMPIRank()==0){cout << "Postprocessing (trying to find feasible solution)..." << endl;}
-    if( !(m->getZStatus()==Z_INFEAS || m->getZStatus()==Z_BOUNDED) ){
-      m->postProcess(50);
-      m->updateModelStatusZ();
-    }
-if(m->getMPIRank()==0){cout << "This is now the z was updated during postprocessing: " << endl;}
-m->printZ();
-if(m->getMPIRank()==0){cout << "This is now the z used to branch: " << endl;}
-desc->printZ(m);
-cout << "End bound()" << endl;
+    updateQuality(m->computeBound(100,true));
+    //if( m->getZStatus()==Z_UNKNOWN ){
+      //desc->updateOmega(m); 
+    //}
+//cout << "End bound()" << endl;
     return 0;
 }
-
-#if 0
-int PSCGTreeNode::postProcessBound(BcpsModel *model) 
-{
-cout << "Begin postProcessBound()" << endl;
-    PSCGModel *m = dynamic_cast<PSCGModel *>(model);
-    PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-
-    quality_ = m->postProcess(50);
-    desc->updateZ(m);
-    desc->updateOmega(m); 
-    desc->updateBd(m);
-    desc->updateBranchingIndex(m);
-cout << "End postProcessBound()" << endl;
-    return 0;
-}
-#endif
 
 //#############################################################################
 
 int PSCGTreeNode::installSubProblem(BcpsModel *m)
 {
-cout << "Begin installSubProblem()" << endl;
+//cout << "Begin installSubProblem()" << endl;
     AlpsReturnStatus status = AlpsReturnStatusOk;
 
     PSCGModel *model = dynamic_cast<PSCGModel *>(m);
@@ -486,466 +213,8 @@ cout << "Begin installSubProblem()" << endl;
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
     
     desc->installSubproblemFromNodeDesc();
-#if 0
-    int numModify = 0;
 
-    int numCoreVars = model->getNumCoreVariables();
-    int numCoreCons = model->getNumCoreConstraints();
-
-    int numCols = model->solver()->getNumCols();
-    int numRows = model->solver()->getNumRows();
-
-    //double *varSoftLB = NULL;
-    //double *varSoftUB = NULL;
-    double *varHardLB = NULL;
-    double *varHardUB = NULL;
-
-    //double *conSoftLB = NULL;
-    //double *conSoftUB = NULL;
-    //double *conHardLB = NULL;
-    //double *conHardUB = NULL;
-    
-    double *startColLB = model->startVarLB();
-    double *startColUB = model->startVarUB();
-    double *startRowLB = model->startConLB();
-    double *startRowUB = model->startConUB();
-    
-    CoinFillN(startColLB, numCoreVars, -ALPS_DBL_MAX);
-    CoinFillN(startColUB, numCoreVars, ALPS_DBL_MAX);
-    CoinFillN(startRowLB, numCoreCons, -ALPS_DBL_MAX);
-    CoinFillN(startRowUB, numCoreCons, ALPS_DBL_MAX);
-
-#if 0
-    //memcpy(startColLB, model->origVarLB(), sizeof(double) * numCoreVars);
-    //memcpy(startColUB, model->origVarUB(), sizeof(double) * numCoreVars);
-    //memcpy(startRowLB, model->origConLB(), sizeof(double) * numCoreCons);
-    //memcpy(startRowUB, model->origConUB(), sizeof(double) * numCoreCons);
-#endif
-
-    int numOldCons = 0;
-    int tempInt = 0;
-    PSCGConstraint *aCon = NULL;
-
-    int nodeID = -1;
-    nodeID = getIndex();
-    //std::cout << "nodeID=" << nodeID << std::endl;
-#endif
-    AlpsPhase phase = knowledgeBroker_->getPhase();
-
-    //======================================================
-    // Restore subproblem: 
-    //  1. Remove noncore var/con
-    //  2. Travel back to root and correct differencing to
-    //     full var/con bounds into model->startXXX
-    //  3. Set col bounds
-    //  4. Set row bounds (is this necessary?)
-    //  5. Add contraints except cores
-    //  6. Add variables except cores
-    //  7. Set basis (should not need modify)
-    //======================================================
-
-
-    //------------------------------------------------------
-    // Remove old constraints from lp solver.
-    //------------------------------------------------------
-#if 0
-    int numDelCons = numRows - numCoreCons;
-    
-#ifdef PSCG_DEBUG
-    std::cout << "INSTALL: numDelCons = " << numDelCons << std::endl;
-#endif
-	
-    if (numDelCons > 0) {
-	int *indices = new int [numDelCons];
-	if (indices == NULL) {
-	    throw CoinError("Out of memory", "installSubProblem", "PSCGTreeNode");
-	}
-	
-	for (i = 0; i < numDelCons; ++i) {
-	    indices[i] = numCoreCons + i;
-	}
-	
-	model->solver()->deleteRows(numDelCons, indices);
-	delete [] indices;
-	indices = NULL;
-    }
-    
-    //--------------------------------------------------------
-    // Travel back to a full node, then collect diff (add/rem col/row,
-    // hard/soft col/row bounds) from the node full to this node.
-    //----------------------------
-    // Note: if we store full set of logic/agorithm col/row, then
-    //       no diff are needed for col/row
-    //--------------------------------------------------------
-    
-    //--------------------------------------------------------
-    // Collect differencing bounds. Branching bounds of this node
-    // are ALSO collected.
-    //--------------------------------------------------------
-
-    PSCGNodeDesc* pathDesc = NULL;
-    AlpsTreeNode *parent = parent_;    
-    
-    /* First push this node since it has branching hard bounds. 
-       NOTE: during rampup, this desc has full description when branch(). */
-    model->leafToRootPath.push_back(this);
-    
-    if (phase != AlpsPhaseRampup) {
-	while(parent) {
-#ifdef PSCG_DEBUG_MORE
-	    std::cout << "Parent id = " << parent->getIndex() << std::endl;
-#endif     
-	    model->leafToRootPath.push_back(parent);
-	    if (parent->getExplicit()) {
-		// Reach an explicit node, then stop.
-		break;
-	    }
-	    else {
-		parent = parent->getParent();
-	    }
-	}
-    }
-    
-#ifdef PSCG_DEBUG_MORE
-    std::cout << "INSTALL: path len = " << model->leafToRootPath.size()
-	      << std::endl;
-#endif
-    
-    //------------------------------------------------------
-    // Travel back from this node to the explicit node to
-    // collect full description.
-    //------------------------------------------------------
-    
-    for(i = static_cast<int> (model->leafToRootPath.size() - 1); i > -1; --i) {
-
-#ifdef PSCG_DEBUG_MORE
-        if (index_ == 3487) {
-            std::cout << "\n----------- NODE ------------" 
-                      << model->leafToRootPath.at(i)->getIndex() << std::endl;
-        }
-#endif
-	
-	//--------------------------------------------------
-	// NOTE: As away from explicit node, bounds become 
-	//       tighter and tighter.
-	//--------------------------------------------------
-        
-        pathDesc = dynamic_cast<PSCGNodeDesc*>((model->leafToRootPath.at(i))->
-                                               getDesc());
-        
-        varHardLB = pathDesc->getVars()->lbHard.entries;
-        varHardUB = pathDesc->getVars()->ubHard.entries;
-        
-	//--------------------------------------------------      
-        // Adjust bounds according to hard var lb/ub.
-	// If rampup or explicit, collect hard bounds so far.
-	//--------------------------------------------------
-	
-        numModify = pathDesc->getVars()->lbHard.numModify;
-	
-#ifdef PSCG_DEBUG_MORE
-	std::cout << "INSTALL: numModify lb hard = " << numModify << std::endl;
-#endif
-	
-        for (k = 0; k < numModify; ++k) {
-            index = pathDesc->getVars()->lbHard.posModify[k];
-            value = pathDesc->getVars()->lbHard.entries[k];
-      
-#ifdef PSCG_DEBUG_MORE
-	    printf("INSTALL: 1, col %d, value %g, startColLB %x\n", 
-		   index, value, startColLB);
-#endif      
-	    // Hard bounds do NOT change according to soft bounds, so
-	    // here need std::max.
-            startColLB[index] = std::max(startColLB[index], value);
-            
-#ifdef PSCG_DEBUG_MORE
-            if (index_ == 3487) {
-                printf("INSTALL: 1, col %d, hard lb %g, ub %g\n", 
-                       index, startColLB[index], startColUB[index]);
-            }
-#endif
-        }
-
-#ifdef PSCG_DEBUG_MORE
-	std::cout << "INSTALL: numModify ub hard = " << numModify<<std::endl;
-#endif
-
-        numModify = pathDesc->getVars()->ubHard.numModify;
-        for (k = 0; k < numModify; ++k) {
-            index = pathDesc->getVars()->ubHard.posModify[k];
-            value = pathDesc->getVars()->ubHard.entries[k];
-            startColUB[index] = std::min(startColUB[index], value);
-	    
-#ifdef PSCG_DEBUG_MORE
-            if (index_ == 3487) {
-                printf("INSTALL: 2, col %d, hard lb %g, ub %g\n", 
-                       index, startColLB[index], startColUB[index]);
-            }
-            if (startColLB[index] > startColUB[index]) {
-                    //assert(0);
-            }
-#endif
-        }
-        
-        //--------------------------------------------------
-        // Adjust bounds according to soft var lb/ub.
-	// If rampup or explicit, collect soft bounds so far.
-        //--------------------------------------------------
-
-        numModify = pathDesc->getVars()->lbSoft.numModify;
-#ifdef PSCG_DEBUG_MORE
-	std::cout << "INSTALL: i=" << i << ", numModify soft lb="
-		  << numModify << std::endl;
-#endif
-        for (k = 0; k < numModify; ++k) {
-            index = pathDesc->getVars()->lbSoft.posModify[k];
-            value = pathDesc->getVars()->lbSoft.entries[k];
-            startColLB[index] = std::max(startColLB[index], value);
-            
-#ifdef PSCG_DEBUG_MORE
-            if (index_ == 3487) {
-                printf("INSTALL: 3, col %d, soft lb %g, ub %g\n", 
-                       index, startColLB[index], startColUB[index]);
-            }
-            
-            if (startColLB[index] > startColUB[index]) {
-		//assert(0);
-            }
-#endif
-        }
-        numModify = pathDesc->getVars()->ubSoft.numModify;
-        
-#ifdef PSCG_DEBUG_MORE
-	std::cout << "INSTALL: i=" << i << ", numModify soft ub="
-		  << numModify << std::endl;
-#endif
-
-        for (k = 0; k < numModify; ++k) {
-            index = pathDesc->getVars()->ubSoft.posModify[k];
-            value = pathDesc->getVars()->ubSoft.entries[k];
-            startColUB[index] = std::min(startColUB[index], value);
-            
-#ifdef PSCG_DEBUG_MORE
-            if (index_ == 3487) {
-                printf("INSTALL: 4, col %d, soft lb %g, ub %g\n", 
-                       index, startColLB[index], startColUB[index]);
-            }
-            
-            if (startColLB[index] > startColUB[index]) {
-		//assert(0);
-            }
-#endif
-        }
-        
-        //--------------------------------------------------
-        // TODO: Modify hard/soft row lb/ub.
-        //--------------------------------------------------
-
-
-        //--------------------------------------------------
-        // Collect active non-core constraints at parent.
-        //--------------------------------------------------
-
-	//----------------------------------------------
-	// First collect all generated cuts, then remove 
-	// deleted.
-	//----------------------------------------------
-	
-	tempInt = pathDesc->getCons()->numAdd;
-	    
-#ifdef PSCG_DEBUG_MORE
-	std::cout << "\nINSTALL: numAdd = " << tempInt << std::endl;
-#endif
-
-	int maxOld = model->getOldConstraintsSize();
-	
-	for (k = 0; k < tempInt; ++k) {
-	    aCon = dynamic_cast<PSCGConstraint *>
-		(pathDesc->getCons()->objects[k]);
-	    
-	    assert(aCon);
-	    assert(aCon->getSize() > 0);
-	    assert(aCon->getSize() < 100000);
-	    
-#ifdef PSCG_DEBUG_MORE
-	    std::cout << "INSTALL: cut  k=" << k 
-		      << ", len=" <<aCon->getSize() 
-		      << ", node="<< index_ << std::endl;
-#endif
-	    (model->oldConstraints())[numOldCons++] = aCon;
-	    
-	    if (numOldCons >= maxOld) {
-		// Need resize
-#ifdef PSCG_DEBUG_MORE
-		std::cout << "INSTALL: resize, maxOld = " 
-			  << maxOld << std::endl;
-#endif
-		maxOld *= 2;
-		PSCGConstraint **tempCons = new PSCGConstraint* [maxOld];
-		
-		memcpy(tempCons, 
-		       model->oldConstraints(), 
-		       numOldCons * sizeof(PSCGConstraint *));
-		
-		model->delOldConstraints();
-		model->setOldConstraints(tempCons);
-		model->setOldConstraintsSize(maxOld);
-	    }
-	}
-	    
-	//----------------------------------------------
-	// Remove those deleted. 
-	// NOTE: model->oldConstraints_ stores all previously 
-	// generated active constraints at parent.
-	//----------------------------------------------
-	
-	tempInt = pathDesc->getCons()->numRemove;
-            
-	if (tempInt > 0) {
-	    int tempPos;
-	    int *tempMark = new int [numOldCons];
-	    CoinZeroN(tempMark, numOldCons);
-	    for (k = 0; k < tempInt; ++k) {
-		tempPos = pathDesc->getCons()->posRemove[k];
-#ifdef PSCG_DEBUG_MORE
-		std::cout << "tempPos=" << tempPos 
-			  << ", tempInt=" << tempInt 
-			  << ", numOldCons=" << numOldCons << std::endl;
-#endif
-		tempMark[tempPos] = 1;
-		
-	    }
-	    
-	    tempInt = 0;
-	    for (k = 0; k < numOldCons; ++k) {
-		if (tempMark[k] != 1) {
-		    // Survived.
-		    (model->oldConstraints())[tempInt++]=
-			(model->oldConstraints())[k];
-		}
-	    }
-	    if (tempInt + pathDesc->getCons()->numRemove != numOldCons) {
-		std::cout << "INSTALL: tempInt=" << tempInt
-			  <<", numRemove="<<pathDesc->getCons()->numRemove
-			  << ", numOldCons=" << numOldCons << std::endl;
-		
-		assert(0);
-	    }
-	    
-	    // Update number of old non-core constraints.
-	    numOldCons = tempInt;
-	    delete [] tempMark;
-	}
-    } // EOF leafToRootPath.
-
-
-    //--------------------------------------------------------
-    // Debug variable bounds to be installed.
-    //--------------------------------------------------------
-
-#ifdef PSCG_DEBUG_MORE
-    for (k = 0; k < numCols; ++k) {
-        //if (index_ == -1) {
-            printf("INSTALL: Col %d, \tlb %g,  \tub %g\n",
-                   k, startColLB[k], startColUB[k]);
-	    //}
-        
-        if (startColLB[k] > startColUB[k] + ALPS_GEN_TOL) {
-            printf("INSTALL: Col %d, \tlb %g,  \tub %g\n",
-                   k, startColLB[k], startColUB[k]);
-            assert(0);
-        }
-    }
-#endif   
-
-    //--------------------------------------------------------
-    // Clear path vector.
-    //--------------------------------------------------------
-    
-    model->leafToRootPath.clear();
-    assert(model->leafToRootPath.size() == 0);
-    
-    //--------------------------------------------------------
-    // Adjust column bounds in lp solver  
-    //--------------------------------------------------------
-    
-    for(i = 0; i < numCols; ++i) {
-	model->solver()->setColBounds(i, startColLB[i], startColUB[i]); 
-    }
-    
-    //--------------------------------------------------------
-    // TODO: Set row bounds 
-    //--------------------------------------------------------
-    
-
-    //--------------------------------------------------------
-    // Add old constraints, which are collect from differencing.
-    //--------------------------------------------------------
-    
-    // If removed cuts due to local cuts.
-
-    model->setNumOldConstraints(numOldCons);
-    
-#ifdef PSCG_DEBUG
-    std::cout << "INSTALL: after collecting, numOldCons = " << numOldCons 
-	      << std::endl;
-#endif
-
-    if (numOldCons > 0) {
-	const OsiRowCut ** oldOsiCuts = new const OsiRowCut * [numOldCons];
-	for (k = 0; k < numOldCons; ++k) {
-	    OsiRowCut * acut = 
-		PSCGConstraintToOsiCut(model->oldConstraints()[k]);
-	    oldOsiCuts[k] = acut;
-	}
-	model->solver()->applyRowCuts(numOldCons, oldOsiCuts);
-	for (k = 0; k < numOldCons; ++k) {
-	    delete oldOsiCuts[k];
-	}
-	delete [] oldOsiCuts;
-	oldOsiCuts = NULL;
-    }
-    
-    //--------------------------------------------------------
-    // Add parent variables, which are collect from differencing.
-    //--------------------------------------------------------
-    
-
-    //--------------------------------------------------------
-    // Set basis
-    //--------------------------------------------------------
-
-    CoinWarmStartBasis *pws = desc->getBasis();
-
-    if (pws != NULL) {
-	model->solver()->setWarmStart(pws);
-
-#ifdef PSCG_DEBUG
-	printf("NODE %d: set warm start\n", getIndex());
-	
-	numCols = model->solver()->getNumCols();
-	numRows = model->solver()->getNumRows();
-	int nStr = pws->getNumStructural();
-	int nArt = pws->getNumArtificial();
-	
-	if (numCols != nStr) {
-	    std::cout << "nStr=" << nStr << ", numCols=" << numCols 
-		      << std::endl;
-	    assert(0);
-	}
-	std::cout << "nArt=" << nArt << ", numRows=" << numRows 
-		  << std::endl;
-	if (numRows != nArt) {
-	    std::cout << "nArt=" << nArt << ", numRows=" << numRows 
-		      << std::endl;
-	    assert(0);
-	}
-#endif
-
-    }  
-#endif
-cout << "End installSubProblem()" << endl;
+//cout << "End installSubProblem()" << endl;
     return status;
 }
 

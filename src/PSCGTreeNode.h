@@ -30,7 +30,6 @@
 
 #include "BcpsObjectPool.h"
 #include "BcpsTreeNode.h"
-#include "BcpsSolution.h"
 #include "BcpsNodeDesc.h"
 #include "PSCGNodeDesc.h"
 #if 1
@@ -82,6 +81,8 @@ class PSCGTreeNode : public BcpsTreeNode {
         init();
         desc_ = desc;
         desc = NULL;
+	//solEstimate_=dynamic_cast<PSCGNodeDesc*>(desc_)->getLB();
+	quality_=dynamic_cast<PSCGNodeDesc*>(desc_)->getLB();
     }
 
     /** Destructor. */
@@ -106,25 +107,19 @@ class PSCGTreeNode : public BcpsTreeNode {
     ///@}
     
     /** intall subproblem */
-    virtual int installSubProblem(BcpsModel *mode);
+    virtual int installSubProblem(BcpsModel *model);
     
     /** Performing the bounding operation. */
     virtual int process(bool isRoot = false, bool rampUp = false);
     
     /** Bounding procedure */
     virtual int bound(BcpsModel *model);
-    int postProcessBound(BcpsModel *model); 
-    void registerSolution(PSCGModel *model){
-	BcpsSolution* ksol =
-                        new BcpsSolution(model->n1,
-                                           model->getZ(),
-                                           model->getIncumbentVal());
-                    getKnowledgeBroker()->addKnowledge(AlpsKnowledgeTypeSolution,
-                                                       ksol,
-                                                       model->getIncumbentVal());
-
-		getKnowledgeBroker()->setPhase(AlpsPhaseSearch);
+    void updateQuality(double val){
+	quality_=val;
+    	PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
+        desc->updateBd(val);
     }
+    //int postProcessBound(BcpsModel *model); 
     /** Takes the explicit description of the current active node and 
         creates the children's descriptions, which contain information 
         about how the branching is to be done. The stati of the children
@@ -132,13 +127,23 @@ class PSCGTreeNode : public BcpsTreeNode {
     virtual std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> > 
 	branch();
     
+    virtual int chooseBranchingObject(BcpsModel *model){
+	//int branchingIndex = -1;
+    	PSCGModel *m = dynamic_cast<PSCGModel*>(model);
+    	PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
+        m->findBranchingIndex();
+        desc->updateBranchingIndex(m);
+	return m->getInfeasIndex();
+    }
     /** Select a branching object based on give branching strategy. */
+#if 0
     int selectBranchObject(PSCGModel *model, 
                            bool& foundSol, 
                            int numPassesLeft);
+#endif
 
     /** To be defined. */
-    virtual int chooseBranchingObject(BcpsModel*) { return AlpsReturnStatusOk;}
+    //virtual int chooseBranchingObject(BcpsModel*) { return AlpsReturnStatusOk;}
     
     /** Generate constraints. */
     int generateConstraints(PSCGModel *model, OsiCuts & cutPool);
@@ -167,11 +172,6 @@ class PSCGTreeNode : public BcpsTreeNode {
     void printInstallSubproblem(){
         PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
         PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-	cout << "Printing z: " << endl;
-	for(int ii=0; ii<model->n1; ii++){
-	    cout << " (" << model->getZ()[ii] << "," << desc->getZ()[ii] << ")";
-	}
-	cout << endl;
 	cout << "(" << model->getBound() << "," << desc->getLB() << ")" << endl;
 	cout << "(" << model->getInfeasIndex() << "," << desc->getBranchingIndex() << ")" << endl;
     }

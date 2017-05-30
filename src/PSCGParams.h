@@ -30,6 +30,7 @@ enum Statuses{
 };
 
 enum SPStatuses{
+    SP_UNKNOWN=-1,
     SP_OPT=0, //PSCG termination criteria met
     SP_ITER_LIM, //otherwise feasible
     SP_INFEAS //at least one subproblem is infeasible
@@ -71,13 +72,13 @@ public:
 	bool scaling;
 	bool dataPathOverride;
 	bool LBcalc;
-	bool AlgorithmC;
+	bool AlgorithmZ;
 	bool disableHeuristic;
 	PSCGParams() : filename(""), noScenarios(-1), maxStep(-1), maxSeconds(-1),
    fixInnerStep(-1), UseVertexHistory(-1), penalty(-1), penaltyMult(-1),
    filetype(0), verbose(false), debug(false), linRelaxFirst(false),
    linRelaxSecond(false), scaling(false), dataPathOverride(false),
-   LBcalc(false), AlgorithmC(false), disableHeuristic(false), mpiSize(1),mpiRank(0) {}
+   LBcalc(false), AlgorithmZ(false), disableHeuristic(false), mpiSize(1),mpiRank(0) {}
 
 // ADDFLAG : Put the definition and declaration here.
     typedef struct CArgs {
@@ -102,7 +103,7 @@ public:
 	TCLAP::SwitchArg CAP_Switch;
 	TCLAP::SwitchArg SMPS_Switch;
 	TCLAP::SwitchArg LB_Switch;
-	TCLAP::SwitchArg AlgC_Switch;
+	TCLAP::SwitchArg AlgZ_Switch;
 	TCLAP::SwitchArg Heur_Switch;
 
 	CArgs(TCLAP::CmdLine &cmdL) :
@@ -115,7 +116,7 @@ public:
 		CAP_Switch("","CAP","Indicates the file to be read is a CAP file", false),
 		SMPS_Switch("","SMPS","Indicates the files to be read comprise an SMPS file", false),
 		LB_Switch("","lb","Toggle calculation of explicit lower bound", false),
-		AlgC_Switch("","AlgC","Toggles use of Algorithm C variant", false),
+		AlgZ_Switch("","AlgZ","Toggles use of Algorithm variant using z to determine branching", false),
 		Heur_Switch("","disableHeur","Turns off use of CPLEX integer solution heuristic", false),
 
 		ppArg("p", "penaltyParam", "Starting value for penalty --OVERRIDES pMultiplier--", false, -1, "float"),
@@ -140,7 +141,7 @@ public:
 		cmdL.add( CAP_Switch );
 		cmdL.add( SMPS_Switch );
 		cmdL.add( LB_Switch );
-		cmdL.add( AlgC_Switch );
+		cmdL.add( AlgZ_Switch );
 		cmdL.add( Heur_Switch );
 		cmdL.add( ppArg );
 		cmdL.add( pmultArg );
@@ -300,8 +301,8 @@ void updateParams(CArgs* a) {
 		LBcalc = true;
 	}
 
-	if (a->AlgC_Switch.getValue() == true) {
-		AlgorithmC = true;
+	if (a->AlgZ_Switch.getValue() == true) {
+		AlgorithmZ = true;
 	}
 
 	if (a->Heur_Switch.getValue() == true) {

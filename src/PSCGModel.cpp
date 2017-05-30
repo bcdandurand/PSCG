@@ -20,6 +20,8 @@ void PSCGModel::initialiseParameters(){
 
 	std::string str_filename(par->filename);
 	std::string str_outputFileID(par->outputFilename);
+	strcpy(filepath,par->filename.c_str());
+	initialiseFileName();
 	nS = par->noScenarios;
 	penC = par->penalty;
 	penMult = par->penaltyMult;
@@ -52,7 +54,7 @@ void PSCGModel::initialiseParameters(){
 	scaling = par->scaling;
 	dataPathOverride = par->dataPathOverride;
 	LBcalc = par->LBcalc;
-	AlgorithmC = par->AlgorithmC; //obsolete, get rid of.
+	AlgorithmZ = par->AlgorithmZ; 
 	disableHeuristic = par->disableHeuristic;
 	ftype = par->filetype;
 
@@ -91,51 +93,51 @@ void PSCGModel::setupSolvers(){
 	    pr.push_back(subproblemSolvers[tS]->getProbabilities());
 	    scaling_matrix.push_back(new double[n1]);
 	    omega_tilde.push_back(new double[n1]);
-	    omega_current.push_back(NULL);
+	    omega_current.push_back(new double[n1]);
+	    omega_saved.push_back(new double[n1]);
 	    
 	    for (int i = 0; i < n1; i++) {
 		scaling_matrix[tS][i] = penC ;
-		//omega_current[tS][i] = 0.0;
+		omega_current[tS][i] = 0.0; //omega will be initialised from the node.
+		omega_saved[tS][i] = 0.0; //omega will be initialised from the node.
 	    }
 	    subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
 	}
 }
 
 int PSCGModel::initialIteration(){
+if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	// This is part of the initialisation - initial Lagrangian subproblem computations
 	double LagrLB_Local = 0.0;
 	modelStatus_[SP_STATUS]=SP_ITER_LIM;
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
-    	    if(spSolverStatuses_[tS]==PSCG_OPTIMAL || spSolverStatuses_[tS]==PSCG_ITER_LIM){	
-		subproblemSolvers[tS]->updateSolnInfo();
-	    	subproblemSolvers[tS]->setXToVertex();
-	    	subproblemSolvers[tS]->setYToVertex();
+            if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
+	    	    LagrLB_Local = ALPS_DBL_MAX;
+cerr << "Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
+	    	    continue;
+
 	    }
-	    else{
-	    	    LagrLB = ALPS_DBL_MAX;	    
-		    //recordKeeping[0]=LagrLB;
-		    currentLagrLB = LagrLB;
-	    	    modelStatus_[SP_STATUS]=SP_INFEAS;
-	    	    return SP_INFEAS;
-	    }
+	    subproblemSolvers[tS]->updateSolnInfo();
+	    subproblemSolvers[tS]->setXToVertex();
+	    subproblemSolvers[tS]->setYToVertex();
+	    subproblemSolvers[tS]->updateOptSoln();
+	    recordKeeping[tS][0]=subproblemSolvers[tS]->getLagrBd();
+	    recordKeeping[tS][1]=recordKeeping[tS][0];
 
 	    //updateTimer.stop();
 	    //updateTimer.addTime(updateTimeThisStep);
-	    recordKeeping[tS][0]=subproblemSolvers[tS]->getLagrBd();
-	    recordKeeping[tS][1]=recordKeeping[tS][0];
-	    subproblemSolvers[tS]->updateOptSoln();
 	    LagrLB_Local += pr[tS]*( subproblemSolvers[tS]->getLagrBd() );//obj;
 
-	 if(useVertexHistory){
-	    if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
-	    else if (nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
+	    if(useVertexHistory){
+	      if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
+	      else if (nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
 		//subproblemSolvers[tS]->removeBackVertex();
 		subproblemSolvers[tS]->replaceOldestVertex();
 	        //subproblemSolvers[tS]->fixWeightToZero( subproblemSolvers[tS]->getNumVertices() - nVerticesUsed-1);
+	      }
 	    }
-	}
 #if 0
 	    if (useVertexHistory) {
 		subproblemSolvers[tS]->updateVertexHistory();
@@ -152,8 +154,6 @@ int PSCGModel::initialIteration(){
 #endif
 	}
 	
-	//Update of z
-	updateZ();
 //if(mpiRank==0){cout << "After z: " << endl;}
 //printZ();
 	//weightedAverage(x_current, pr, z_local, z_current, nNodeSPs, n1, mpiRank);
@@ -161,7 +161,10 @@ int PSCGModel::initialIteration(){
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
 			// Send decision variables to other processes.
+//if(mpiRank==0)cerr << "InitialIteration: before MPI_Allreduce "  << endl;
+//cerr << "#";
 		MPI_Allreduce(&LagrLB_Local, &LagrLB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+//if(mpiRank==0)cerr << "InitialIteration: after MPI_Allreduce "  << endl;
 
 			//commsTimer.stop();
 			//commsTimer.addTime(commsTimeThisStep);
@@ -173,7 +176,13 @@ int PSCGModel::initialIteration(){
 	
 	currentLagrLB = LagrLB;
 	//recordKeeping[0]=LagrLB;
-	if(currentLagrLB > ALPS_INFINITY) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
+	assert(ALPS_DBL_MAX > ALPS_INFINITY);
+	if(LagrLB > ALPS_INFINITY){ modelStatus_[SP_STATUS]=SP_INFEAS;} //for parallel
+	else{
+	    //Update of z
+	    modelStatus_[SP_STATUS]=SP_OPT;
+	    updateZ();
+	}
 #if 0
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 	    for (int i = 0; i < n1; i++) {
@@ -181,21 +190,19 @@ int PSCGModel::initialIteration(){
 	    }
 	}
 #endif
+if(mpiRank==0){cerr << "End initialIteration()" << endl;}
 	return modelStatus_[SP_STATUS];
 }
 bool PSCGModel::solveRecourseProblemGivenFixedZ(){	
 if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
-printOriginalVarBds();
-printCurrentVarBds();
+//printOriginalVarBds();
+//printCurrentVarBds();
 	double localObjVal=0.0;
 	//objVal = 0.0;
 	bool isFeas=true;
-//int numIntVars_;
-//int *intVar_;
 	memcpy(z_rounded,z_current,n1*sizeof(double));
 	for(int ii=0; ii<numIntVars_; ii++) {z_rounded[intVar_[ii]] = round(z_current[intVar_[ii]]);}
-printZ();
-printZRounded();
+//printZRounded();
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 
 		//****************** Compute Next Vertex **********************
@@ -203,68 +210,51 @@ printZRounded();
 		
 		//Solve Lagrangian MIP
 		subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_rounded, NULL, currentVarLB_, currentVarUB_, colType_);
+		//if(tS==0) subproblemSolvers[tS]->printLinCoeffs();
+		//if(tS==0) subproblemSolvers[tS]->printC();
+		//if(tS==0) subproblemSolvers[tS]->printLagrSoln();
 		//subproblemSolvers[tS]->updateSolnInfo();
-                if(!(subproblemSolvers[tS]->getSolverStatus()==PSCG_OPTIMAL || subproblemSolvers[tS]->getSolverStatus()==PSCG_ITER_LIM))
+                if(subproblemSolvers[tS]->getSolverStatus()==PSCG_PRIMAL_INF || subproblemSolvers[tS]->getSolverStatus()==PSCG_DUAL_INF)
 		{
 	    	    //LagrLB = ALPS_DBL_MAX;	    
 		    objVal = ALPS_DBL_MAX;
 		    if(mpiRank==0){cout << "Recourse problem given fixed z is infeasible due to subproblem " << tS << endl;}
-		    //if(mpiRank==0){subproblemSolvers[tS]->printXBounds();}
 		    if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << objVal << endl;}
 		    isFeas=false;
-		    return isFeas;
+		    localObjVal = ALPS_DBL_MAX;
+		    //return isFeas;
+		    break;
 		}
 		//updateTimer.addTime(updateTimeThisStep);
 
 		//Acumulate the values for the Lagrangian subproblems
+		//cout << "  " << subproblemSolvers[tS]->getLagrBd();
 		localObjVal += pr[tS]*subproblemSolvers[tS]->getLagrBd();//FWSPoptvalk;}
-//cout << " (" << pr[tS] << "," << subproblemSolvers[tS]->getLagrBd() << ")";
-#if 0
-	 	if(useVertexHistory){
-		    subproblemSolvers[tS]->updateVertexHistory();
-		    if (nVerticesUsed > 0 && subproblemSolvers[tS]->getNumVertices() > nVerticesUsed) {
-			subproblemSolvers[tS]->removeBackVertex();
-		        //subproblemSolvers[tS]->fixWeightToZero( subproblemSolvers[tS]->getNumVertices() - nVerticesUsed-1);
-		    }
-		}
-#endif
 	}
 //cout << "LagrLB_Local******************************: " << objVal << endl;
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
 
 		localReduceBuffer[0]=localObjVal;
-
+//if(mpiRank==0) cerr << "solveRecourseProblemGivenFixedZ(): before MPI_Allreduce()" << endl;
+//cerr << "#";
 		MPI_Allreduce(localReduceBuffer, reduceBuffer, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+//if(mpiRank==0) cerr << "solveRecourseProblemGivenFixedZ(): end MPI_Allreduce()" << endl;
 		if(mpiRank==0){cout << "Recourse problem given fixed z has value: " << reduceBuffer[0] << " versus current LB " << currentLagrLB << endl;}
 		objVal=reduceBuffer[0];
-		//LagrLB = reduceBuffer[0];
 	}
 	#endif
 
 	if (mpiSize == 1) {
-		//LagrLB = LagrLB_Local;
 		objVal=localObjVal;
 		if(mpiRank==0){cout << "Recourse problem given fixed z has value: " << objVal << " versus current LB " << currentLagrLB << endl;}
-		//ALVal = ALVal_Local;
-		//discrepNorm = localDiscrepNorm;
-		//cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
 	}
-#if 0
-        if(isFeas){
-	if(incumbentVal_ > LagrLB){ 
-	    incumbentVal_=LagrLB;
-	    memcpy( z_incumbent_, z_current, n1*sizeof(double) );
-        }
-	}
-#endif
-	//if(isFeas){evaluateFeasibleZ();}
 if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << objVal << endl;}
 	return isFeas;
 }
 
 int PSCGModel::performColGenStep(){	
-//if(mpiRank==0){cout << "Begin performColGenStep(): "  << endl;}
+//if(true){cerr << "Proc: " << mpiRank << " Begin performColGenStep(): "  << endl;}
 	LagrLB_Local = 0.0;
 	ALVal_Local = 0.0;
 	localDiscrepNorm = 0.0;
@@ -274,10 +264,9 @@ int PSCGModel::performColGenStep(){
 	double gapVal = 0.0, sqrDiscrNorm = 0.0;
 	
 	for (int tS = 0; tS < nNodeSPs; tS++) {
-
 		//****************** Compute Next Vertex **********************
-		// Find next vertex and Lagrangian lower bound
-		
+	// Find next vertex and Lagrangian lower bound
+//if(tS==0) subproblemSolvers[tS]->printC();
 		recordKeeping[tS][2]=subproblemSolvers[tS]->getALVal();
 		recordKeeping[tS][3]=subproblemSolvers[tS]->getSqrNormDiscr();
 		ALVal_Local += pr[tS]*subproblemSolvers[tS]->getALVal();
@@ -290,16 +279,16 @@ int PSCGModel::performColGenStep(){
 
 		//Solve Lagrangian MIP
 		spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
-    	        if(spSolverStatuses_[tS]==PSCG_OPTIMAL || spSolverStatuses_[tS]==PSCG_ITER_LIM){	
-		    subproblemSolvers[tS]->updateSolnInfo();
-		    //subproblemSolvers[tS]->compareLagrBds(omega_tilde[tS]);
-		    gapVal=subproblemSolvers[tS]->updateGapVal(omega_tilde[tS]);
+		if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
+	    	    //LagrLB = ALPS_DBL_MAX;	    
+	    	    LagrLB_Local = ALPS_DBL_MAX;
+	    	    ALVal_Local = ALPS_DBL_MAX;
+cerr << "Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
+	    	    break;
 		}
-		else{
-	    	    LagrLB = ALPS_DBL_MAX;	    
-	    	    modelStatus_[SP_STATUS]=SP_INFEAS;
-	    	    return SP_INFEAS;
-		}
+		subproblemSolvers[tS]->updateSolnInfo();
+		//subproblemSolvers[tS]->compareLagrBds(omega_tilde[tS]);
+		gapVal=subproblemSolvers[tS]->updateGapVal(omega_tilde[tS]);
 		//updateTimer.addTime(updateTimeThisStep);
 		scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm) ? 2.0:1.0;
 		//Acumulate the values for the Lagrangian subproblems
@@ -309,14 +298,15 @@ int PSCGModel::performColGenStep(){
 	 	if(useVertexHistory){
 		    if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
 		    else if(nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
-			//subproblemSolvers[tS]->removeBackVertex();
 			subproblemSolvers[tS]->replaceOldestVertex();
-		        //subproblemSolvers[tS]->fixWeightToZero( subproblemSolvers[tS]->getNumVertices() - nVerticesUsed-1);
 		    }
 		}
+//cerr << "Proc: " << mpiRank << ": Subproblem " << tS << " solve finished." << endl;
 	}
-	
 	#ifdef USING_MPI
+//if(mpiRank==0) cerr << "PerformColGenStep(): MPI before MPI_Barrier" << endl;;
+//cerr << "*";
+//MPI_Barrier(MPI_COMM_WORLD);
 	if (mpiSize > 1) {
 		//commsTimer.start();
 		// Send decision variables to other processes.
@@ -325,7 +315,11 @@ int PSCGModel::performColGenStep(){
 		localReduceBuffer[1]=ALVal_Local;
 		localReduceBuffer[2]=localDiscrepNorm;
 
+//if(mpiRank==0) cerr << "PerformColGenStep(): MPI before MPI_Allreduce" << endl;;
+//cerr << "#";
 		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		//MPI::Comm::Allreduce(localReduceBuffer, reduceBuffer, 3, MPI::DOUBLE, MPI::SUM);
+//if(mpiRank==0) cerr << "PerformColGenStep(): MPI after MPI_Allreduce" << endl;;
 
 		LagrLB = reduceBuffer[0];
 		ALVal = reduceBuffer[1];
@@ -351,28 +345,26 @@ int PSCGModel::performColGenStep(){
 	    if(recordKeeping[tS][1] >  1e-2 + recordKeeping[tS][2] + 0.5*recordKeeping[tS][3]){
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2]+0.5*recordKeeping[tS][3] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
+		cout << "Current solution value: " << subproblemSolvers[tS]->evaluateSolution(omega_current[tS]) << endl;;
 		subproblemSolvers[tS]->evaluateVertexHistory(omega_current[tS]);
+	        subproblemSolvers[tS]->printWeights();	
 	    }
 	    //assert(recordKeeping[tS][1] <=  1e-2 + recordKeeping[tS][2] + 0.5*recordKeeping[tS][3]);
 	}
-	updateModelStatusSP();
-//if(mpiRank==0){cout << "End performColGenStep(): "  << endl;}
+	//updateModelStatusSP();
+//if(mpiRank==0) cerr << endl;
+	if(LagrLB > ALPS_INFINITY) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
+	else{modelStatus_[SP_STATUS]=SP_OPT;}
+//if(mpiRank==0){cerr << "End performColGenStep(): "  << endl;}
 	return modelStatus_[SP_STATUS];
 }
-//******************FWPH functions**********************
 
-
-//NOT CORRECTLY IMPLEMENTED
-void computeFeasibleStartingPoint(int tS, double* x, double* yFeasible) {
-	SMIP_qu_secondStage question(tS, x);
-	SMIP_ans_secondStage answer(yFeasible);
-	//CPLEXsolverSCG subproblemSolvers;
-	//subproblemSolvers.solveForSecondStage(&question, &answer);
-}
 
 AlpsTreeNode* PSCGModel::createRoot(){
     PSCGTreeNode *root = new PSCGTreeNode;
     PSCGNodeDesc *desc = new PSCGNodeDesc(this);
+    desc->setZLBs(origVarLB_);
+    desc->setZUBs(origVarUB_);
     root->setDesc(desc);
     root->setExplicit(1);
     return root;
@@ -382,13 +374,14 @@ AlpsTreeNode* PSCGModel::createRoot(){
 
 
 void PSCGModel::displayParameters(){
+  if(mpiRank==0){
 	#ifdef USING_MPI
 	std::cout << "USINGMPI:TRUE" << endl;
 	#else
 	std::cout << "USINGMPI:FALSE" << endl;
 	#endif
 
-	std::cout << "ALGORITHM:FWPH" << std::endl;
+	std::cout << "ALGORITHM:PSCG with branch and bound" << std::endl;
 	std::cout << "Number of processors: " << mpiSize << std::endl;
 	std::cout << "Data file path: " << filepath << std::endl;
 	//std::cout << "Problem filename: " << str_filename << std::endl;
@@ -442,7 +435,7 @@ void PSCGModel::displayParameters(){
 	std::cout << "Scaling: " << scaling << std::endl;
 	std::cout << "Debug output: " << debug << std::endl;
 	std::cout << "Finding feasible point for first vertex: Yes" << std::endl;
-	std::cout << "Using Algorithm C variant: " << AlgorithmC << std::endl;
+	std::cout << "Using Algorithm variant to branch using z: " << AlgorithmZ << std::endl;
 
 	if (nVerticesUsed < 0) {
 		std::cout << "Number of vertexes used: 1"<< std::endl;
@@ -456,5 +449,6 @@ void PSCGModel::displayParameters(){
 
 	std::cout << std::endl << std::endl;
     	std::cout << std::endl << std::endl;
+  }//if mpiRank==0
 }
 

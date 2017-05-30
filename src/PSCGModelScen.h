@@ -62,6 +62,7 @@ double *c;
 double *d;
 
 double LagrBd;
+double objVal;
 double gapVal;
 
 double *x;
@@ -79,6 +80,7 @@ vector< vector<double> > yVertices;
 
 IloCplex cplexMP;
 IloModel mpModel;
+IloNum weight0;
 IloNumArray weightSoln;//(env, nVertices);
 IloNumArray weightObjective;
 vector<double> baseWeightObj;
@@ -99,7 +101,7 @@ public:
 PSCGModelScen():
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),x_vertex_opt(NULL),y_vertex_opt(NULL),oldestVertexIndex(-1),
-weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(0.0),
+weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
@@ -107,7 +109,7 @@ mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 PSCGModelScen(const PSCGModelScen &other):
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),
-weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(0.0),
+weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
@@ -138,13 +140,22 @@ void finishInitialisation();
 }
 
 virtual int solveLagrangianProblem(const double* omega)=0;
+virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal)=0;
 virtual int solveFeasibilityProblem()=0;
 int getSolverStatus(){return solverStatus_;}
+double* getC(){return c;}
+double* getD(){return d;}
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual void setSolverStatus()=0;
 virtual void upBranchOnVar(int varIndex, double bound)=0;
 virtual void downBranchOnVar(int varIndex, double bound)=0;
+virtual void setLBs(const double *lbs, int nLBs){
+cerr << "setLBs(): Default implementation does nothing." << endl;
+}
+virtual void setUBs(const double *ubs, int nUBs){
+cerr << "setLBs(): Default implementation does nothing." << endl;
+}
 void updateOptSoln(){
    if(x_vertex_opt==NULL) x_vertex_opt = new double[n1];
    if(y_vertex_opt==NULL) y_vertex_opt = new double[n2];
@@ -191,11 +202,26 @@ void evaluateVertexHistory(const double *omega){
     }
 //virtual void setColSolution(const double *colsol) = 0;
 }
+
+double getXVertexEntry(int entry, int vertex){
+  return xVertices[entry][vertex];
+}
+
 void compareLagrBds(const double* omega){
    cout << LagrBd << " ***versus*** " << evaluateVertexSolution(omega) << endl;
 }
 virtual void printColTypesFirstStage(){;}
 virtual void printColBds(){;}
+void printC(){
+cout << "Printing c: " << endl;
+ for(int ii=0; ii<n1; ii++){
+  cout << " " << c[ii];
+ }
+ cout << endl;
+}
+virtual void printLagrSoln(){
+return;
+}
 #if 1
 bool roundIfClose(double &toBeRounded){
     if(fabs(toBeRounded-floor(toBeRounded)) < 1e-6){ 
@@ -210,6 +236,24 @@ bool roundIfClose(double &toBeRounded){
 }
 #endif
 
+void printWeights(){
+  cout << "Printing weight solutions in continuous MP: " << endl;
+try{
+  cout << weight0 << " ";
+  for(int ii=0; ii<nVertices; ii++){
+    cout << "  " << weightSoln[ii];
+  }
+  cout << endl;
+}
+catch(IloException& e){
+  cout << "printWeights() error: " << e.getMessage() << endl;
+  //cout << "Exception caught...Refreshing solution..." << endl;
+  //refresh();
+  e.end();
+}
+
+}
+
 //x,y,x_vertex, and y_vertex should all be set to something meaningful
 double updateGapVal(const double *omega){
   gapVal=0.0;
@@ -221,6 +265,7 @@ double updateGapVal(const double *omega){
 
 double getGapVal(){return gapVal;}
 
+#if 0
 double computeXDispersion(const double *z){
     double disp = 0.0;
     for(int ii=0; ii<n1; ii++){
@@ -228,6 +273,7 @@ double computeXDispersion(const double *z){
     }
     return disp;
 }
+#endif
 
 void addVertex(){
     if(nVertices==maxNVertices){
@@ -319,15 +365,22 @@ void zeroOutVertexAtIndex(int iii){
 	//weightSoln.add(0.0);
 	//weightObjective[iii]=0.0//.add(0.0);
 	mpWeightVariables[iii].setBounds(0.0,0.0);
+        weightSoln[iii]=0.0;//(env, nVertices);
 }
 
 void clearVertexHistory(){
   for(int v=0; v<maxNVertices; v++) zeroOutVertexAtIndex(v);
+  oldestVertexIndex=-1;
   nVertices=0;
+}
+
+virtual void printLinCoeffs(){
+return;
 }
 
 void printVertices(){
   assert(nVertices>0);
+cout << "Printing Vertices: " << endl;
   for(int ii=0; ii<n1; ii++){
       for(int vv=0; vv<nVertices; vv++){
 	cout << " " << xVertices[ii][vv];
@@ -383,7 +436,7 @@ void clearVertexHistory(){
 		weightObjective.remove(0);
 }
 #endif
-virtual bool updateSolnInfo()=0;
+virtual void updateSolnInfo()=0;
 
 virtual void fixVarAt(int index, double fixVal){
     cout << "fixVarAt() is doing nothing..." << endl;
@@ -436,7 +489,7 @@ void setQuadraticTerm(const double *scaling_vector) {
 }
 
 void updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector); 
-void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z);
+void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector);
 
 //void getLagrangianGradient(SMIP_qu_getLagrangianGradient* question, SMIP_ans_getLagrangianGradient* answer);
 
@@ -460,8 +513,65 @@ void refresh(){
     memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
     memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
     addVertex();
+    
     setXToOptVertex();
     setYToOptVertex();
+    weightSoln[0]=1.0;//(env, nVertices);
+    for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
+}
+void refresh(const double *omega, const double *z, const double *scaling_vector){
+    clearVertexHistory();
+    memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
+    memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
+    addVertex();
+    
+    //setXToOptVertex();
+    //setYToOptVertex();
+    updatePrimalVariables_OneScenario(omega, z, scaling_vector);
+
+    //weightSoln[0]=1.0;//(env, nVertices);
+    //for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
+}
+
+virtual void polishSolution(){
+cerr << "polishSolution(): Doing nothing." << endl;
+}
+
+void polishWeights(){
+//assert(weight0 >=0 && weight0 <=1);
+	double weightSum=0.0;
+	if(weight0 >=0 && weight0 <=1){
+    	    weightSum += weight0;
+	}
+	else if(weight0 > 1.0){
+//cout << "Flagging: weight0 = " << weight0 << endl;
+    	    weight0=1.0;
+    	    weightSum += weight0;
+	}
+	else{
+//cout << "Flagging: weight0 = " << weight0 << endl;
+	    weight0=0.0;
+	}
+
+	for(int wI=0; wI<nVertices; wI++) {
+	    if(weightSoln[wI] >=0 && weightSoln[wI] <=1){
+    	        weightSum += weightSoln[wI];
+	    }
+	    else if(weightSoln[wI] > 1.0){
+//cout << "Flagging: weight[" << wI << "] = " << weightSoln[wI] << endl;
+    	        weightSoln[wI]=1.0;
+    	        weightSum += weightSoln[wI];
+	    }
+	    else{
+//cout << "Flagging: weight[" << wI << "] = " << weightSoln[wI] << endl;
+		weightSoln[wI]=0.0;
+	    }
+	}
+	assert(weightSum > 0);
+	weight0 /= weightSum;
+	for(int wI=0; wI<nVertices; wI++) {
+	    weightSoln[wI] /=weightSum;
+	}
 }
 
 double getLagrBd(){return LagrBd;}
@@ -507,7 +617,28 @@ virtual void fixVarAt(int index, double fixVal){
 }
 
 virtual int solveLagrangianProblem(const double* omega);
+virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
 virtual int solveFeasibilityProblem();
+virtual void polishSolution(){
+  for(int ii=0; ii<n1; ii++){
+      if(LagrMIPInterface_->getColLower()[ii] > x_vertex[ii]){
+	x_vertex[ii] = LagrMIPInterface_->getColLower()[ii];
+      }
+      if(LagrMIPInterface_->getColUpper()[ii] < x_vertex[ii]){
+	x_vertex[ii] = LagrMIPInterface_->getColUpper()[ii];
+      }
+      if(x_vertex[ii]==-0) x_vertex[ii]=0.0;
+  }
+  for(int ii=0; ii<n2; ii++){
+      if(LagrMIPInterface_->getColLower()[n1+ii] > y_vertex[ii]){
+	y_vertex[ii] = LagrMIPInterface_->getColLower()[n1+ii];
+      }
+      if(LagrMIPInterface_->getColUpper()[n1+ii] < y_vertex[ii]){
+	y_vertex[ii] = LagrMIPInterface_->getColUpper()[n1+ii];
+      }
+      if(y_vertex[ii]==-0) y_vertex[ii]=0.0;
+  }
+}
 virtual void setSolverStatus(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
 
@@ -576,9 +707,19 @@ virtual void upBranchOnVar(int varIndex, double bound){
 	//cout << "Col bds at: " << varIndex << " are " << LagrMIPInterface_->getColLower() << " and " << LagrMIPInterface_->getColUpper() << endl;
     }
 }
+virtual void setLBs(const double *lbs, int nLBs){
+    for(int ii=0; ii<nLBs; ii++){
+	LagrMIPInterface_->setColLower(ii,lbs[ii]);
+    }
+}
 virtual void downBranchOnVar(int varIndex, double bound){
     if(varIndex >= 0 && varIndex < n1+n2){
 	LagrMIPInterface_->setColUpper(varIndex,bound);
+    }
+}
+virtual void setUBs(const double *ubs, int nUBs){
+    for(int ii=0; ii<nUBs; ii++){
+	LagrMIPInterface_->setColUpper(ii,ubs[ii]);
     }
 }
 
@@ -611,6 +752,59 @@ cout << "Printing subproblem bounds: " << endl;
   }
   cout << endl;
 }
+virtual void printLinCoeffs(){
+cout << "Printing linear coefficients: " << endl;
+  for(int ii=0; ii<n1+n2; ii++){
+    cout << " " << LagrMIPInterface_->getObjCoefficients()[ii];
+  }
+  cout << endl;
+}
+virtual void printLagrSoln(){
+cout << "Printing col solns: " << endl;
+  const double* solution = LagrMIPInterface_->getColSolution();
+  for(int ii=0; ii<n1+n2; ii++){
+    cout << " " << solution[ii];
+  }
+  cout << endl;
+}
+double computeMIPVal(const double *omega){
+  const double* solution = LagrMIPInterface_->getColSolution();
+  const double* coeff = LagrMIPInterface_->getObjCoefficients();
+  double retVal=0.0;
+ if(omega==NULL){
+  for(int ii=0; ii<n1+n2; ii++){
+    retVal +=solution[ii]*coeff[ii];
+  }
+ }
+ else{
+  for(int ii=0; ii<n1; ii++){
+    retVal +=solution[ii]*(coeff[ii]+omega[ii]);
+  }
+  for(int ii=n1; ii<n2; ii++){
+    retVal +=solution[ii]*coeff[ii];
+  }
+ }
+  return retVal;
+}
+
+int changeFromMIQPToMILP(){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+        if(CPXgetprobtype(osi->getEnvironmentPtr(),osi->getLpPtr()) == CPXPROB_MIQP){
+	    return CPXchgprobtype(osi->getEnvironmentPtr(), osi->getLpPtr(), CPXPROB_MILP);
+	}
+	else{return 0;}
+
+}
+int changeFromMILPToMIQP(){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+        if(CPXgetprobtype(osi->getEnvironmentPtr(),osi->getLpPtr()) == CPXPROB_MILP){
+	    return CPXchgprobtype(osi->getEnvironmentPtr(), osi->getLpPtr(), CPXPROB_MIQP);
+	}
+	else{
+	    return 0;
+	}
+}
+
 
 virtual void printColTypesFirstStage(){
     for(int i=0; i<n1; i++){
@@ -726,18 +920,19 @@ virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *
    return solverStatus_;
 }
 
-virtual bool updateSolnInfo(){
+virtual void updateSolnInfo(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
 	if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
 		if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver iteration limit reached." << endl;
 		const double* solution = osi->getColSolution();
-		LagrBd = osi->getObjValue()*osi->getObjSense();
+		//LagrBd = osi->getObjValue()*osi->getObjSense();
 		memcpy(x_vertex,solution,n1*sizeof(double));
 		memcpy(y_vertex,solution+n1,n2*sizeof(double));
 		//for(int ii=0; ii<n1; ii++){ roundIfClose(x_vertex[ii]);}
 		//for(int ii=0; ii<n2; ii++){ roundIfClose(y_vertex[ii]);}
-		for(int ii=0; ii<n1; ii++){ (x_vertex[ii]);}
-		for(int ii=0; ii<n2; ii++){ (y_vertex[ii]);}
+		//for(int ii=0; ii<n1; ii++){ (x_vertex[ii]);}
+		//for(int ii=0; ii<n2; ii++){ (y_vertex[ii]);}
+		polishSolution();
 	}
 	else{
 		cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
@@ -761,6 +956,7 @@ cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env
 
 void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
 virtual int solveLagrangianProblem(const double* omega);
+virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
     solverStatus_ = PSCG_OPTIMAL;
@@ -769,11 +965,13 @@ virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, c
    fixXToZ(z,colTypes);
    int solveStatus = solveLagrangianProblem(omega);
    unfixX(origLBs, origUBs); 
+   return solveStatus;
 }
 virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
    fixXToZ(z,colTypes);
    int solveStatus = solveFeasibilityProblem();
    unfixX(origLBs, origUBs); 
+   return solveStatus;
 }
 #if 0
 virtual void fixXToZ(const double *z){
@@ -821,7 +1019,7 @@ virtual void downBranchOnVar(int varIndex, double bound){
     }
 }
 
-virtual bool updateSolnInfo(){
+virtual void updateSolnInfo(){
     assert(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM);	
     if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
 	if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated iteration limit reached." << endl;

@@ -121,7 +121,7 @@ int PSCGModelScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int
 	if (nThreads >= 0) { LagrMIPInterface_->setIntParam(OsiParallelThreads, nThreads); }
 	if (disableHeuristic) { LagrMIPInterface_->setIntParam(OsiHeurFreq, -1); }
 	LagrMIPInterface_->setDblParam(OsiDualTolerance, 1e-8);
-	setGapTolerances(1e-8,1e-8);
+	setGapTolerances(1e-9,1e-9);
 	LagrMIPInterface_->setHintParam(OsiDoPresolveInInitial,true);
 	LagrMIPInterface_->setHintParam(OsiDoScale,true);
 	LagrMIPInterface_->setHintParam(OsiDoCrash,true);
@@ -160,6 +160,7 @@ void PSCGModelScen::finishInitialisation() {
 	    mpVertexConstraints.add(IloRange(env, 0.0, 0.0));
  	    mpAuxVariables.add(IloNumVar(mpVertexConstraints[i](-1.0)));
 	    mpAuxVariables[i].setLB(-1.0*IloInfinity);
+	    mpAuxVariables[i].setUB(IloInfinity);
 	}
 	mpModel.add(mpVertexConstraints);
 
@@ -198,6 +199,10 @@ int PSCGModelScen_Bodur::solveLagrangianProblem(const double *omega) {
 	return 0;
 }
 #endif
+int PSCGModelScen_Bodur::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
+//TODO
+    return solveLagrangianProblem(omega);
+}
 int PSCGModelScen_Bodur::solveFeasibilityProblem(){
 	
 	for (int i = 0; i < n1; i++) {
@@ -230,6 +235,8 @@ int PSCGModelScen_Bodur::solveFeasibilityProblem(){
 int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
+        changeFromMIQPToMILP(); //This only does anything if the problem has not already been changed back
+	//changeToMILP();
 	if(omega!=NULL){
 	  for (int i = 0; i < n1; i++) {
 		osi->setObjCoeff(i, c[i] + omega[i]);
@@ -240,6 +247,7 @@ int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
 		osi->setObjCoeff(i, c[i]);
 	  }
 	}
+#if 0
 	double startLagrBd = COIN_DBL_MAX;
 	double *startSol=new double[n1+n2];
 	if(nVertices>0){
@@ -249,8 +257,8 @@ int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
 	    osi->setColSolution(startSol);
 	    startLagrBd = evaluateVertexSolution(omega);
 	}
+#endif
 	osi->branchAndBound();
-	LagrBd = osi->getObjValue();//*osi->getObjSense();
 #if 0
 if(omega==NULL){ 
  cout << "LagrBd " << LagrBd << endl;
@@ -261,29 +269,90 @@ if(omega==NULL){
  cout << endl;
 }
 #endif
-	
+	//printLagrSoln();
 	setSolverStatus();
         //if(tS==0) printXBounds();
         //if(tS==0) printYBounds();
         if(solverStatus_==PSCG_PRIMAL_INF){ 
-	    LagrBd =  COIN_DBL_MAX;
+	    LagrBd =  COIN_DBL_MAX*osi->getObjSense();
 	    //osi->unmarkHotStart();
 	}
 	else{
 	    //osi->markHotStart();
+	    //LagrBd = computeMIPVal(omega);
+	    LagrBd = osi->getObjValue()*osi->getObjSense();
 	}
+#if 0
 	if(nVertices>0 && solverStatus_!=PSCG_PRIMAL_INF){
 	  if(startLagrBd + 1e-5 < LagrBd && omega!=NULL){
 	    cout << "Flagging " << LagrBd - startLagrBd << endl;
 	    //assert(startLagrBd >= LagrBd);
-	    osi->setColSolution(startSol);
-	    LagrBd = startLagrBd;
+	    //osi->setColSolution(startSol);
+	    //LagrBd = startLagrBd;
 	  }
 	}
+#endif
 	
-	delete [] startSol;
+	//delete [] startSol;
 	
 	return solverStatus_;
+}
+int PSCGModelScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
+	OsiCpxSolverInterface* osi = LagrMIPInterface_;
+        changeFromMILPToMIQP(); //This only does anything if the problem has not already been changed back
+	double *diag = new double[n1+n2];
+	if(omega!=NULL){
+	  for (int i = 0; i < n1; i++) {
+		osi->setObjCoeff(i, c[i] + omega[i] - z[i]*scal[i]);
+		diag[i]=scal[i];
+	  }
+	}
+	else{
+	  for (int i = 0; i < n1; i++) {
+		osi->setObjCoeff(i, c[i] - z[i]*scal[i]);
+		diag[i]=scal[i];
+	  }
+	}
+	for (int j=0; j<n2; j++){
+	    diag[n1+j]=0.0;
+	}
+	
+	osi->setSeparableQuadraticObjectiveCoefficients(diag);
+#if 1
+    	osi->setIntParam(OsiSolutionTarget, 1);
+     
+    	osi->setIntParam(OsiParallelMode,1);
+        osi->setIntParam(OsiOutputControl,0);
+     	osi->setIntParam(OsiMIPOutputControl,0);
+    	osi->setDblParam(OsiDualTolerance, 1e-3);
+     
+    	osi->setHintParam(OsiDoPresolveInInitial,true);
+    	osi->setHintParam(OsiDoScale,true);
+    	osi->setHintParam(OsiDoCrash,true);
+    	osi->setHintParam(OsiDoReducePrint,true);
+    	osi->setHintParam(OsiLastHintParam, true);
+#endif
+	osi->branchAndBound();
+	setSolverStatus();
+        if(solverStatus_==PSCG_PRIMAL_INF){ 
+	    objVal =  COIN_DBL_MAX;
+	    //osi->unmarkHotStart();
+	}
+	else{
+	    memcpy(x_vertex,osi->getColSolution(),n1*sizeof(double));
+	    memcpy(y_vertex,osi->getColSolution()+n1,n2*sizeof(double));
+	    objVal = osi->getObjValue();
+	    for(int ii=0; ii<n1; ii++){
+		objVal += 0.5*scal[ii]*z[ii]*z[ii];
+	    }
+	}
+	for (int i = 0; i < n1; i++) {
+	  osi->setObjCoeff(i, c[i]);
+	  diag[i]=0.0;
+	}
+	osi->setSeparableQuadraticObjectiveCoefficients(diag);
+	osi->setSolvingMIQP(false);
+   	delete [] diag; 
 }
 
 int PSCGModelScen_SMPS::solveFeasibilityProblem(){
@@ -372,7 +441,7 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 	}
 }
 
-void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z) {
+void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector) {
    try{
 	IloNum weightObj0(0.0);
 	for (int wI = 0; wI < nVertices; wI++) {
@@ -421,17 +490,19 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 		//cplexMP.refineConflict();
 		//cout << cplexMP.getConflict() << endl;
 		cout << "Refreshing solution..." << endl;
-		refresh();
+		refresh(omega,z,scaling_vector);
 		//throw(-1);
 	}
 	if(cplexMP.getCplexStatus()!=IloCplex::Optimal) {
 		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
-		printVertices();
+		//printVertices();
+		//printWeights();
 	}
 
 	cplexMP.getValues(weightSoln, mpWeightVariables);
-	double weight0 = cplexMP.getValue(mpWeight0);
+	weight0 = cplexMP.getValue(mpWeight0);
 	
+	polishWeights(); //fix any unfortunate numerical quirks
 
 	// note: the final weight corresponds to the existing x
 	for (int i = 0; i < n1; i++) {
@@ -455,6 +526,7 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 			y[j] += weightSoln[wI] * yVertices[j][wI];
 		}
 	}
+	
    }
    catch(IloException& e){
 	//cout << "MPSolve error: " << e.getMessage() << endl;

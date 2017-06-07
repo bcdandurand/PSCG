@@ -1,0 +1,564 @@
+%%%%%%%%%%%%%%%%%%%%%%% file template.tex %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% This is a general template file for the LaTeX package SVJour3
+% for Springer journals.          Springer Heidelberg 2010/09/16
+%
+% Copy it to a new file with a new name and use it as the basis
+% for your article. Delete % signs as needed.
+%
+% This template includes a few options for different layouts and
+% content for various journals. Please consult a previous issue of
+% your journal as needed.
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% First comes an example EPS file -- just ignore it and
+% proceed on the \documentclass line
+% your LaTeX will extract the file if required
+\begin{filecontents*}{example.eps}
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 19 19 221 221
+%%CreationDate: Mon Sep 29 1997
+%%Creator: programmed by hand (JK)
+%%EndComments
+gsave
+newpath
+  20 20 moveto
+  20 220 lineto
+  220 220 lineto
+  220 20 lineto
+closepath
+2 setlinewidth
+gsave
+  .4 setgray fill
+grestore
+stroke
+grestore
+\end{filecontents*}
+%
+\RequirePackage{fix-cm}
+%
+%\documentclass{svjour3}                     % onecolumn (standard format)
+%\documentclass[smallcondensed]{svjour3}     % onecolumn (ditto)
+\documentclass[smallextended]{svjour3}       % onecolumn (second format)
+%\documentclass[twocolumn]{svjour3}          % twocolumn
+%
+\smartqed  % flush right qed marks, e.g. at end of proof
+%
+%\usepackage{graphicx}
+
+\usepackage{amssymb,graphicx,amscd,setspace,verbatim,amsmath,color,algpseudocode,algorithm,mathabx,float}
+%\newtheorem{theorem}{Theorem}
+%\newtheorem{conjecture}{Conjecture}
+%\newtheorem{lemma}{Lemma}
+%\newtheorem{remark}{Remark}
+%\newtheorem{proposition}{Proposition}
+%\newtheorem{corollary}{Corollary}
+%\newtheorem{definition}{Definition}
+
+\newcommand{\braces}[1]{\left\{ #1 \right \}}
+\newcommand{\brackets}[1]{\left[ #1 \right]}
+\newcommand{\reals}{\mathbb{R}}
+\newcommand{\integers}{\mathbb{Z}}
+\newcommand{\dvar}{\mu}
+\newcommand{\penC}{\sigma}
+\newcommand{\norm}[1]{\left \| #1 \right \|}
+\newcommand{\conv}{\operatorname{conv}}
+\newcommand{\cone}{\text{cone}}
+\newcommand{\linear}{\text{line}}
+\newcommand{\eNum}{\text{e}}
+\newcommand{\Var}{\text{Var}}
+\newcommand{\Ind}{\text{Ind}}
+
+\newcommand{\colorA}[1]{\textcolor{red}{#1}}
+\newcommand{\colorB}[1]{\textcolor{blue}{#1}}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\blue}[1]{\textcolor{blue}{#1}}
+
+\newcommand{\scenI}{s}
+\newcommand{\nS}{s}
+\newcommand{\scenSet}{\Omega}
+\newcommand{\slack}{\gamma}
+\newcommand{\x}{x}
+\newcommand{\y}{y}
+\newcommand{\X}{X}
+\newcommand{\Y}{Y}
+\newcommand{\dualFnc}{q}
+\newcommand{\iLoopInd}{t}
+
+\newcommand{\h}{h}
+\newcommand{\ttt}{t}
+\newcommand{\TT}{\mathcal{T}}
+\newcommand{\s}{s}
+\newcommand{\SC}{S}
+\newcommand{\SSS}{\mathcal{S}}
+
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
+
+%\newcommand{\TheTitle}{A parallelizable augmented Lagrangian method applied to computing Lagrangian bounds of large-scale non-convex-constrained optimization problems} 
+\newcommand{\TheTitle}{...}%A parallelizable augmented Lagrangian method applied to large-scale non-convex-constrained optimization problems} 
+\newcommand{\TheAuthors}{...}%Brian Dandurand, Natashia Boland, Jeffrey Christiansen, Andrew Eberhard, Fabricio Oliveira}
+
+%
+% \usepackage{mathptmx}      % use Times fonts if available on your TeX system
+%
+% insert here the call for the packages your document requires
+%\usepackage{latexsym}
+% etc.
+%
+% please place your own definitions here and don't use \def but
+% \newcommand{}{}
+%
+% Insert the name of "your journal" with
+% \journalname{myjournal}
+%
+\begin{document}
+
+%\title{{\TheTitle}\thanks{This work was supported by the Australian Research Council (ARC) grant ARC DP140100985.}}
+\title{{\TheTitle}\thanks{}}
+%\title{Insert your title here%\thanks{Grants or other notes
+%%about the article that should go on the front page should be
+%%placed here. General acknowledgments should be placed at the end of the article.}
+%}
+%\subtitle{Do you have a subtitle?\\ If so, write it here}
+
+\titlerunning{A parallelizable augmented Lagrangian method...}        % if too long for running head
+
+%\author{First Author         \and
+%        Second Author %etc.
+%}
+
+
+\author{  ...
+% Natashia Boland
+%    \and
+%  Jeffrey Christiansen
+%  \and
+%  Brian Dandurand
+%  \and
+%  Andrew Eberhard
+%  \and
+%  Fabricio Oliveira
+}
+    
+
+
+%\authorrunning{Short form of author list} % if too long for running head
+
+\institute{
+%             \emph{Present address:} of F. Author  %  if needed
+%N. Boland \at Georgia Institute of Technology, Atlanta, , USA 
+%\and
+%J. Christiansen \at RMIT University, Melbourne, Victoria, Australia 
+%\and
+%B. Dandurand \at RMIT University, Melbourne, Victoria, Australia 
+%\and
+%A. Eberhard \at RMIT University, Melbourne, Victoria, Australia \\
+%              Tel.: +61-3-9925-2616\\
+%              Fax: +61-3-9925-1748\\
+%              \email{andy.eberhard@rmit.edu.au}           %  \\
+%\and
+%F. Oliveira \at RMIT University, Melbourne, Victoria, Australia 
+}
+
+%\institute{F. Author \at
+%              first address \\
+%              Tel.: +123-45-678910\\
+%              Fax: +123-45-678910\\
+%              \email{fauthor@example.com}           %  \\
+%%             \emph{Present address:} of F. Author  %  if needed
+%           \and
+%           S. Author \at
+%              second address
+%}
+
+\date{Received: date / Accepted: date}
+% The correct dates will be entered by the editor
+
+
+\maketitle
+
+\begin{abstract}
+%We contribute improvements to a Lagrangian dual solution approach applied to large-scale optimization problems whose objective functions are convex,  continuously differentiable and possibly nonlinear, while the non-relaxed constraint set is compact but not necessarily convex. Such problems arise, for example, in the split-variable deterministic reformulation of stochastic mixed-integer optimization problems. The dual solution approach needs to address the nonconvexity of the non-relaxed constraint set while being efficiently implementable in parallel.
+%We adapt the augmented Lagrangian method framework to address the presence of nonconvexity in the non-relaxed constraint set and the need for efficient parallelization. The development of our approach is most naturally compared with the development of proximal bundle methods and especially with their use of serious step conditions. However, deviations from these developments allow for an improvement in efficiency with which parallelization can be utilized. 
+%Pivotal in our modification to the augmented Lagrangian method is the use of an integration of approaches based on the simplicial decomposition method (SDM) and the nonlinear block Gauss-Seidel (GS) method. 
+%An adaptation of a serious step condition associated with proximal bundle methods allows for the approximation tolerance to be automatically adjusted. 
+%Under mild conditions  optimal dual convergence is proven, and we report computational results on test instances from the stochastic optimization literature.
+%We demonstrate improvement in parallel speedup over a baseline parallel approach.
+
+%\keywords{First keyword \and Second keyword \and More}
+\keywords{augmented Lagrangian method \and proximal bundle method \and nonlinear block Gauss-Seidel method \and simplicial decomposition method \and parallel computing}
+%proximal simplicial decomposition method, dual decomposition, mixed-integer optimization, large scale optimization
+% \PACS{PACS code1 \and PACS code2 \and more}
+% \subclass{MSC code1 \and MSC code2 \and more}
+\subclass{90-08, 90C06, 90C11, 90C15, 90C25, 90C26, 90C30, 90C46}
+%90-08, Computational methods 
+%90C06, Large-scale problems
+%90C11, Mixed-integer programming
+%90C15, Stochastic programming
+%90C25, Convex programming
+%90C26, Nonconvex programming
+%90C30, Nonlinear programming
+%90C46 Optimality conditions, duality
+\end{abstract}
+
+
+
+
+\section{Introduction and Background}
+%Motivated by applications in stochastic mixed-integer optimization, 
+%which 1) benefits from the regularization of proximal point methods; and 2) is efficiently parallelizable in the sense of maximizing the computational work that can be parallelized, the memory usage that can be distributed, and minimizing the amount of parallel communication. %This sense of efficiency in parallelization is correlated with scalability, where increased parallel efficiency leads to improved benefit of using more processors.  
+%Within the setting of proximal point methods, the nonconvexity of the constraint set brings up the issue of practical implementability, and the proximal term is the main source of impediment in the efficient parallelization.
+%%while the issue of efficient parallelization is addressed by the integration of a nonlinear block Gauss-Seidel approach with the proximal point methodology while maintaining practical implementability. %We then specialize this approach to an application in stochastic mixed-integer programming for computing Lagrangian dual bounds efficiently and in parallel.
+The problem of interest has the form
+\begin{equation}\label{P1}
+f^*:=\min_{x,z} \braces{f(x) : Qx=z, x \in X, z \in Z},
+\end{equation}
+where $f$ is convex and continuously differentiable, $Q \in \mathbb{R}^{q \times n}$ is a block-diagonal matrix determining linear constraints $Qx=z$, $X\subset \mathbb{R}^n$ is a closed and bounded set, and $Z\subset \mathbb{R}^q$ is a linear subspace. The vector $x \in X$ of decision variables  is derived from the original decisions associated with a problem, while the vector $z \in Z$ of auxiliary variables are introduced to effect a decomposable structure in~\eqref{P1}. The block diagonal components of $Q$ are denoted $Q_i \in \mathbb{R}^{q_i \times n_i}$, $i=1,\dots,m$.
+%Once the constraint $Qx=z$ is relaxed, the decomposable structure of~\eqref{P1} becomes evident due to the following structural assumptions:
+%\begin{enumerate}
+%\item $X=X_1 \times \cdots \times X_m \subset \mathbb{R}^{n_1} \times \cdots \times \mathbb{R}^{n_m}$ with $\sum_{i=1}^m n_i = n$, so that we may write $x=(x_1,\dots,x_m)$,
+%\item $Q$ is a block diagonal matrix with block diagonal components $Q_i \in \mathbb{R}^{q_i \times n_i}$,
+%\item $f(x)=\sum_{i=1}^m f_i(x_i)$ where $f_i : \mathbb{R}^{n_i} \mapsto \mathbb{R}$ are convex and continuously differentiable for $i=1,\dots,m$.
+%\end{enumerate} 
+Problem~\eqref{P1} is general enough to subsume, for example, the split-variable deterministic reformulation of a stochastic optimization problem with potentially multiple stages, as defined, for example, in~\cite{BirgeLouveaux2011}, while it can also model the case where $f$ is nonlinear (and convex) and/or $X$ is any compact (but not necessarily convex) set.
+
+We develop a branch-and-bound approach to solving~\eqref{P1} based on solving Lagrangian relaxations due to relaxing $Qx=z$.
+At each node, we use the recently developed algorithm SDM-GS-ALM to solve two equivalent characterizations of the Lagrangian dual problem.
+The Lagrangian dual function is defined 
+$$\phi(\omega) := \min_{x,z} \braces{f(x) + \omega^\top (Qx-z) : x \in X, z \in Z}.$$ 
+Under the dual feasibility condition $\omega \in Z^\perp$, we have 
+$$\phi(\omega) = \min_x \braces{f(x) + \omega^\top Qx : x \in X}.$$ 
+When $f$ is not linear, we also need to refer to the convexified Lagrangian dual funciton  
+$\phi^C(\omega) := \min_{x,z} \braces{f(x) + \omega^\top (Qx-z) : x \in \conv(X), z \in Z},$ 
+for which analogously,
+we have 
+\begin{equation}\label{PhiC}
+\phi^C(\omega) = \min_x \braces{f(x) + \omega^\top Qx : x \in \conv(X)}
+\end{equation} 
+when $\omega \in Z^\perp$. Optimal solutions to problem~\eqref{PhiC} will be referred to generically as $\widehat{x}(\omega)$. 
+\begin{remark}
+Under the assumption that $\conv(X)$ is not known beforehand by any characterization, direct evaluation of $\phi^C$ or any of its subgradients at any $\omega \in Z^\perp$ is not possible. 
+This dual function is only treated indirectly in the following algorithms.
+%Nevertheless, the necessity of referring to  $\phi^C$  will become clear later in this section. %Also, problem~\eqref{P1ConvB} is the primal characterization to~\eqref{P2C}.
+\end{remark}
+
+
+
+The (conviexified) Lagrangian dual problem is:
+\begin{equation}\label{D1}
+\phi_C^*:=\max_{\omega \in \Omega} \phi^C(\omega).
+\end{equation}
+Its well-known primal characterization is
+\begin{equation}\label{D2}
+\phi_C^*=\min_{x,z} \braces{f(x) : Qx=z, x \in \conv(X), z \in Z},
+\end{equation}
+
+It is straightforward from the definitions that $\phi^C(\omega) \le \phi(\omega)$ for all dual feasible $\omega \in Z^\perp$. 
+In the case when $f$ is linear, we have $\phi^C(\omega) = \phi(\omega)$ for all $\omega \in Z^\perp$ and so $\phi^*=\phi_C^*$.
+%and the primal characterizations~\eqref{P1Conv} and~\eqref{P1ConvB} of the respective dual problems are equivalent.
+But in the general case where $f$ is nonlinear, the dual~\eqref{P2C} can be ``weaker'' than~\eqref{P2}, where $\phi_C^* < \phi^*$ can occur,
+which we see in the following example.
+%, andthe primal characterizations ~\eqref{P1Conv} and~\eqref{P1ConvB} of the respective dual problems are not equivalent. 
+Let $f : \mathbb{R}^2 \mapsto \mathbb{R}$ be defined by $f(x)=(x_1-0.5)^2+(x_2-0.5)^2$, $X=\braces{0,1} \times \braces{0,1}$, and let $Qx=z$ be defined to model the constraints $x_1 -z_1 = 0$ and $x_2 - z_2 = 0$ where $Z = \braces{(z_1,z_2) : z_1=z_2} \subset \mathbb{R}^2$. We see trivially that $\phi_C^* = 0$, which is verified with the saddle point $x_1^*=x_2^*=z_1^*=z_2^*=0.5$ and $\omega^*=(0,0)$. However,
+$\phi^* = 0.5$, which is verified with either of the saddle points $x_1^*=x_2^*=z_1^*=z_2^*=0$ and $\omega^*=(0,0)$, or $x_1^*=x_2^*=z_1^*=z_2^*=1$ and $\omega^*=(0,0)$. Thus,  $\phi_C^* < \phi^*$.
+
+Dual optimal solutions to~\eqref{D1}, when they exist, are generically denoted by $\omega^*$, and corresponding optimal primal solution verifying the value $\phi_C(\omega^*)$ is denoted by $\widehat{x}(\omega^*)$. The optimal solutions to the second characterization~\eqref{D2}, when they exist, are denoted $(x^*,z^*)$. We shall denote the set 
+$$X_Z := \braces{ x \in X : \exists \; z \in Z \; \text{s.t.} \; Qx=z}.$$ 
+It is straightforward to show that $\conv(X_Z) = \braces{x \in \conv(X)  : \exists \; z \in Z \; \text{s.t.} \; Qx=z}$ under the assumption that $Z$ is convex.
+
+We shall use both characterizations~\eqref{D1} and~\eqref{D2} to inform different ways of branching on variables and branching values. 
+\begin{enumerate}
+\item Viewing the node subproblems as instances of problem~\eqref{D2}, we have optimal solutions $(x^*,z^*)$ to problem~\eqref{D2} that satisfy 
+$$(x^*,z^*) \in \braces{(x,z) : x \in \conv(X), z \in Z, Qx=z},$$ 
+but $x^* \not\in X$ in the case of strict duality gap $\phi_C^* < f^*$. Thus we project $x^*$ onto $X$, denoting the projection by $P_X(x^*)$. (When $X$ is defined by polyhedral and mixed-integer constraints, this projection can just take the form of rounding the components of $x$ with integer restrictions to their nearest integer values.) We shall later consider the discrepancies $x^* - P_X(x^*)$ and their dispersions. Under this paradigm, bounding is applied to $X$.
+\item Viewing the node subproblems as instances of problem~\eqref{D1}, assuming we have dual optimal solution $\omega^*$, we have corresponding primal certificate solutions $\widehat{x}(\omega^*)$. For these solutions, we have $Q\widehat{x}(\omega^*) \not\in Z$ in the case of duality gap $\phi_C^* < f^*$. We consider one of two projections:
+\begin{enumerate}
+\item Take the projection $P_Z(Q\widehat{x}(\omega^*))$. We shall later consider the discrepancies $Q\widehat{x}(\omega^*)-P_Z(Q\widehat{x}(\omega^*))$ and their dispersions.  The projection $P_{Z}(\widehat{x}(\omega^*))$ can take the form of an averaging of the individual components $\widehat{x}_i(\omega_i^*))$, $i=1,\dots,m$.
+\item Take the projection of $Q\widehat{x}(\omega^*)$ onto $Q\conv(X) \cap Z$, denoted by 
+$$P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*)).$$ We shall show that
+$z^*$ is an element of $P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*))$, and so we consider the discrepancies $Q\widehat{x}(\omega^*)-z^*$.
+\end{enumerate}
+Under this paradigm bounds are applied (conceptually) to $Z$, but in implementational practice, still on $X$.
+\end{enumerate}
+
+
+
+Due to the sheer scale of number of variables that would be branched on under the first approach, we focus on the second approach for branching. Thus, conceptually, we branch in the ambient space of $Z$.
+Branching occurs on components $z_i$ of $z$ that either violate integrality constraints, or that show dispersion from some consensus value associated with other violated constraints.
+The constraints added due to branching are denoted $Qx \in B$. Based on this constraint, define $X_B:=\braces{x \in X : Qx \in B}$, so that we define, respectively,
+\begin{equation}\label{P1B}
+f_B^*:=\min_{x,z} \braces{f(x) : Qx=z, x \in X_B,\; z \in Z},
+\end{equation}
+\begin{equation}\label{D1B}
+\phi_{B}^{C*}:=\max_{\omega \in \Omega} \phi_B^C(\omega).
+\end{equation}
+with
+\begin{equation}\label{PhiCB}
+\phi_B^C(\omega) = \min_x \braces{f(x) + \omega^\top Qx : x \in \conv(X_B)}
+\end{equation} 
+and
+\begin{equation}\label{D2B}
+\phi_{B}^{C*}=\min_{x,z} \braces{f(x) : Qx=z, x \in \conv(X_B),\; z \in Z},
+\end{equation}
+Note that we may use either the constraints $z \in B$ or $Qx \in B$ interchangeably as the context warrants.
+
+
+
+
+During each node processing of the branch-and-bound, an attempt is made to find a feasible solution to the node-specific instance of~\eqref{P1B}, which provides a finite upper bound, which we shall refer to as the \emph{incumbent value} and denote as $\upsilon \in \mathbb{R}$. Furthermore, we use an iterative approach, referred to as the \emph{oracle}, to solving each instance of~\eqref{D1B} and~\eqref{D2B} simultaneously, that is guaranteed to converge optimally. During the processing of each node, one of three things will happen:
+\begin{enumerate}
+\item The oracle terminates due to the objective value exceeding the incumbent value (fathoming due to bound).
+%We shall see that this form of termination also catches all forms of subproblem infeasibility (as the infimum of~\eqref{EQBBSP} is infinity; this is where the need for a finite incumbent value arises).
+\item The oracle terminates due to optimality of~\eqref{P1B} within pre-specified precision. This can be verified in that $\widehat{x}_B(\omega_B^*)$ satisfies $Q\widehat{x}_B(\omega_B^*) = z$ for some $z \in Z$, and/or $x_B^* \in X$. The node is fathomed after testing whether $f_B^* < \upsilon$
+and updating $\upsilon \gets f_B^*$ if that is the case.
+\item Otherwise, branchings (in $\mathbb{R}^m$) need to be determined.
+\end{enumerate}
+
+\begin{algorithm}[H]
+\begin{algorithmic}
+ \State {\bf Definitions:} 
+ \State \quad\quad$\mathcal{S}:=\braces{f,Q,X,Z,B}$, $\mathcal{P}:=\braces{\rho,\gamma, \epsilon, t_{max}, k_{max}}$
+ \State \quad\quad$\upsilon$ is an incumbent value, and 
+ \State \quad\quad$\left( \widetilde{x}, \widetilde{z} \right)$ is a corresponding incumbent feasible solution for~\eqref{P1} for which $\upsilon = F(\widetilde{z})$
+ \State {\bf Precondition:} 
+ \State \quad\quad It is assumed that the value of the current node has been checked to not exceed the incumbent value $\upsilon$ 
+\end{algorithmic}
+\begin{algorithmic}
+\Function{Process}{$\mathcal{S}$, $\mathcal{P}$, $\omega^0$, $\upsilon$, $\left( \widetilde{x}, \widetilde{z} \right)$}
+  \State $\left(\widehat{x}^{*},x^{*},z^{*},\omega^{*},\widecheck{\phi}^{*}\right) \gets \textbf{bound}(\mathcal{S}$, $\mathcal{P}$ $\omega^0)$
+% \State $(D^0, x^0, z^0, \omega^0, \widecheck{\phi}^{0}) \gets$ Initialize($\mathcal{S},\left( \widetilde{x}, \widetilde{z} \right)$), $\textbf{term}\gets\textbf{false}$, $k \gets 0$
+%\While{$\neg (\widecheck{\phi}^{k} > \upsilon \; \textbf{or}\; \textbf{term})$} 
+% \State $(\widehat{x}^{k+1},x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, \textbf{term}) \gets \text{PSCG}(\mathcal{S},\mathcal{P},D^k,x^k,z^k,\omega^k,\widecheck{\phi}^k)$
+% \State $k \gets k+1$
+%\EndWhile
+\If{$\widecheck{\phi}^{*} > \upsilon$ \textbf{or} $\widecheck{\phi}^* = \infty$}
+ \State \textbf{fathom node}
+ \State $\mathcal{B} \gets \emptyset$
+ \State \textbf{return} $(\upsilon, \widetilde{z}, \mathcal{B})$
+\EndIf
+\State $\mathcal{B} \gets \textbf{findBranchings}(\widehat{x}^{*}, z^{*})$
+\State $(\widetilde{z},\upsilon) \gets \textbf{findFeasibleSolution}(z^{*},\omega^{*},\mathcal{S},\mathcal{P})$ (Note that any solution $\widetilde{z}$ found will satisfy $\widetilde{z} \in B$.)
+\If{$\mathcal{B} \neq \emptyset $}
+\State \textbf{node needs to branch}
+\Else
+\State \textbf{fathom node}  (Due to optimality)
+\EndIf
+\State \textbf{return} $(\upsilon, \widetilde{z}, \mathcal{B})$
+\EndFunction
+\Function{bound}{$\mathcal{S}$, $\mathcal{P}$ $\omega^0$}
+\State $(D^0,x^0,z^0,\omega^0,\widecheck{\phi}^0) \gets$ Initialize($\mathcal{S},\mathcal{P},\omega^0$)
+\State $k \gets 0$, $\textbf{term}\gets\textbf{false}$
+\While{$\neg (\widecheck{\phi}^{k} > \upsilon \; \textbf{or}\; \textbf{term})$} 
+ \State $(\widehat{x}^{k+1},x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, \textbf{term}) \gets \text{PSCG}(\mathcal{S},\mathcal{P},D^k,x^k,z^k,\omega^k,\widecheck{\phi}^k)$
+ \State $k \gets k+1$
+\EndWhile
+\State \textbf{return} $\left(\widehat{x}^{k},x^{k},z^{k},\omega^{k},\widecheck{\phi}^{k}\right)$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\subsection{Parallel Stabilized Column Generation (PSCG)}
+
+In applying the AL method to problem~\eqref{P1ConvB}, 
+the continuous master problem for fixed $\omega \in Z^\perp$ takes the form
+\begin{equation}\label{EqQMPConv}
+\phi_\rho^{AL}(\omega):=\min_{x,z} \braces{L_\rho(x,z,\omega), x \in \conv(X), z \in Z}
+\end{equation}
+where the augmented Lagrangian (AL) relaxes $Qx=z$ and is defined by
+\begin{equation}\label{ALDefn}
+L_\rho(x,z,\omega):= f(x) + \omega^\top Qx + \frac{\rho}{2}\norm{Qx-z}_2^2.
+\end{equation}
+
+
+
+
+
+
+
+In the algorithm that follows, we use the following approximation $\widehat{\phi} : \mathbb{R}^q \times \mathbb{R}^n \times \mathbb{R}^q \mapsto \mathbb{R}$ of $\phi^C$ centered at $(x^k,z^k)$, $k \ge 0$, in place the cutting plane model:
+\begin{align*}
+\widehat{\phi}(\omega,x^k,z^k) := L_\rho(x^k,z^k,\omega) + \frac{\rho}{2} \norm{Qx^k-z^k}_2^2.
+\end{align*}
+%where the augmented Lagrangian (AL) $L_\rho(x,z,\omega)$ is defined as in~\eqref{ALDefn}. 
+
+
+
+The convex hull $\conv(X)$ is not known explicitly, and so $\phi^C$ cannot be evaluated directly. 
+Consequently, we additionally make use of the following minorization $\widecheck{\phi}$ of $\phi^C$ that can be evaluated.
+For $x^k \in \conv(X)$, $k \ge 0$, define $\widecheck{\phi}(\omega,x^k)$ as follows:
+\begin{equation}\label{PhiCheck}
+\widecheck{\phi}(\omega,x^k) := \min_x \braces{f(x^k) + \nabla_x f(x^k)(x-x^k) + \omega^\top Qx : x \in X}.
+\end{equation}
+%Note that the $\conv$ is dropped due to the linear form of the objective function, and so the evaluation of $\widecheck{\phi}$ is practically implementable. 
+Observe that, due to the linearity of the objective function with respect to $x$ in~\eqref{PhiCheck}, the use of constraint sets $X$ and $\conv(X)$ are interchangeable, 
+and so in evaluating $\widecheck{\phi}$, an explicit description of  $\conv(X)$ is not required. 
+Furthermore, from the definition of $\phi^C$, the convexity of $f$ over $\mathbb{R}^n$, and the interchangeability of $X$ and $\conv(X)$ in~\eqref{PhiCheck}, it is clear that for all $x^k \in \mathbb{R}^n$, $k \ge 0$, we have $\phi^C(\omega) \ge \widecheck{\phi}(\omega,x^k)$. Furthermore, when $f$ is linear, we have $\phi^C(\omega) \equiv \widecheck{\phi}(\omega,x^k)$ for all $x^k$, $k \ge 0$; the two functions collapse into the same function with the centering at $x^k$ of the latter function now  irrelevant. 
+
+In \cite{previouspaper}, we developed an efficiently parallelizable iterative procedure to solving problem~\eqref{P2}. 
+In this paper, we incorporate this procedure as part of the bounding mechanism within a branch-and-bound approach....
+
+For review purposes, the iterative dual procedure is given as follows.
+
+\begin{algorithm}[H]
+\caption{A regular iteration of PSCG.\label{AlgDualAscentGSSSC}}
+\begin{algorithmic}
+\State {\bf Preconditions:} 
+\State \quad\quad$x^k \in \conv(X)$, $z^k \in \argmin_z \braces{\norm{Qx-z}^2: z \in Z \cap B}$, $\omega^k \in Z^\perp$, 
+\State \quad\quad$\widecheck{\phi}^k = \widecheck{\phi}(\omega^k,x^k)$, $\braces{x^k + \alpha (\widehat{x} - x^k) : \alpha \in [0,1]} \subseteq {D} \subseteq \conv(X)$ where
+\State \quad\quad\quad\quad$\widehat{x} \in \argmin_x \braces{\nabla_x L_\rho(x^k,z^k,\omega^k) (x - {x}^k) : x \in X}$.
+\State \quad\quad$\mathcal{S}:=\braces{f,Q,X,Z,B}$, $\mathcal{P}:=\braces{\rho,\gamma, \epsilon, t_{max}, k_{max}}$
+\end{algorithmic}
+\begin{algorithmic}[1]
+\Function{PSCG}{$\mathcal{S}$, $\mathcal{P}$, $D^k$, $x^k$, $z^k$, $\omega^k$, $\widecheck{\phi}^{k}$ }  
+       \For{$k=1,2,\dots,k_{max}$}
+       \State Initialize $\omega^{k+1} \gets \omega^{k}$, $\widecheck{\phi}^{k+1} \gets \widecheck{\phi}^{k}$ \Comment{(Default, null-step updates)}
+       \State $(\widehat{x}^{k+1},x^{k+1},z^{k+1},D^{k+1},\Gamma) \gets$ SDM-GS($L_\rho(\cdot,\cdot,\omega^k)$, $X$, $Z \cap B$, $D^k$, $x^{k}$, $z^{k}$, $t_{max}$) \label{ReturnSDMGS}
+       \If{$L_\rho({x}^{k+1},{z} ^{k+1},\omega^k) + \frac{\rho}{2} \norm{Q{x}^{k+1}-{z}^{k+1}}_2^2-\widecheck{\phi}^k \le \epsilon$} \label{Alg4BeginTermCond}
+       	\State {\bf return} $(x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, D^{k+1}, \textbf{true})$
+       \EndIf \label{Alg4EndTermCond}
+       \State $\widetilde{\phi} \gets  L_{\rho}({x}^{k+1},{z} ^{k+1},\omega^k) + \frac{\rho}{2} \norm{Q{x}^{k+1}-{z}^{k+1}}_2^2 - \Gamma$ \label{ComputePhiTilde}
+       \State $\widetilde{\gamma} \gets \frac{\widetilde{\phi} - \widecheck{\phi}^k}{L_\rho({x}^{k+1},{z}^{k+1}, \omega^k) + \frac{\rho}{2} \norm{Q{x}^{k+1}-{z} ^{k+1}}_2^2-\widecheck{\phi}^k}$ \label{ComputeCritVal}
+       \If{$\widetilde{\gamma} \ge \gamma$} \label{Alg4LineSSC}
+         \State set $\omega^{k+1} \gets \omega^{k} + \rho (Q{x}^{k+1}-{z}^{k+1})$, $\widecheck{\phi}^{k+1} \gets \widetilde{\phi}$
+        \EndIf
+        \State Possibly update $\rho$, e.g., $\rho \gets \frac{1}{\min \braces{\max \braces{(2/\rho)(1-\widetilde{\gamma}),1/(10\rho),10^{-4}}, 10/\rho}}$ as in~\cite{Kiwiel1995} \label{Alg4RhoUpdate}
+        \EndFor  
+      \State \textbf{return}  $(\widehat{x}^{k+1},x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, D^{k+1}, \textbf{false})$
+\EndFunction
+\end{algorithmic}
+\medskip
+\begin{algorithmic}
+\State {\bf Preconditions:} $\widetilde{x} \in \conv(X)$, $\widetilde{z} \in \argmin_z \braces{F(\widetilde{x},z) : z \in Z}$, $D \subseteq \conv(X)$
+\end{algorithmic}
+\begin{algorithmic}[1]
+\Function{SDM-GS}{$F$, $X$, $Z$, $D$, $\widetilde{x}$, $\widetilde{z}$, $t_{max}$}  
+        \For{$t=1,\dots,t_{max}$} \label{ForXYUpdateBegin}
+           \State $\widetilde{x} \gets \argmin_x \braces{F(x,\widetilde{z}) : x \in D}$ \label{SDMGSXUpdate}
+	\State $\widetilde{z} \gets \argmin_z \braces{F(\widetilde{x},z) : z \in Z}$ \label{SDMGSZUpdate}
+        \EndFor \label{ForXYUpdateEnd}
+	\State $\widehat{x} \in \argmin_x \braces{\nabla_x F(\widetilde{x},\widetilde{z}) (x - \widetilde{x}) : x \in X}$ \label{SCGDirFindingSP}
+	 \State Reconstruct ${D}$ to be any set such that \label{LineDa}
+	 \State \quad $\braces{\widetilde{x} + \alpha (\widehat{x} - \widetilde{x}) : \alpha \in [0,1]} \subseteq {D} \subseteq \conv(X)$ \label{LineDb}
+	 \State Set $\Gamma \gets - \nabla_x F(\widetilde{x},\widetilde{z}) (\widehat{x} - \widetilde{x})$ \label{GammaLine}
+      \State \textbf{return} $\left(\widehat{x},\widetilde{x},\widetilde{z},{D}, \Gamma \right)$ 
+\EndFunction
+\end{algorithmic}
+\end{algorithm} 
+
+
+
+Algorithm PSCG addresses the solution to an alternative dual problem which is equivalent to~\eqref{P2} when $f$ is linear, but in general provides a weaker dual bound otherwise. This dual problem is used to address the more general setting where $f$ is convex but possibly nonlinear.%, so that $f_X^{**}$ never arises in the analysis or algorithm statement and need not be computed.
+
+
+
+
+\begin{proposition}\label{PropFWBCD}
+Let $\braces{(x^k,z^k,\omega^k)}$ be a sequence generated by Algorithm~\ref{AlgDualAscentGSSSC} applied to problem~\eqref{P1} with $X$ compact, $Z$ a linear subspace, $\omega^0 \in Z^{\perp}$, $B$ closed and convex, $\rho > 0$, $\gamma \in (0,1)$, $\epsilon=0$ and $k_{max}=\infty$. 
+If there exists a dual optimal solution $\omega^*$ to the dual problem~\eqref{P2C}, then either
+\begin{enumerate}
+\item $\omega^k = \overline{\omega}$ is fixed and optimal for~\eqref{P2C} for $k \ge \bar{k}$ for some finite $\bar{k}$; or
+%\item finite termination where, for some $\bar{k} \ge 1$,  $\omega^*=\omega^{\bar{k}}$ and $(x^{\bar{k}},z^{\bar{k}})$ is optimal for problem~\eqref{P1ConvB}; or 
+\item $\omega^k$ is never optimal for~\eqref{P2C} for any finite $k \ge 1$, but $\lim_{k \to \infty} \omega^k = \overline{\omega}$ is optimal,
+\end{enumerate}
+and the sequence $\braces{(x^k,z^k)}$ has limit points $(\overline{x},\overline{z})$, each of which are optimal for problem~\eqref{P1ConvB}.
+\end{proposition}
+
+
+\subsection{Parallelization and workload}
+The opportunities for parallelization and distribution of the computational workload in PSCG, as stated in Algorithm~\ref{AlgDualAscentGSSSC}, are not immediately apparent.
+This subsection explicitly indicates which update problems may be solved in parallel, and the nature of the required communication between the parallel computational nodes.
+
+The bulk of computational work, parallelization, and parallel communication occurs within the SDM-GS method stated in Algorithm~\ref{AlgBCD-XZ}, where for the problems of interest, the following decomposable structures apply: $X=\prod_{i=1}^m X_i$, $D=\prod_{i=1}^m D_i$,  and $F(x,z)=\sum_{i=1}^m F(x_i,z)$. 
+In the larger context of Algorithm~\ref{AlgDualAscentGSSSC}, the subproblem of Line~\ref{SDMGSXUpdate} in Algorithm~\ref{AlgBCD-XZ} can be solved in parallel given fixed $\widetilde{z} \in Z$ and $\omega \in Z^\perp$ along the block indices $i=1,\dots,m$ as
+\begin{equation}\label{Alg4QMP}
+\min_{x} \braces{ f_i(x) + (\omega_i)^\top Q_i x + \frac{\rho}{2} \norm{Q_i x - \widetilde{z}_i}_2^2 : x \in D_i},
+\end{equation}
+while the subproblem of Line~\ref{SCGDirFindingSP} is solved as
+$$
+\min_x \braces{ \nabla_x f_i(\widetilde{x}_i) + \left( \omega_i + \rho(Q_i \widetilde{x}_i - \widetilde{z}_i) \right)^\top Q_i x : x \in X_i}.
+$$
+\begin{remark}
+In the setting where problem~\eqref{P1} is a large-scale mixed-integer linear optimization problem, the subproblems of Line~\ref{SDMGSXUpdate} are continuous convex quadratic optimization problems for each block $i=1,\dots,m$, which can be solved independently of one another and in parallel. In the same setting, the Line~\ref{SCGDirFindingSP} subproblems are mixed-integer optimization problems for each block $i=1,\dots,m$, which can also be solved independently of one another and in parallel.
+Additionally, the reconstruction of $D$ occurring in Line~\ref{LineDb} can be done in parallel for each $D_i$ along the indices $i=1,\dots,m$.
+\end{remark}
+
+
+Parallel communication is needed for the computation of the $z$ update. In the larger context of Algorithm~\ref{AlgDualAscentGSSSC}, this takes the form of solving
+$$
+\min_z \braces{\sum_{i=1}^m \norm{Q_i \widetilde{x}_i - z_i}_2^2 : z \in Z}.
+$$
+This is solved as an averaging that requires the reduce-sum type parallel communication.
+The computation of values required to compute $\gamma^k$ in Line~\ref{ComputeCritVal} in Algorithm~\ref{AlgDualAscentGSSSC} also requires a reduce-sum type parallel communication. 
+For implementation purposes, the computation of these values, including the computation of $\Gamma$ from the SDM-GS call, can be combined into one reduce-sum communication. In total, each iteration of Algorithm~\ref{AlgDualAscentGSSSC} requires two reduce-sum type communications, one for computing the $z$-update, and one combined reduce-sum communication to compute scalars associated with the Lagrangian bounds and the critical values for the termination conditions. 
+The storage and updates of $x^k$ and $\omega^k$ and $D$ can also be done in parallel, while $z^k$ and $\gamma^k$ need to be computed and stored by every processor at each iteration $k$.
+
+%%%%%%%%%%%%%%%%%%%% BRANCH-AND-BOUND %%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Branch-and-bound with SCG-GS-ALM as bounding procedure}
+
+In order to inform branching decisions, we need a sense of dispersion based on some violation of feasibility, and a value with which to bound.
+
+\subsection{Branching decisions}
+Given an optimal dual solution $\omega^*$, for some $\widehat{x} \in \widehat{x}(\omega^*)$, 
+set $\widehat{x}=(\widehat{x}_i)_{i=1,\dots,m}$, we take an average $\widehat{z} = (1/m)\sum_{i=1}^m Q_i\widehat{x}_i$. Based on this average,
+we compute a component-wise dispersion 
+$$\sigma_j:=\norm{ \left[(Q_i\widehat{x}_{i})_j - \widehat{z}_j\right]_{i=1,\dots,m} }$$ 
+for each component index $j=1,\dots,n_x$ using norm $\norm{\cdot}=\norm{\cdot}_{1}$, $\norm{\cdot}_2$, or $\norm{\cdot}_\infty$, and denote $\sigma:=(\sigma_j)_{j=1,\dots,n_x}$. 
+[So far, this is the only meaningful way to describe dispersion]
+
+We might use weighting of the form 
+$$\sigma_j:=\max_{i=1,\dots,m} \braces{\left| \omega_{i,j} \left( (Q_i\widehat{x}_{i})_j - \widehat{z}_j \right) \right|}$$
+
+
+
+
+%%%%%%%%%%%%%%%%%%%% CONCLUSION AND FUTURE WORK %%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion and future work}\label{SectConclusion}
+%Our contribution is motivated by the goal of improving the efficiency of parallelization applied to iterative approaches for solving the Lagrangian dual problem of 
+%large scale optimization problems. These problems have nonlinear convex differentiable objective $f$, decomposable nonconvex constraint set $X$, and nondecomposable affine constraint set $Qx=z$ to which Lagrangian relaxation is applied. Problems of such a form include the split variable extensive form of mixed-integer linear stochastic programs as a special case. 
+%%mixed-integer linear stochastic optimization problems. 
+%%In considering the split variable extensive deterministic form of such mixed-integer linear problems, 
+%%The primal characterization of the Lagrangian dual problem of the form $\min_{x,z} \braces{f(x) : Qx=z, x \in \conv(X), z \in Z}$. 
+%Implicitly, our approach refers to the convex hull $\conv(X)$ of $X$, and the assumed lack of known description of $\conv(X)$ needs to be addressed. Proximal bundle methods (alternatively in the form of the proximal simplicial decomposition method or stabilized column generation) are well-known for addressing the latter issue. In the former issue, that of exploiting the large scale structure to apply parallel computation efficiently, we develop a modified augmented Lagrangian (AL) method with approximate subproblem solutions that incorporates ideas from the proximal bundle method.% or more especially its dual form the proximal simplicial decomposition method.  
+%
+%%In developing this framework, we use the proximal simplicial decomposition method as a motivating analogy, where there is no use of a cutting-plane model. 
+%%To this end, we develop an implementation of the augmented Lagrangian (AL) method with approximate subproblem solutions that is practical for our motivating problems and that allows for efficient parallelization. 
+%The approximation of subproblem solutions is based on an iterative approach that integrates ideas from the simplicial decomposition method (SDM) (for constructing inner approximations of $\conv(X)$) and the nonlinear block Gauss-Seidel method. It is the latter Gauss-Seidel aspect that is primarily responsible for enhancing the parallel efficiency that is observed in the numerical experiments. While convergence analysis of the integrated SDM-GS approach may be derived from slight modifications to results in~\cite{Bonettini2011}, for the sake of completeness and explicitness, we provide in the appendix a proof of optimal convergence of SDM-GS as it is applied within our algorithm under a standard set of conditions. A distinction between so-called ``serious'' steps and ``null'' steps, in analogy to the proximal bundle method, is also recovered. Once these aspects are successfully integrated, then the contribution is complete, where the beneficial stabilization associated with proximal point methods and the ability to apply parallelization more efficiently are both realized. The resulting algorithm developed in this paper is referred to as SDM-GS-ALM, which has similar functionality to the alternating direction method of multipliers (ADMM).
+%
+%We performed numerical tests of two sorts. 
+%%In Test 1, we examined the effect of approximating the solution of the AL primal subproblem using one iteration of SDM-GS against using exact solves of the proximal bundle method continuous master problem. In the setting with linear objective function, the latter computations were simulated by allowing the Gauss-Seidel iterations to solve the continuous master problem (with fixed inner approximation) to (near) exactness. We saw that in the early iterations, there was surprisingly no consistent outperforming of one method over the other in terms of the quality of Lagrangian bounds computed. In the tail-end iterations, the benefit of having the continuous master problem associated with the proximal bundle method solved exactly became more evident. %Therefore, enhancements to SDM-GS-ALM would have a rule introduced for adjusting the number of Gauss-Seidel iterations to use that are not followed by SDM expansions of the inner approximation.
+%In Test 1, we examined the impact of varying the serious step condition parameter. We found that parameterizations that effect more stringent serious step conditions seem to have the effect of mitigating the early iteration instability due to penalty parameters that are too large. At the same time, the more stringent serious step condition parameterizations seemed to result in slower convergence to dual optimality in the tail-end. As is the case for proximal bundle methods, information obtained in the serious step condition tests may be used to beneficially adjust the proximal term penalty coefficient in   early iterations. 
+%%(Although the convergence analysis may require the penalty to stabilize in the later iterations.)
+%
+%In Test 2, we examined the efficiency of parallelization, measured by the speedup ratio, due to the use of the SDM-GS-ALM, compared versus pre-existing implementations of the proximal bundle method that use structure exploiting primal dual interior point methods to improve parallel efficiency. We saw in these results a promising increase in parallel efficiency due to the use of SDM-GS-ALM, where the increase in parallel efficiency is attributed primarily to the successful incorporation of Gauss-Seidel iterations. The results of the last problem tested, SSLP 10-50-2000, additionally suggested a benefit due to the ability of SDM-GS-ALM to distribute not just the workload, but also the use of memory. The vector of auxiliary variables $z$ is the only substantial block of data that needs to be stored and modified by all processors. In the context of stochastic optimization problems, this represents a modest communication bottleneck in proportion to the number of first-stage variables for two-stage problems, while for multistage problems, the amount of such data that must be stored by every processor and modified by parallel communication can increase exponentially with the number of stages.
+%
+%Potential future improvements include the following. While a default implementation of SDM-GS-ALM would have one Gauss-Seidel iteration per SDM-GS call, the Lagrangian bounds reported from the Test 2 experiments suggest that an improved implementation would have early iterations use one Gauss-Seidel iteration per SDM-GS call, but steadily increase the number of Gauss-Seidel iterations per SDM-GS call for the later iterations. This results in better Lagrangian bounds at termination. While these extra Gauss-Seidel iterations require extra parallel communication, the additional wall clock time required becomes increasingly marginal for larger problems where the cost of solving the SDM linearized subproblems associated with expanding the inner approximation increasingly outweighs the cost associated with computing the approximate solution of the continuous master problem and any required parallel communications. 
+%
+%A potentially large improvement to the speed of convergence, in terms of wall clock time, would be to incorporate into the analysis the degree to which the SDM linearized subproblem can be solved suboptimally and yet retain the optimal convergence. We expect that solving these subproblems exactly, particularly in the early iterations, is highly wasteful, and providing a theoretical basis for controlling the tolerance of solution inaccuracy would be of great value. Another potential avenue for future work is to extend the experimental analysis to multistage mixed-integer stochastic optimization problems and/or nonlinear problems, as the form of the problem addressed by SDM-GS-ALM is general enough to model these types of problems. 
+
+
+
+%\begin{acknowledgements}
+%We thank Prof. Jeffrey Linderoth for helpful input in the development and preparation of this manuscript.
+%If you'd like to thank anyone, place your comments here
+%and remove the percent signs.
+%\end{acknowledgements}
+
+
+
+
+
+
+% BibTeX users please use one of
+%\bibliographystyle{spbasic}      % basic style, author-year citations
+\bibliographystyle{spmpsci}      % mathematics and physical sciences
+%\bibliographystyle{spphys}       % APS-like style for physics
+\bibliography{./bibliographyPSCGDD}   % name your BibTeX data base
+
+
+\end{document}
+% end of file template.tex
+

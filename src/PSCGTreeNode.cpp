@@ -27,7 +27,7 @@
 #include <cmath>
 #include <vector>
 
-#include "CoinUtility.hpp"
+//#include "CoinUtility.hpp"
 
 #include "AlpsKnowledge.h"
 #include "AlpsEnumProcessT.h"
@@ -66,8 +66,7 @@ PSCGTreeNode::createNewTreeNode(AlpsNodeDesc *&desc) const
 // - parent must be explicit if not NULL,
 // - this node is explicit.
 
-int
-PSCGTreeNode::process(bool isRoot, bool rampUp)
+int PSCGTreeNode::process(bool isRoot, bool rampUp)
 {
     int status = PSCG_OK;
 
@@ -75,8 +74,11 @@ PSCGTreeNode::process(bool isRoot, bool rampUp)
     // Get model information and parameters.
     //------------------------------------------------------
     PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
+    if(model->getBestNodeQuality()==model->getBound()){model->saveOmega();}
     bool isMPIRoot = model->getMPIRank()==0;
+    int nodeDepth=getDepth();
 if(isMPIRoot) {cout << "***************BEGINNING OF PROCESSING NODE*******************" << endl;}
+if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
     PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
     //------------------------------------------------------
     // Check if this can be fathomed by objective cutoff.
@@ -87,6 +89,7 @@ if(isMPIRoot) {cout << "***************BEGINNING OF PROCESSING NODE*************
 	    cout << "Fathomed by bound" << endl;
 	    cout << "***************END OF PROCESSING NODE*******************" << endl;
 	}
+        desc->freeNodeInfo();
     	return status;
     }
     
@@ -108,22 +111,29 @@ if(isMPIRoot) {cout << "***************BEGINNING OF PROCESSING NODE*************
 
     int z_status = model->getZStatus();
     if( model->getZStatus()==Z_UNKNOWN ){
-      if(chooseBranchingObject(model)==-1){
+      chooseBranchingObject(model);
+
+      if(model->getNumNewNodeSPs()==0){
 	setStatus(AlpsNodeStatusFathomed);
+        desc->freeNodeInfo();
 	if(isMPIRoot) cout << "Fathomed by optimality" << endl;
       }
       else{
         //desc->updateZ(model);
-        desc->updateBranchingZVals(model);
+        //desc->updateBranchingZVals(model);
+    	//desc->updateOmega(model); 
+    	desc->updateDesc(model);
 	setStatus(AlpsNodeStatusPregnant);
-	if(isMPIRoot) cout << "Node needs to branch...Branching on " << model->getInfeasIndex() << " with z value " << model->getBranchingZVals()[0] << endl;
+	//free node information later when branching occurs
+	if(isMPIRoot) cout << "Node needs to branch...with branching information:" << endl;
+	if(isMPIRoot) model->printNewNodeSPInfo();
       }
 
     //------------------------------------------------------
     // Try to find a feasible solution, improve the incumbent value 
     //------------------------------------------------------
       if(isMPIRoot) cout << "Searching for feasible solution, improvement on incumbent value..." << endl;
-      model->findPrimalFeasSoln(100);
+      model->findPrimalFeasSoln(20);
     }
     else{
         if(model->getZStatus()==Z_INFEAS){
@@ -132,6 +142,7 @@ if(isMPIRoot) {cout << "***************BEGINNING OF PROCESSING NODE*************
 	else{ //z_status==Z_BOUNDED
 	    if(isMPIRoot) cout << "Fathomed by bound" << endl;
         }
+        desc->freeNodeInfo();
 	setStatus(AlpsNodeStatusFathomed);
     }
     
@@ -156,12 +167,13 @@ PSCGTreeNode::branch()
     // THINK: how about constraint bounds? When to update?
     // TODO: how about other SOS object, etc.?
     //------------------------------------------------------
-
+    PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
+#if 0
     AlpsPhase phase = knowledgeBroker_->getPhase();
 
 
-    std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> > 
-	childNodeDescs;
+    //std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> > 
+	//childNodeDescs;
     
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 
@@ -176,8 +188,10 @@ PSCGTreeNode::branch()
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
 					    quality_));
+#endif
     status_ = AlpsNodeStatusBranched;
     
+    desc->freeNodeInfo();
 //cout << "End branch()" << endl;
     return childNodeDescs;
 }
@@ -192,7 +206,9 @@ int PSCGTreeNode::bound(BcpsModel *model)
 //cout << "Begin bound()" << endl;
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-    updateQuality(m->computeBound(100,true));
+    int nodeDepth=getDepth();
+    //updateQuality(m->computeBound(20,true));
+    updateQuality(m->computeBound(1+2*nodeDepth,true));
     //if( m->getZStatus()==Z_UNKNOWN ){
       //desc->updateOmega(m); 
     //}

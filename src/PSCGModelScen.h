@@ -66,6 +66,7 @@ double objVal;
 double gapVal;
 
 double *x;
+double *dispersions;
 double *y;
 
 int nVertices;
@@ -120,6 +121,7 @@ void finishInitialisation();
 
 ~PSCGModelScen(){
   delete [] x;
+  delete [] dispersions;
   delete [] y;
   delete [] c;
   delete [] d;
@@ -139,14 +141,19 @@ void finishInitialisation();
   weightSoln.end();
 }
 
-virtual int solveLagrangianProblem(const double* omega)=0;
+virtual int solveLagrangianProblem(const double* omega=NULL)=0;
 virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal)=0;
 virtual int solveFeasibilityProblem()=0;
+virtual int getCPLEXErrorStatus(){
+    cerr << "getCPLEXErrorStatus(): default implementation, does nothing, returning 0" << endl;
+    return 0;
+}
 int getSolverStatus(){return solverStatus_;}
 double* getC(){return c;}
 double* getD(){return d;}
+double* getDispersions(){return dispersions;}
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes)=0;
-virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
+//virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual void setSolverStatus()=0;
 virtual void upBranchOnVar(int varIndex, double bound)=0;
 virtual void downBranchOnVar(int varIndex, double bound)=0;
@@ -372,6 +379,7 @@ void clearVertexHistory(){
   for(int v=0; v<maxNVertices; v++) zeroOutVertexAtIndex(v);
   oldestVertexIndex=-1;
   nVertices=0;
+  for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
 }
 
 virtual void printLinCoeffs(){
@@ -488,8 +496,8 @@ void setQuadraticTerm(const double *scaling_vector) {
 	}
 }
 
-void updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector); 
-void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector);
+void updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp=false); 
+void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp=false);
 
 //void getLagrangianGradient(SMIP_qu_getLagrangianGradient* question, SMIP_ans_getLagrangianGradient* answer);
 
@@ -520,14 +528,15 @@ void refresh(){
     for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
 }
 void refresh(const double *omega, const double *z, const double *scaling_vector){
-    clearVertexHistory();
-    memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
-    memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
-    addVertex();
     
     //setXToOptVertex();
     //setYToOptVertex();
     updatePrimalVariables_OneScenario(omega, z, scaling_vector);
+
+    clearVertexHistory();
+    memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
+    memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
+    addVertex();
 
     //weightSoln[0]=1.0;//(env, nVertices);
     //for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
@@ -616,7 +625,7 @@ virtual void fixVarAt(int index, double fixVal){
       LagrMIPInterface_->setColBounds(index,fixVal,fixVal);
 }
 
-virtual int solveLagrangianProblem(const double* omega);
+virtual int solveLagrangianProblem(const double* omega=NULL);
 virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void polishSolution(){
@@ -727,7 +736,7 @@ const char* getColTypes(){
     return LagrMIPInterface_->getColType();
 } 
 
-int getCPLEXErrorStatus(){
+virtual int getCPLEXErrorStatus(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
 	return CPXgetstat(osi->getEnvironmentPtr(), osi->getLpPtr());
 }
@@ -913,12 +922,14 @@ virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, c
 //printColBds();
    return solverStatus_;
 }
+#if 0
 virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
    fixXToZ(z,colTypes);
    solverStatus_ = solveFeasibilityProblem();
    unfixX(origLBs, origUBs); 
    return solverStatus_;
 }
+#endif
 
 virtual void updateSolnInfo(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
@@ -955,7 +966,7 @@ PSCGModelScen_Bodur(const PSCGModelScen_Bodur &other):PSCGModelScen(other),
 cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}
 
 void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
-virtual int solveLagrangianProblem(const double* omega);
+virtual int solveLagrangianProblem(const double* omega=NULL);
 virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
@@ -967,13 +978,13 @@ virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, c
    unfixX(origLBs, origUBs); 
    return solveStatus;
 }
+#if 0
 virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
    fixXToZ(z,colTypes);
    int solveStatus = solveFeasibilityProblem();
    unfixX(origLBs, origUBs); 
    return solveStatus;
 }
-#if 0
 virtual void fixXToZ(const double *z){
 //TODO: set the xVariables to be continuous
     for(int ii=0; ii<n1; ii++){

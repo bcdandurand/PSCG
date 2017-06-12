@@ -141,6 +141,8 @@ void PSCGModelScen::finishInitialisation() {
 	x_vertex = new double[n1];
 	y_vertex = new double[n2];
 	x = new double[n1];
+	dispersions = new double[n1];
+	for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
 	y = new double[n2];
 	//x_vertex.add(n1,0.0);
 	//y_vertex.add(n2,0.0);
@@ -165,8 +167,11 @@ void PSCGModelScen::finishInitialisation() {
 	mpModel.add(mpVertexConstraints);
 
 	//We use dual simplex due to the nature of the problem
-	cplexMP.setParam(IloCplex::RootAlg, IloCplex::Dual);
-	//cplexQP.setParam(IloCplex::RootAlg, IloCplex::Primal);
+	//cplexMP.setParam(IloCplex::RootAlg, IloCplex::Dual);
+	cplexMP.setParam(IloCplex::RootAlg, IloCplex::Primal);
+        //cplexMP.setParam(IloCplex::SolutionType, CPX_BASIC_SOLN);
+	//cplexMP.setParam(IloCplex::RootAlg, 0);
+	cplexMP.setParam(IloCplex::OptimalityTarget, 1);
 	
 	if (nThreads >= 0) { cplexMP.setParam(IloCplex::Threads, nThreads); }
 	cplexMP.setOut(env.getNullStream());
@@ -406,10 +411,11 @@ cout << endl;
 
 
 //Not tested!
-void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector) {
+void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp) {
 	
 	double numerator = 0.0;
 	double denominator = 0.0;
+	double dir = 0.0;
 	
 	for (int i = 0; i < n1; i++) {
 		if(omega==NULL){numerator -= (c[i] + scaling_vector[i] * (x[i] - z[i])) * (x_vertex[i] - x[i]);}
@@ -431,9 +437,12 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 	
 	if (a > 1) {a = 1;}
 	if (a < 0) {a = 0;}
-	
+	double oldX;
 	for (int i = 0; i < n1; i++) {
+		dir = x_vertex[i] - x[i];
+		oldX=x[i];
 		x[i] = x[i] + a * (x_vertex[i] - x[i]);
+		if(updateDisp){dispersions[i] = max( (1.0-a)*(dispersions[i]+fabs(x[i]-oldX)) , a*fabs(x[i]-x_vertex[i]) );}
 	}
 
 	for (int j = 0; j < n2; j++) {
@@ -441,8 +450,10 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 	}
 }
 
-void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector) {
+void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp) {
+   double direction=1.0;
    try{
+	if(updateDisp) mpWeight0.setBounds(0.0,0.0);
 	IloNum weightObj0(0.0);
 	for (int wI = 0; wI < nVertices; wI++) {
 		weightObjective[wI] = baseWeightObj[wI];
@@ -489,8 +500,11 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 		//cout << mpModel << endl;
 		//cplexMP.refineConflict();
 		//cout << cplexMP.getConflict() << endl;
+		cout << "Number of vertices: " << getNVertices() << endl;
+		cplexMP.exportModel("infeasModel.lp");
 		cout << "Refreshing solution..." << endl;
 		refresh(omega,z,scaling_vector);
+		//assert(false);
 		//throw(-1);
 	}
 	if(cplexMP.getCplexStatus()!=IloCplex::Optimal) {
@@ -503,22 +517,35 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 	weight0 = cplexMP.getValue(mpWeight0);
 	
 	polishWeights(); //fix any unfortunate numerical quirks
-
+	double *oldX = new double[n1];
+	memcpy(oldX,x,n1*sizeof(double));
 	// note: the final weight corresponds to the existing x
 	for (int i = 0; i < n1; i++) {
 		x[i] = weight0 * x[i];
+		//if(updateDisp){dispersions[i] = weight0*dispersions[i];}
 	}
 
 	for (int j = 0; j < n2; j++) {
 		y[j] = weight0 * y[j];
 	}
-			
 	for(int wI=0; wI<nVertices; wI++) {
-		
 		for (int i = 0; i < n1; i++) {
 			x[i] += weightSoln[wI] * xVertices[i][wI];
 		}
 	}
+      if(updateDisp){
+	for (int ii = 0; ii < n1; ii++) {
+		//dispersions[ii] += weight0*fabs(oldX[ii]-x[ii]);
+		//dispersions[ii] += fabs(oldX[ii]-x[ii]);
+		dispersions[ii] = 0.0;
+		//dispersions[ii] = 0.0;
+		for(int wI=0; wI<nVertices; wI++) {
+		    //dispersions[ii] += weightSoln[wI]*fabs(xVertices[ii][wI]-x[ii]); 
+		    dispersions[ii] += weightSoln[wI]*fabs(xVertices[ii][wI]-x[ii]) ; 
+		}
+	}
+      }
+        delete [] oldX;
 		
 	for(int wI=0; wI<nVertices; wI++) {
 		
@@ -527,6 +554,7 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 		}
 	}
 	
+	if(updateDisp) mpWeight0.setBounds(0.0,1.0);
    }
    catch(IloException& e){
 	//cout << "MPSolve error: " << e.getMessage() << endl;

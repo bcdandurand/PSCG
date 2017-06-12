@@ -34,6 +34,7 @@
 #include "PSCGNodeDesc.h"
 #if 1
 #include "PSCGModel.h"
+#include "CoinUtility.hpp"
 
 class BcpsModel;
 //class PSCGModel;
@@ -61,6 +62,8 @@ class PSCGTreeNode : public BcpsTreeNode {
 
     /** Save an explicit node description. */
     //void saveExplicit();
+    std::vector< CoinTriple<AlpsNodeDesc*, AlpsNodeStatus, double> > 
+	childNodeDescs;
     
  public:
 
@@ -116,6 +119,8 @@ class PSCGTreeNode : public BcpsTreeNode {
     virtual int bound(BcpsModel *model);
     void updateQuality(double val){
 	quality_=val;
+	//if(val > quality_) quality_=val;
+	//else{cout << "PSCGTreeNode::updateQuality(): Warning: candidate update of quality would be diminishing: " << val << " < " << quality_ << endl;}
     	PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
         desc->updateBd(val);
     }
@@ -133,6 +138,21 @@ class PSCGTreeNode : public BcpsTreeNode {
     	PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
         m->findBranchingIndex();
         desc->updateBranchingIndex(m);
+	
+	vector< vector<var_branch> > newSPInfo = m->getNewNodeSPInfo();
+	for(int nn=0; nn<newSPInfo.size(); nn++){
+            PSCGNodeDesc *childDesc = new PSCGNodeDesc(m);//desc->createChildNodeDescUp(desc->getBranchingIndex());
+	    for(int oo=0; oo<newSPInfo[nn].size(); oo++){
+		childDesc->setZLB(newSPInfo[nn][oo].index, newSPInfo[nn][oo].lb);
+		childDesc->setZUB(newSPInfo[nn][oo].index, newSPInfo[nn][oo].ub);
+	    }
+	    //childDesc->updateOmega(m);
+	    childDesc->setLB(quality_);
+    	    childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
+					    (childDesc),
+					    AlpsNodeStatusCandidate,
+					    quality_));
+	}
 	return m->getInfeasIndex();
     }
     /** Select a branching object based on give branching strategy. */

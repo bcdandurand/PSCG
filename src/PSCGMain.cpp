@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
 	//******************Wall Timing Setup****************
 
 	//Start timing. More refined timing is possible for debugging.
+#if 0
 	Stopwatch totalTimer;
    	Stopwatch interpTimer;
    	Stopwatch updateTimer;
@@ -33,6 +34,7 @@ int main(int argc, char **argv) {
 
    	totalTimer.start();
    	double totalTimeAllStep [TIME_TYPES] = {0,0};
+#endif
 
 	//******************MPI Setup**********************
 	int mpiRank;
@@ -61,12 +63,14 @@ int main(int argc, char **argv) {
 	
 
 	PSCGModel model(&par);
-	double *z = new double[model.n1];
+	//double *z = new double[model.n1];
+	#if 0
 	vector<double*> omega;
 	for(int tS=0; tS<model.nNodeSPs; tS++){
 	    omega.push_back(new double[model.n1]);
 	    for(int ii=0;ii<model.n1; ii++) omega[tS][ii]=0.0;
 	}
+	#endif
 	//model.readZIntoModel(z);
 	//model.readOmegaIntoModel(omega);
 	//PSCGNodeDesc *desc = new PSCGNodeDesc(&model);
@@ -96,7 +100,7 @@ cout << "...Ending search." << endl;
 
 	//******************Decision Variable Initialisation**********************
 
-	int step = 0; 
+	//int step = 0; 
 
 	#if 0
 		forInitTimes.stop();
@@ -118,6 +122,7 @@ cout << "...Ending search." << endl;
 	//******************Outer FWPH Loop Begins Here**********************
 	//*******************************************************************
 
+#if 0
 	step++;
 	bool terminate = false;
 	bool timeLimitReached = false;
@@ -179,16 +184,19 @@ cout << "...Ending search." << endl;
 		step++;
 	}//end while
 	
+#endif
 	//***********************************************************************
 	//******************Outer FWPH Loop Terminates Here**********************
 	//***********************************************************************
 
-	if(mpiRank==0) std::cout << endl;
+	//if(mpiRank==0) std::cout << endl;
 
 	#ifdef USING_MPI
 		MPI_Finalize();
 	#endif
 	
+
+#if 0
 	totalTimer.stop();
 	totalTimer.getTime(totalTimeAllStep);
 	
@@ -221,7 +229,8 @@ cout << "...Ending search." << endl;
 		<< mpiSize << " node,  " << model.totalNoGSSteps << " GS steps,  Lag. LB: " << model.currentLagrLB << endl;
 		std::cout << "RUN:SUCCESS" << std::endl;
 	}
-	delete [] z;
+#endif
+	//delete [] z;
 #endif
 	return 0;
 }

@@ -69,6 +69,7 @@ grestore
 \newcommand{\eNum}{\text{e}}
 \newcommand{\Var}{\text{Var}}
 \newcommand{\Ind}{\text{Ind}}
+\newcommand{\proj}{\text{P}}
 
 \newcommand{\colorA}[1]{\textcolor{red}{#1}}
 \newcommand{\colorB}[1]{\textcolor{blue}{#1}}
@@ -272,20 +273,22 @@ We shall use both characterizations~\eqref{D1} and~\eqref{D2} to inform differen
 \begin{enumerate}
 \item Viewing the node subproblems as instances of problem~\eqref{D2}, we have optimal solutions $(x^*,z^*)$ to problem~\eqref{D2} that satisfy 
 $$(x^*,z^*) \in \braces{(x,z) : x \in \conv(X), z \in Z, Qx=z},$$ 
-but $x^* \not\in X$ in the case of strict duality gap $\phi_C^* < f^*$. Thus we project $x^*$ onto $X$, denoting the projection by $P_X(x^*)$. (When $X$ is defined by polyhedral and mixed-integer constraints, this projection can just take the form of rounding the components of $x$ with integer restrictions to their nearest integer values.) We shall later consider the discrepancies $x^* - P_X(x^*)$ and their dispersions. Under this paradigm, bounding is applied to $X$.
-\item Viewing the node subproblems as instances of problem~\eqref{D1}, assuming we have dual optimal solution $\omega^*$, we have corresponding primal certificate solutions $\widehat{x}(\omega^*)$. For these solutions, we have $Q\widehat{x}(\omega^*) \not\in Z$ in the case of duality gap $\phi_C^* < f^*$. We consider one of two projections:
+but $x^* \not\in X$ in the case of strict duality gap $\phi_C^* < f^*$. Thus we project $x^*$ onto $X$, denoting the projection by $P_X(x^*)$. (When $X$ is defined by polyhedral and mixed-integer constraints, this projection can just take the form of rounding the components of $x$ with integer restrictions to their nearest integer values.) We would consider the discrepancies $x^* - \proj_X(x^*)$ and their dispersions. Under this paradigm, bounding is applied to $X$.
+\item Viewing the node subproblems as instances of problem~\eqref{D1}, assuming we have a dual optimal solution $\omega^*$, we have corresponding sets of primal certificate solutions $\widehat{x}(\omega^*)$. For these solutions, we have $Q\widehat{x}(\omega^*) \cap  Z = \emptyset$ in the case of duality gap $\phi_C^* < f^*$. We consider one of two projections:
 \begin{enumerate}
-\item Take the projection $P_Z(Q\widehat{x}(\omega^*))$. We shall later consider the discrepancies $Q\widehat{x}(\omega^*)-P_Z(Q\widehat{x}(\omega^*))$ and their dispersions.  The projection $P_{Z}(\widehat{x}(\omega^*))$ can take the form of an averaging of the individual components $\widehat{x}_i(\omega_i^*))$, $i=1,\dots,m$.
-\item Take the projection of $Q\widehat{x}(\omega^*)$ onto $Q\conv(X) \cap Z$, denoted by 
-$$P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*)).$$ We shall show that
-$z^*$ is an element of $P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*))$, and so we consider the discrepancies $Q\widehat{x}(\omega^*)-z^*$.
+\item Take the projection $\proj_Z(Q\widehat{x}(\omega^*))$. Conceptually, we want to accumulate the dispersions in some set-wise or point-wise fashion.
+The important thing to note is that under this line of thought, we do not consider the dispersion of only one $\widehat{x} \in \widehat{x}(\omega^*)$, but the entire set $\widehat{x}(\omega^*)$, which is contained in the highest dimensional face of $\conv(X)$ for which $z^*$ is in its relative interior.
+\item Rather than projection, we use the information from $x^*$, $z^*$ and $\omega^*$. (Or, more practically, $x^k$, $z^k$ and $\omega^k$.) We still work with the set $Q\widehat{x}(\omega^k)$, whose vertex description is available from computing $\widehat{x}^t \in \widehat{x}(\omega^t)$ at each iteration $t=1,\dots,k$.
+%Take the projection of $Q\widehat{x}(\omega^*)$ onto $Q\conv(X) \cap Z$, denoted by 
+%$$P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*)).$$ We shall show that
+%$z^*$ is an element of $P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*))$, and so we consider the discrepancies $Q\widehat{x}(\omega^*)-z^*$.
 \end{enumerate}
 Under this paradigm bounds are applied (conceptually) to $Z$, but in implementational practice, still on $X$.
 \end{enumerate}
 
 
 
-Due to the sheer scale of number of variables that would be branched on under the first approach, we focus on the second approach for branching. Thus, conceptually, we branch in the ambient space of $Z$.
+Due to the large number of variables that would be branched on under the first approach, we do not consider branching based on the first approach, although we do use the dispersions from the first approach discrepancies to inform branching based on the second approach. Thus, conceptually, we branch in the ambient space of $Z$.
 Branching occurs on components $z_i$ of $z$ that either violate integrality constraints, or that show dispersion from some consensus value associated with other violated constraints.
 The constraints added due to branching are denoted $Qx \in B$. Based on this constraint, define $X_B:=\braces{x \in X : Qx \in B}$, so that we define, respectively,
 \begin{equation}\label{P1B}
@@ -309,9 +312,10 @@ Note that we may use either the constraints $z \in B$ or $Qx \in B$ interchangea
 
 During each node processing of the branch-and-bound, an attempt is made to find a feasible solution to the node-specific instance of~\eqref{P1B}, which provides a finite upper bound, which we shall refer to as the \emph{incumbent value} and denote as $\upsilon \in \mathbb{R}$. Furthermore, we use an iterative approach, referred to as the \emph{oracle}, to solving each instance of~\eqref{D1B} and~\eqref{D2B} simultaneously, that is guaranteed to converge optimally. During the processing of each node, one of three things will happen:
 \begin{enumerate}
-\item The oracle terminates due to the objective value exceeding the incumbent value (fathoming due to bound).
+\item The oracle terminates due to the objective value exceeding the incumbent value (fathoming due to bound), or due to subproblem infeasibility.
 %We shall see that this form of termination also catches all forms of subproblem infeasibility (as the infimum of~\eqref{EQBBSP} is infinity; this is where the need for a finite incumbent value arises).
-\item The oracle terminates due to optimality of~\eqref{P1B} within pre-specified precision. This can be verified in that $\widehat{x}_B(\omega_B^*)$ satisfies $Q\widehat{x}_B(\omega_B^*) = z$ for some $z \in Z$, and/or $x_B^* \in X$. The node is fathomed after testing whether $f_B^* < \upsilon$
+\item The oracle terminates due to optimality of~\eqref{P1B} within pre-specified precision. 
+That is $\norm{x^* - \proj_X(x^*)} + \norm{Qx^* - z^*} < \epsilon$. The node is fathomed after testing whether $f_B^* < \upsilon$
 and updating $\upsilon \gets f_B^*$ if that is the case.
 \item Otherwise, branchings (in $\mathbb{R}^m$) need to be determined.
 \end{enumerate}
@@ -501,29 +505,43 @@ The storage and updates of $x^k$ and $\omega^k$ and $D$ can also be done in para
 
 In order to inform branching decisions, we need a sense of dispersion based on some violation of feasibility, and a value with which to bound.
 
+\subsection{Measure of feasibility}
+
+A criterion for fathoming by optimality may be given by
+\begin{equation}\label{FeasTol}
+\norm{x^* - \proj_X(x^*)} + \norm{Qx^*-z^*} < \epsilon.
+\end{equation}
+for some suitably small tolerance $\epsilon > 0$. If the feasibility criterion~\eqref{FeasTol} is not met, then branching must occur, and the branching should be informed by the dispersions measured in the two norm terms of~\eqref{FeasTol}. It will be convenient to to refine the dispersions, where the vector
+$$
+\sigma_X :=\left[\norm{x_i^* - \proj_{X_i}(x_i^*)} \right]_{i=1,\dots,m}
+$$
+is defined. The diagonal matrix whose diagonal entries are taken from $\sigma_X$ will be denoted $\Sigma_X$.
+
 \subsection{Branching decisions}
-We have the following approaches at measuring dispersion from the constraint $Qx=z$:
+We have the following approaches at measuring dispersion from the constraint $Qx=z$ at iteration $k$:
 \begin{enumerate}
-\item Given an optimal dual solution $\omega^*$, for some $\widehat{x} \in \widehat{x}(\omega^*)$, 
-set $\widehat{x}=(\widehat{x}_i)_{i=1,\dots,m}$, we take an average $\widehat{z} = (1/m)\sum_{i=1}^m Q_i\widehat{x}_i$. Based on this average,
+\item Given a dual feasible solution $\omega^k$, for some $\widehat{x}^k \in \widehat{x}(\omega^k)$, 
+setting $\widehat{x}^k=(\widehat{x}_i^k)_{i=1,\dots,m}$, we take an average $\widehat{z}^k = (1/m)\sum_{i=1}^m Q_i\widehat{x}_i^k$. Based on this average,
 we compute a component-wise dispersion 
-$$\sigma_j:=\norm{ \left[(Q_i\widehat{x}_{i})_j - \widehat{z}_j\right]_{i=1,\dots,m} }$$ 
-for each component index $j=1,\dots,n_x$ using norm $\norm{\cdot}=\norm{\cdot}_{1}$, $\norm{\cdot}_2$, or $\norm{\cdot}_\infty$, and denote $\sigma:=(\sigma_j)_{j=1,\dots,n_x}$. 
-\item Another approach exchanges $\widehat{z}$ for $z^*$ (the latter of which is already computed in solving a node subproblem):
-$$\sigma_j:=\norm{ \left[(Q_i\widehat{x}_{i})_j - {z}_j\right]_{i=1,\dots,m} }.$$ 
-\item Next,
-$$ \sigma_j := \sum_{i=1,\dots,m} \sum_{t=1,\dots,T_i} \alpha_t \left| \widehat{x}_{i,j}^t(\omega^*) - x_{i,j}^* \right|, $$
-where $\widehat{x}_{i}^t$, $t=1,\dots,T_i$, are the columns used to form a convex combination $x_{i,j}^* = \sum_{t=1,\dots,T_i} \alpha_t\widehat{x}_{i}^t$
-with $0 \le \alpha_t \le 1$ for $t=1,\dots,T_i$ and $\sum_{t=1,\dots,T_i} \alpha_t = 1$.
-\item Using the dual solutions $\omega^*$, we take
+$$\sigma_j^k:=\norm{ \left[(Q_i\widehat{x}_{i}^k)_j - \widehat{z}_j^k\right]_{i=1,\dots,m} } + \norm{Qx^k-z^k}$$ 
+for each component index $j=1,\dots,n_x$ using norm $\norm{\cdot}=\norm{\cdot}_{1}$, $\norm{\cdot}_2$, or $\norm{\cdot}_\infty$, and denote $\sigma:=(\sigma_j)_{j=1,\dots,n_x}$. This is the approach [in Caroe and Schultz]. One quirk with this approach is that, at the optimal dual solution $\omega^*$, any of the previously generated solutions $\widehat{x} \in \widehat{x}(\omega^k)$ may also satisfy $\widehat{x} \in \widehat{\omega}^*$. This is especially true in the typically satisfied case that $c \in Z$. Also, the approach does not use information from the dispersions $\norm{x^* - \proj_X(x^*)}$. The latter issue is addressed with the following modification to $\sigma_j^k$:
+$$
+\sigma_j^k:=\norm{ \left[([\sigma_X]_i+\epsilon)[Q_i\widehat{x}_{i}^k) - \widehat{z}_i^k]_j\right]_{i=1,\dots,m} } + \norm{Qx^k-z^k}
+$$
+\item Let $\widehat{x}^t \in \widehat{x}(\omega^t)$ for $t=0,1,\dots,k$. Then another form of dispersion is given by:
+$$ \sigma_j := \sum_{i=1,\dots,m} \sum_{t=1,\dots,k} \alpha_t \left|Q_i\left( \widehat{x}_{i,j}^t - x_{i,j}^k \right) \right| + \rho_{i,j}\left| Q_i x_{i,j}^k - z_j^k \right|, $$
+where $0 \le \alpha_t \le 1$ for $t=1,\dots,T_i$ and $\sum_{t=1,\dots,T_i} \alpha_t = 1$ are the convex multipliers used to form a convex combination $x^k = \sum_{t=1,\dots,k} \alpha_t\widehat{x}^t$.
+\end{enumerate}
+
+\begin{remark}
+We also considered using a measure of the dispersion of the dual solutions $\omega^k$, taking
 $$
 \sigma_j := \norm{\left[\omega_{i,j}\right]_{i=1,\dots,m}}.
 $$
-\end{enumerate}
+This approach is (somewhat) sensible for when restricting the branching to variables with integrality restrictions, or when the disjunctions are otherwise strictly separated. It is otherwise an ill-defined approach, in that optimal dual solutions are typically non-unique, especially when bounding constraints are being added. Any further thoughts on this matter must take into account the set of dual optimal solutions.
+\end{remark}
 
-
-
-
+\section{Computational results}
 
 %%%%%%%%%%%%%%%%%%%% CONCLUSION AND FUTURE WORK %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion and future work}\label{SectConclusion}

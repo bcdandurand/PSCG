@@ -214,98 +214,104 @@ grestore
 %%while the issue of efficient parallelization is addressed by the integration of a nonlinear block Gauss-Seidel approach with the proximal point methodology while maintaining practical implementability. %We then specialize this approach to an application in stochastic mixed-integer programming for computing Lagrangian dual bounds efficiently and in parallel.
 The problem of interest has the form
 \begin{equation}\label{P1}
-f^*:=\min_{x,z} \braces{f(x) : Qx=z, x \in X, z \in Z},
+f^*:=\min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ c^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i,  x_i=z \text{ for }i=1,\dots,m,\; z \in \mathbb{R}^{n_1}},
 \end{equation}
-where $f$ is convex and continuously differentiable, $Q \in \mathbb{R}^{q \times n}$ is a block-diagonal matrix determining linear constraints $Qx=z$, $X\subset \mathbb{R}^n$ is a closed and bounded set, and $Z\subset \mathbb{R}^q$ is a linear subspace. The vector $x \in X$ of decision variables  is derived from the original decisions associated with a problem, while the vector $z \in Z$ of auxiliary variables are introduced to effect a decomposable structure in~\eqref{P1}. The block diagonal components of $Q$ are denoted $Q_i \in \mathbb{R}^{q_i \times n_i}$, $i=1,\dots,m$.
+where $K$ is a bounded polyhedral set intersected with mixed-integrality constraints. 
+%where The vector $x \in X$ of decision variables  is derived from the original decisions associated with a problem, while the vector $z \in Z$ of auxiliary variables are introduced to effect a decomposable structure in~\eqref{P1}. The block diagonal components of $Q$ are denoted $Q_i \in \mathbb{R}^{q_i \times n_i}$, $i=1,\dots,m$.
 %Once the constraint $Qx=z$ is relaxed, the decomposable structure of~\eqref{P1} becomes evident due to the following structural assumptions:
 %\begin{enumerate}
 %\item $X=X_1 \times \cdots \times X_m \subset \mathbb{R}^{n_1} \times \cdots \times \mathbb{R}^{n_m}$ with $\sum_{i=1}^m n_i = n$, so that we may write $x=(x_1,\dots,x_m)$,
 %\item $Q$ is a block diagonal matrix with block diagonal components $Q_i \in \mathbb{R}^{q_i \times n_i}$,
 %\item $f(x)=\sum_{i=1}^m f_i(x_i)$ where $f_i : \mathbb{R}^{n_i} \mapsto \mathbb{R}$ are convex and continuously differentiable for $i=1,\dots,m$.
 %\end{enumerate} 
-Problem~\eqref{P1} is general enough to subsume, for example, the split-variable deterministic reformulation of a stochastic optimization problem with potentially multiple stages, as defined, for example, in~\cite{BirgeLouveaux2011}, while it can also model the case where $f$ is nonlinear (and convex) and/or $X$ is any compact (but not necessarily convex) set.
+%Problem~\eqref{P1} is general enough to subsume, for example, the split-variable deterministic reformulation of a stochastic optimization problem with potentially multiple stages, as defined, for example, in~\cite{BirgeLouveaux2011}, while it can also model the case where $f$ is nonlinear (and convex) and/or $X$ is any compact (but not necessarily convex) set.
 
 We develop a branch-and-bound approach to solving~\eqref{P1} based on solving Lagrangian relaxations due to relaxing $Qx=z$.
 At each node, we use the recently developed algorithm SDM-GS-ALM to solve two equivalent characterizations of the Lagrangian dual problem.
 The Lagrangian dual function is defined 
-$$\phi(\omega) := \min_{x,z} \braces{f(x) + \omega^\top (Qx-z) : x \in X, z \in Z}.$$ 
-Under the dual feasibility condition $\omega \in Z^\perp$, we have 
-$$\phi(\omega) = \min_x \braces{f(x) + \omega^\top Qx : x \in X}.$$ 
-When $f$ is not linear, we also need to refer to the convexified Lagrangian dual funciton  
-$\phi^C(\omega) := \min_{x,z} \braces{f(x) + \omega^\top (Qx-z) : x \in \conv(X), z \in Z},$ 
-for which analogously,
-we have 
-\begin{equation}\label{PhiC}
-\phi^C(\omega) = \min_x \braces{f(x) + \omega^\top Qx : x \in \conv(X)}
-\end{equation} 
-when $\omega \in Z^\perp$. Optimal solutions to problem~\eqref{PhiC} will be referred to generically as $\widehat{x}(\omega)$. 
-\begin{remark}
-Under the assumption that $\conv(X)$ is not known beforehand by any characterization, direct evaluation of $\phi^C$ or any of its subgradients at any $\omega \in Z^\perp$ is not possible. 
-This dual function is only treated indirectly in the following algorithms.
-%Nevertheless, the necessity of referring to  $\phi^C$  will become clear later in this section. %Also, problem~\eqref{P1ConvB} is the primal characterization to~\eqref{P2C}.
-\end{remark}
+$$\phi(\omega) := \min_{x,y,z} \braces{p_i \left[ c^\top x_i + \omega_i^\top(x_i-z) + d_i^\top y_i \right] : (x_i,y_i) \in K_i, z \in \mathbb{R}^{n_1}}.$$ 
+Under the dual feasibility condition $\sum_{i=1}^m p_i \omega_i = 0$, we have 
+$$\phi(\omega) = \min_{x,y,z} \braces{p_i \left[ \left(c+\omega_i\right)^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i, z \in \mathbb{R}^{n_1}}$$ 
+%When $f$ is not linear, we also need to refer to the convexified Lagrangian dual funciton  
+%$\phi^C(\omega) := \min_{x,z} \braces{f(x) + \omega^\top (Qx-z) : x \in \conv(X), z \in Z},$ 
+%for which analogously,
+%we have 
+%\begin{equation}\label{PhiC}
+%\phi^C(\omega) = \min_x \braces{f(x) + \omega^\top Qx : x \in \conv(X)}
+%\end{equation} 
+%when $\omega \in Z^\perp$. 
+%Optimal solutions to problem~\eqref{PhiC} will be referred to generically as $\widehat{x}(\omega)$. 
+%\begin{remark}
+%Under the assumption that $\conv(X)$ is not known beforehand by any characterization, direct evaluation of $\phi^C$ or any of its subgradients at any $\omega \in Z^\perp$ is not possible. 
+%This dual function is only treated indirectly in the following algorithms.
+%%Nevertheless, the necessity of referring to  $\phi^C$  will become clear later in this section. %Also, problem~\eqref{P1ConvB} is the primal characterization to~\eqref{P2C}.
+%\end{remark}
 
 
 
-The (conviexified) Lagrangian dual problem is:
+The Lagrangian dual problem is:
 \begin{equation}\label{D1}
-\phi_C^*:=\max_{\omega \in \Omega} \phi^C(\omega).
+\phi^*:=\max_{\omega \in \Omega} \phi(\omega).
 \end{equation}
-Its well-known primal characterization is
+Its well-known primal characterization takes the form
 \begin{equation}\label{D2}
-\phi_C^*=\min_{x,z} \braces{f(x) : Qx=z, x \in \conv(X), z \in Z},
+f_C^*:=\min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ c^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in \conv(K_i),  x_i=z \text{ for }i=1,\dots,m,\; z \in \mathbb{R}^{n_1}}.
 \end{equation}
+It is well-known that $f_C^*=\phi^*$, although in general, $\phi^* \le f^*$, with $\phi^* < f^*$ being typical with the presence of mixed-integrality constraints on $x$ and $y$.
 
-It is straightforward from the definitions that $\phi^C(\omega) \le \phi(\omega)$ for all dual feasible $\omega \in Z^\perp$. 
-In the case when $f$ is linear, we have $\phi^C(\omega) = \phi(\omega)$ for all $\omega \in Z^\perp$ and so $\phi^*=\phi_C^*$.
-%and the primal characterizations~\eqref{P1Conv} and~\eqref{P1ConvB} of the respective dual problems are equivalent.
-But in the general case where $f$ is nonlinear, the dual~\eqref{P2C} can be ``weaker'' than~\eqref{P2}, where $\phi_C^* < \phi^*$ can occur,
-which we see in the following example.
-%, andthe primal characterizations ~\eqref{P1Conv} and~\eqref{P1ConvB} of the respective dual problems are not equivalent. 
-Let $f : \mathbb{R}^2 \mapsto \mathbb{R}$ be defined by $f(x)=(x_1-0.5)^2+(x_2-0.5)^2$, $X=\braces{0,1} \times \braces{0,1}$, and let $Qx=z$ be defined to model the constraints $x_1 -z_1 = 0$ and $x_2 - z_2 = 0$ where $Z = \braces{(z_1,z_2) : z_1=z_2} \subset \mathbb{R}^2$. We see trivially that $\phi_C^* = 0$, which is verified with the saddle point $x_1^*=x_2^*=z_1^*=z_2^*=0.5$ and $\omega^*=(0,0)$. However,
-$\phi^* = 0.5$, which is verified with either of the saddle points $x_1^*=x_2^*=z_1^*=z_2^*=0$ and $\omega^*=(0,0)$, or $x_1^*=x_2^*=z_1^*=z_2^*=1$ and $\omega^*=(0,0)$. Thus,  $\phi_C^* < \phi^*$.
 
-Dual optimal solutions to~\eqref{D1}, when they exist, are generically denoted by $\omega^*$, and corresponding optimal primal solution verifying the value $\phi_C(\omega^*)$ is denoted by $\widehat{x}(\omega^*)$. The optimal solutions to the second characterization~\eqref{D2}, when they exist, are denoted $(x^*,z^*)$. We shall denote the set 
-$$X_Z := \braces{ x \in X : \exists \; z \in Z \; \text{s.t.} \; Qx=z}.$$ 
-It is straightforward to show that $\conv(X_Z) = \braces{x \in \conv(X)  : \exists \; z \in Z \; \text{s.t.} \; Qx=z}$ under the assumption that $Z$ is convex.
+%It is straightforward from the definitions that $\phi^C(\omega) \le \phi(\omega)$ for all dual feasible $\omega \in Z^\perp$. 
+%In the case when $f$ is linear, we have $\phi^C(\omega) = \phi(\omega)$ for all $\omega \in Z^\perp$ and so $\phi^*=\phi_C^*$.
+%%and the primal characterizations~\eqref{P1Conv} and~\eqref{P1ConvB} of the respective dual problems are equivalent.
+%But in the general case where $f$ is nonlinear, the dual~\eqref{P2C} can be ``weaker'' than~\eqref{P2}, where $\phi_C^* < \phi^*$ can occur,
+%which we see in the following example.
+%%, andthe primal characterizations ~\eqref{P1Conv} and~\eqref{P1ConvB} of the respective dual problems are not equivalent. 
+%Let $f : \mathbb{R}^2 \mapsto \mathbb{R}$ be defined by $f(x)=(x_1-0.5)^2+(x_2-0.5)^2$, $X=\braces{0,1} \times \braces{0,1}$, and let $Qx=z$ be defined to model the constraints $x_1 -z_1 = 0$ and $x_2 - z_2 = 0$ where $Z = \braces{(z_1,z_2) : z_1=z_2} \subset \mathbb{R}^2$. We see trivially that $\phi_C^* = 0$, which is verified with the saddle point $x_1^*=x_2^*=z_1^*=z_2^*=0.5$ and $\omega^*=(0,0)$. However,
+%$\phi^* = 0.5$, which is verified with either of the saddle points $x_1^*=x_2^*=z_1^*=z_2^*=0$ and $\omega^*=(0,0)$, or $x_1^*=x_2^*=z_1^*=z_2^*=1$ and $\omega^*=(0,0)$. Thus,  $\phi_C^* < \phi^*$.
+
+Dual optimal solutions to~\eqref{D1}, when they exist, are generically denoted by $\omega^*$, and and the set of corresponding optimal primal solutions verifying the value $\phi(\omega^*)$ is denoted by $K^*(\omega^*)$. The optimal solutions to the second characterization~\eqref{D2}, when they exist, are denoted $(x^*,y^*,z^*)$. We shall denote the set $Z:=\braces{(x,y) \in K : \exists \; z \in \mathbb{R}^n \; \text{s.t.} \; x_i=z\; \text{for }i=1,\dots,m}$. 
+%$$K_Z := \braces{ (x,y) \in K : \exists \; z \in \mathbb{R}^n \; \text{s.t.} \; x_i=z\; \text{for }i=1,\dots,m}.$$ 
+%It is straightforward to show that $\conv(X_Z) = \braces{x \in \conv(X)  : \exists \; z \in Z \; \text{s.t.} \; Qx=z}$ under the assumption that $Z$ is convex.
 
 We shall use both characterizations~\eqref{D1} and~\eqref{D2} to inform different ways of branching on variables and branching values. 
 \begin{enumerate}
-\item Viewing the node subproblems as instances of problem~\eqref{D2}, we have optimal solutions $(x^*,z^*)$ to problem~\eqref{D2} that satisfy 
-$$(x^*,z^*) \in \braces{(x,z) : x \in \conv(X), z \in Z, Qx=z},$$ 
-but $x^* \not\in X$ in the case of strict duality gap $\phi_C^* < f^*$. Thus we project $x^*$ onto $X$, denoting the projection by $P_X(x^*)$. (When $X$ is defined by polyhedral and mixed-integer constraints, this projection can just take the form of rounding the components of $x$ with integer restrictions to their nearest integer values.) We would consider the discrepancies $x^* - \proj_X(x^*)$ and their dispersions. Under this paradigm, bounding is applied to $X$.
-\item Viewing the node subproblems as instances of problem~\eqref{D1}, assuming we have a dual optimal solution $\omega^*$, we have corresponding sets of primal certificate solutions $\widehat{x}(\omega^*)$. For these solutions, we have $Q\widehat{x}(\omega^*) \cap  Z = \emptyset$ in the case of duality gap $\phi_C^* < f^*$. We consider one of two projections:
+\item Viewing the node subproblems as instances of problem~\eqref{D2}, we have optimal solutions $(x^*,y^*,z^*)$ to problem~\eqref{D2} that satisfy 
+$$(x^*,y^*,z^*) \in \braces{(x,y,z) : (x,y) \in \conv(K), x_i=z,\; i=1,\dots,m},$$ 
+but $(x^*,y^*) \not\in K$ in the case of strict duality gap $\phi_C^* < f^*$. Thus we would project $(x^*,y^*)$ onto $K$, denoting the projection by $\proj_K((x^*,y^*))$. (Given that $K$ is defined by polyhedral and mixed-integer constraints, this projection can just take the form of rounding the components of $(x,y)$ with integer restrictions to their nearest integer values.) We would consider the discrepancies $(x^*,y^*) - \proj_K((x^*,y^*))$ and their dispersions. 
+%Under this paradigm, bounding is applied to $K$.
+\item Viewing the node subproblems as instances of problem~\eqref{D1}, assuming we have a dual optimal solution $\omega^*$, we have corresponding sets of primal certificate solutions $K^*(\omega^*)$. For these solutions, we have $K^*(\omega^*) \cap  Z = \emptyset$ in the case of duality gap $\phi_C^* < f^*$. We consider one of two projections:
 \begin{enumerate}
-\item Take the projection $\proj_Z(Q\widehat{x}(\omega^*))$. Conceptually, we want to accumulate the dispersions in some set-wise or point-wise fashion.
-The important thing to note is that under this line of thought, we do not consider the dispersion of only one $\widehat{x} \in \widehat{x}(\omega^*)$, but the entire set $\widehat{x}(\omega^*)$, which is contained in the highest dimensional face of $\conv(X)$ for which $z^*$ is in its relative interior.
-\item Rather than projection, we use the information from $x^*$, $z^*$ and $\omega^*$. (Or, more practically, $x^k$, $z^k$ and $\omega^k$.) We still work with the set $Q\widehat{x}(\omega^k)$, whose vertex description is available from computing $\widehat{x}^t \in \widehat{x}(\omega^t)$ at each iteration $t=1,\dots,k$.
+\item Take the projection $\proj_Z(K(\omega^*))$. Conceptually, we want to accumulate the dispersions in some set-wise or point-wise fashion.
+Ideally, we do not consider the dispersion of only one $\widehat{x} \in K^*(\omega^*)$, but the entire set $K^*(\omega^*)$, which is contained in the highest dimensional face of $\conv(K)$ for which $(x^*,y^*)$ is in its relative interior.
+\item Rather than projection, we use the information from $x^*$, $z^*$ and $\omega^*$. (Or, more practically, $x^k$, $z^k$ and $\omega^k$.) We still work with the set $K^*(\omega^k)$, whose vertex description is available from computing $\widehat{x}^t \in K^*(\omega^t)$ at each iteration $t=1,\dots,k$.
 %Take the projection of $Q\widehat{x}(\omega^*)$ onto $Q\conv(X) \cap Z$, denoted by 
 %$$P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*)).$$ We shall show that
 %$z^*$ is an element of $P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*))$, and so we consider the discrepancies $Q\widehat{x}(\omega^*)-z^*$.
 \end{enumerate}
-Under this paradigm bounds are applied (conceptually) to $Z$, but in implementational practice, still on $X$.
+%Under this paradigm bounds are applied (conceptually) to $Z$, but in implementational practice, still on $X$.
 \end{enumerate}
 
 
 
-Due to the large number of variables that would be branched on under the first approach, we do not consider branching based on the first approach, although we do use the dispersions from the first approach discrepancies to inform branching based on the second approach. Thus, conceptually, we branch in the ambient space of $Z$.
-Branching occurs on components $z_i$ of $z$ that either violate integrality constraints, or that show dispersion from some consensus value associated with other violated constraints.
-The constraints added due to branching are denoted $Qx \in B$. Based on this constraint, define $X_B:=\braces{x \in X : Qx \in B}$, so that we define, respectively,
+Due to the large number of variables that would be branched on under the first approach, branching is not based on the first approach. Although we do use the dispersions from the first approach discrepancies to inform branching based on the second approach. 
+%Thus, conceptually, we branch in the ambient space of $Z$.
+Branching occurs on components $x_{i,j}$ of each $x_i$ that either violate integrality constraints, or that show dispersion from some consensus value associated with other violated constraints.
+The constraints added due to branching are denoted $x \in B$. Based on this constraint, define $K_B:=\braces{(x,y) \in K : x \in B}$, so that we define, respectively,
 \begin{equation}\label{P1B}
-f_B^*:=\min_{x,z} \braces{f(x) : Qx=z, x \in X_B,\; z \in Z},
+f_B^*:=\min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ c^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i,\; x_i \in B_i,\;  x_i=z \text{ for }i=1,\dots,m,\; z \in \mathbb{R}^{n_1}},
 \end{equation}
 \begin{equation}\label{D1B}
-\phi_{B}^{C*}:=\max_{\omega \in \Omega} \phi_B^C(\omega).
+\phi_{B}^*:=\max_{\omega \in \Omega} \phi_B(\omega).
 \end{equation}
 with
 \begin{equation}\label{PhiCB}
-\phi_B^C(\omega) = \min_x \braces{f(x) + \omega^\top Qx : x \in \conv(X_B)}
+\phi_B(\omega) = \min_{x,y,z} \braces{p_i \left[ \left(c+\omega_i\right)^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i,\; x_i \in B_i,\; z \in \mathbb{R}^{n_1}}
 \end{equation} 
 and
 \begin{equation}\label{D2B}
-\phi_{B}^{C*}=\min_{x,z} \braces{f(x) : Qx=z, x \in \conv(X_B),\; z \in Z},
+\phi_{B}^*=\min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ c^\top x_i + d_i^\top y_i \right] : \begin{array}{c}(x_i,y_i) \in \conv(K_i \cap B_i),\\  x_i=z \text{ for }i=1,\dots,m,\\ z \in \mathbb{R}^{n_1}\end{array}}.
 \end{equation}
-Note that we may use either the constraints $z \in B$ or $Qx \in B$ interchangeably as the context warrants.
+%Note that we may use either the constraints $z \in B$ or $Qx \in B$ interchangeably as the context warrants.
 
 
 
@@ -315,23 +321,23 @@ During each node processing of the branch-and-bound, an attempt is made to find 
 \item The oracle terminates due to the objective value exceeding the incumbent value (fathoming due to bound), or due to subproblem infeasibility.
 %We shall see that this form of termination also catches all forms of subproblem infeasibility (as the infimum of~\eqref{EQBBSP} is infinity; this is where the need for a finite incumbent value arises).
 \item The oracle terminates due to optimality of~\eqref{P1B} within pre-specified precision. 
-That is $\norm{x^* - \proj_X(x^*)} + \norm{Qx^* - z^*} < \epsilon$. The node is fathomed after testing whether $f_B^* < \upsilon$
-and updating $\upsilon \gets f_B^*$ if that is the case.
-\item Otherwise, branchings (in $\mathbb{R}^m$) need to be determined.
+That is $\norm{(x^*,y^*) - \proj_K(x^*,y^*)} + \sum_{i=1}^m \norm{x_i^* - z^*} < \epsilon$. The node is fathomed after testing whether $f_B^* < \upsilon$
+and updating $\upsilon \gets f_B^*$ if that is the case. (In Caroe and Schultz, it is the vertex solutions $(\widehat{x},\widehat{y})$ that are tested only, so that the criterion is $\norm{\widehat{x}_i - \widehat{z}} < \epsilon$, where $\widehat{z}$ is some averaging of $\widehat{x}_i$, $i=1,\dots,m$.)
+\item Otherwise, branchings need to be determined.
 \end{enumerate}
 
 \begin{algorithm}[H]
 \begin{algorithmic}
  \State {\bf Definitions:} 
- \State \quad\quad$\mathcal{S}:=\braces{f,Q,X,Z,B}$, $\mathcal{P}:=\braces{\rho,\gamma, \epsilon, t_{max}, k_{max}}$
+ \State \quad\quad$\mathcal{S}:=\braces{f,K,B}$, $\mathcal{P}:=\braces{\rho,\gamma, \epsilon, t_{max}, k_{max}}$
  \State \quad\quad$\upsilon$ is an incumbent value, and 
- \State \quad\quad$\left( \widetilde{x}, \widetilde{z} \right)$ is a corresponding incumbent feasible solution for~\eqref{P1} for which $\upsilon = F(\widetilde{z})$
+% \State \quad\quad$\left( \widetilde{x}, \widetilde{y}, \widetilde{z} \right)$ is a corresponding incumbent feasible solution for~\eqref{P1} for which $\upsilon = F(\widetilde{z})$
  \State {\bf Precondition:} 
  \State \quad\quad It is assumed that the value of the current node has been checked to not exceed the incumbent value $\upsilon$ 
 \end{algorithmic}
 \begin{algorithmic}
-\Function{Process}{$\mathcal{S}$, $\mathcal{P}$, $\omega^0$, $\upsilon$, $\left( \widetilde{x}, \widetilde{z} \right)$}
-  \State $\left(\widehat{x}^{*},x^{*},z^{*},\omega^{*},\widecheck{\phi}^{*}\right) \gets \textbf{bound}(\mathcal{S}$, $\mathcal{P}$ $\omega^0)$
+\Function{Process}{$\mathcal{S}$, $\mathcal{P}$, $\omega^0$, $\upsilon$, $\left( \widetilde{x}, \widetilde{y}, \widetilde{z} \right)$}
+  \State $\left(K^{*}(\omega^*),(x^{*},y^*,z^{*}),\omega^{*},{\phi}^{*}\right) \gets \textbf{bound}(\mathcal{S}$, $\mathcal{P}$ $\omega^0)$
 % \State $(D^0, x^0, z^0, \omega^0, \widecheck{\phi}^{0}) \gets$ Initialize($\mathcal{S},\left( \widetilde{x}, \widetilde{z} \right)$), $\textbf{term}\gets\textbf{false}$, $k \gets 0$
 %\While{$\neg (\widecheck{\phi}^{k} > \upsilon \; \textbf{or}\; \textbf{term})$} 
 % \State $(\widehat{x}^{k+1},x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, \textbf{term}) \gets \text{PSCG}(\mathcal{S},\mathcal{P},D^k,x^k,z^k,\omega^k,\widecheck{\phi}^k)$
@@ -342,23 +348,23 @@ and updating $\upsilon \gets f_B^*$ if that is the case.
  \State $\mathcal{B} \gets \emptyset$
  \State \textbf{return} $(\upsilon, \widetilde{z}, \mathcal{B})$
 \EndIf
-\State $\mathcal{B} \gets \textbf{findBranchings}(\widehat{x}^{*}, z^{*})$
-\State $(\widetilde{z},\upsilon) \gets \textbf{findFeasibleSolution}(z^{*},\omega^{*},\mathcal{S},\mathcal{P})$ (Note that any solution $\widetilde{z}$ found will satisfy $\widetilde{z} \in B$.)
+\State $\mathcal{B} \gets \textbf{findBranchings}(K^{*}(\omega^*),(x^{*},y^*,z^{*}),\omega^{*})$
+\State $(\widetilde{x},\widetilde{y},\widetilde{z},\upsilon) \gets \textbf{findFeasibleSolution}(z^{*},\omega^{*},\mathcal{S},\mathcal{P})$ %(Note that any solution $\widetilde{z}$ found will satisfy $\widetilde{z} \in B$.)
 \If{$\mathcal{B} \neq \emptyset $}
 \State \textbf{node needs to branch}
 \Else
 \State \textbf{fathom node}  (Due to optimality)
 \EndIf
-\State \textbf{return} $(\upsilon, \widetilde{z}, \mathcal{B})$
+\State \textbf{return} $(\widetilde{x},\widetilde{y},\widetilde{z},\upsilon), \mathcal{B})$
 \EndFunction
 \Function{bound}{$\mathcal{S}$, $\mathcal{P}$ $\omega^0$}
 \State $(D^0,x^0,z^0,\omega^0,\widecheck{\phi}^0) \gets$ Initialize($\mathcal{S},\mathcal{P},\omega^0$)
 \State $k \gets 0$, $\textbf{term}\gets\textbf{false}$
 \While{$\neg (\widecheck{\phi}^{k} > \upsilon \; \textbf{or}\; \textbf{term})$} 
- \State $(\widehat{x}^{k+1},x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, \textbf{term}) \gets \text{PSCG}(\mathcal{S},\mathcal{P},D^k,x^k,z^k,\omega^k,\widecheck{\phi}^k)$
+ \State $(K^*(\omega^{k+1}), (x^{k+1},y^{k+1},z^{k+1}),\omega^{k+1},{\phi}^{k+1}, \textbf{term}) \gets \text{PSCG}(\mathcal{S},\mathcal{P},D^k,x^k,z^k,\omega^k,\widecheck{\phi}^k)$
  \State $k \gets k+1$
 \EndWhile
-\State \textbf{return} $\left(\widehat{x}^{k},x^{k},z^{k},\omega^{k},\widecheck{\phi}^{k}\right)$
+\State \textbf{return} $\left(K^*(\omega^{k}), (x^{k},y^{k},z^{k}),(\widetilde{x},\widetilde{y},\widetilde{z}),\omega^{k},{\phi}^{k},\upsilon\right)$
 \EndFunction
 \end{algorithmic}
 \end{algorithm}
@@ -521,15 +527,17 @@ is defined. The diagonal matrix whose diagonal entries are taken from $\sigma_X$
 We have the following approaches at measuring dispersion from the constraint $Qx=z$ at iteration $k$:
 \begin{enumerate}
 \item Given a dual feasible solution $\omega^k$, for some $\widehat{x}^k \in \widehat{x}(\omega^k)$, 
-setting $\widehat{x}^k=(\widehat{x}_i^k)_{i=1,\dots,m}$, we take an average $\widehat{z}^k = (1/m)\sum_{i=1}^m Q_i\widehat{x}_i^k$. Based on this average,
+setting $\widehat{x}^k=\brackets{\widehat{x}_i^k}_{i=1,\dots,m}$, we take an average $\widehat{z}^k = \proj_Z(Q\widehat{x}^k)$. Based on this average,
 we compute a component-wise dispersion 
-$$\sigma_j^k:=\norm{ \left[(Q_i\widehat{x}_{i}^k)_j - \widehat{z}_j^k\right]_{i=1,\dots,m} } + \norm{Qx^k-z^k}$$ 
-for each component index $j=1,\dots,n_x$ using norm $\norm{\cdot}=\norm{\cdot}_{1}$, $\norm{\cdot}_2$, or $\norm{\cdot}_\infty$, and denote $\sigma:=(\sigma_j)_{j=1,\dots,n_x}$. This is the approach [in Caroe and Schultz]. One quirk with this approach is that, at the optimal dual solution $\omega^*$, any of the previously generated solutions $\widehat{x} \in \widehat{x}(\omega^k)$ may also satisfy $\widehat{x} \in \widehat{\omega}^*$. This is especially true in the typically satisfied case that $c \in Z$. Also, the approach does not use information from the dispersions $\norm{x^* - \proj_X(x^*)}$. The latter issue is addressed with the following modification to $\sigma_j^k$:
+$$\sigma_j^k:=\sum_{i=1,\dots,m} \left| \brackets{Q_i\widehat{x}_i^k - \widehat{z}_i^k}_j \right|$$% +  \left| \brackets{Q_i{x}_i^k - {z}_i^k}_j \right|$$ 
+for each component index $j=1,\dots,n_x$, and denote $\sigma:=\brackets{\sigma_j}_{j=1,\dots,n_x}$. This is the approach [in Caroe and Schultz]. One quirk with this approach is that, at the optimal dual solution $\omega^*$, any of the previously generated solutions $\widehat{x} \in \widehat{x}(\omega^k)$ may also satisfy $\widehat{x} \in \widehat{\omega}^*$. This is especially true in the typically satisfied case that $c \in Z$. Also, the approach does not use information from the dispersions $\norm{x^* - \proj_X(x^*)}$. The latter issue is addressed with the following modification to $\sigma_j^k$:
 $$
 \sigma_j^k:=\norm{ \left[([\sigma_X]_i+\epsilon)[Q_i\widehat{x}_{i}^k) - \widehat{z}_i^k]_j\right]_{i=1,\dots,m} } + \norm{Qx^k-z^k}
 $$
-\item Let $\widehat{x}^t \in \widehat{x}(\omega^t)$ for $t=0,1,\dots,k$. Then another form of dispersion is given by:
-$$ \sigma_j := \sum_{i=1,\dots,m} \sum_{t=1,\dots,k} \alpha_t \left|Q_i\left( \widehat{x}_{i,j}^t - x_{i,j}^k \right) \right| + \rho_{i,j}\left| Q_i x_{i,j}^k - z_j^k \right|, $$
+\item Let $\widehat{x}^t \in \widehat{x}(\omega^t)$ for $t=0,1,\dots,k$. We have for each $i=1,\dots,m$ that $x_i^k = \sum_{t} \alpha^t \widehat{x}^t$. Then another form of dispersion is given by:
+$$
+\sigma_j := \sum_{i=1,\dots,m} \beta_i \sum_{t=1,\dots,k} \alpha_t \left|Q_i \widehat{x}_{i,j}^t - z_{i,j}^k \right| $$
+$$ \sigma_j := \frac{1}{\sum_{i=1} [\sigma_X]_i+\epsilon}\sum_{i=1,\dots,m} [\sigma_X+\epsilon]_i \sum_{t=1,\dots,k} \alpha_t \left|Q_i\left( \widehat{x}_{i,j}^t - x_{i,j}^k \right) \right| + \rho_{i,j}\left| Q_i x_{i,j}^k - z_j^k \right|, $$
 where $0 \le \alpha_t \le 1$ for $t=1,\dots,T_i$ and $\sum_{t=1,\dots,T_i} \alpha_t = 1$ are the convex multipliers used to form a convex combination $x^k = \sum_{t=1,\dots,k} \alpha_t\widehat{x}^t$.
 \end{enumerate}
 

@@ -257,7 +257,7 @@ Its well-known primal characterization takes the form
 \begin{equation}\label{D2}
 f_C^*:=\min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ c^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in \conv(K_i),  x_i=z \text{ for }i=1,\dots,m,\; z \in \mathbb{R}^{n_1}}.
 \end{equation}
-It is well-known that $f_C^*=\phi^*$, although in general, $\phi^* \le f^*$, with $\phi^* < f^*$ being typical with the presence of mixed-integrality constraints on $x$ and $y$.
+It is well-known [under our standing assumptions] that $f_C^*=\phi^*$, although in general, $\phi^* \le f^*$, with $\phi^* < f^*$ being typical with the presence of mixed-integrality constraints on $x$ and $y$.
 
 
 %It is straightforward from the definitions that $\phi^C(\omega) \le \phi(\omega)$ for all dual feasible $\omega \in Z^\perp$. 
@@ -358,7 +358,7 @@ and updating $\upsilon \gets f_B^*$ if that is the case. (In Caroe and Schultz, 
 \State \textbf{return} $(\widetilde{x},\widetilde{y},\widetilde{z},\upsilon), \mathcal{B})$
 \EndFunction
 \Function{bound}{$\mathcal{S}$, $\mathcal{P}$ $\omega^0$}
-\State $(D^0,x^0,z^0,\omega^0,\widecheck{\phi}^0) \gets$ Initialize($\mathcal{S},\mathcal{P},\omega^0$)
+\State $(D^0,x^0,z^0,\omega^0,{\phi}^0) \gets$ Initialize($\mathcal{S},\mathcal{P},\omega^0$)
 \State $k \gets 0$, $\textbf{term}\gets\textbf{false}$
 \While{$\neg (\widecheck{\phi}^{k} > \upsilon \; \textbf{or}\; \textbf{term})$} 
  \State $(K^*(\omega^{k+1}), (x^{k+1},y^{k+1},z^{k+1}),\omega^{k+1},{\phi}^{k+1}, \textbf{term}) \gets \text{PSCG}(\mathcal{S},\mathcal{P},D^k,x^k,z^k,\omega^k,\widecheck{\phi}^k)$
@@ -373,14 +373,14 @@ and updating $\upsilon \gets f_B^*$ if that is the case. (In Caroe and Schultz, 
 
 \subsection{Parallel Stabilized Column Generation (PSCG)}
 
-In applying the AL method to problem~\eqref{P1ConvB}, 
+In applying the AL method to problem~\eqref{D2}, 
 the continuous master problem for fixed $\omega \in Z^\perp$ takes the form
 \begin{equation}\label{EqQMPConv}
-\phi_\rho^{AL}(\omega):=\min_{x,z} \braces{L_\rho(x,z,\omega), x \in \conv(X), z \in Z}
+\phi_\rho^{AL}(\omega):=\min_{x,y,z} \braces{L_\rho(x,y,z,\omega), (x,y) \in \conv(K), z \in Z}
 \end{equation}
-where the augmented Lagrangian (AL) relaxes $Qx=z$ and is defined by
+where the augmented Lagrangian (AL) relaxes $x_i=z$, $i=1,\dots,m$ and is defined by
 \begin{equation}\label{ALDefn}
-L_\rho(x,z,\omega):= f(x) + \omega^\top Qx + \frac{\rho}{2}\norm{Qx-z}_2^2.
+L_\rho(x,y,z,\omega):= \sum_{i=1,\dots,m} p_i\brackets{(c+\omega_i)^\top x_i + d_i^\top y_i + \frac{\rho}{2}\norm{x_i-z}_2^2}.
 \end{equation}
 
 
@@ -391,22 +391,22 @@ L_\rho(x,z,\omega):= f(x) + \omega^\top Qx + \frac{\rho}{2}\norm{Qx-z}_2^2.
 
 In the algorithm that follows, we use the following approximation $\widehat{\phi} : \mathbb{R}^q \times \mathbb{R}^n \times \mathbb{R}^q \mapsto \mathbb{R}$ of $\phi^C$ centered at $(x^k,z^k)$, $k \ge 0$, in place the cutting plane model:
 \begin{align*}
-\widehat{\phi}(\omega,x^k,z^k) := L_\rho(x^k,z^k,\omega) + \frac{\rho}{2} \norm{Qx^k-z^k}_2^2.
+\widehat{\phi}(\omega,x^k,y^k, z^k) := L_\rho(x^k,y^k,z^k,\omega) + \frac{\rho}{2} \sum_{i=1,\dots,m}\norm{x_i^k-z^k}_2^2.
 \end{align*}
 %where the augmented Lagrangian (AL) $L_\rho(x,z,\omega)$ is defined as in~\eqref{ALDefn}. 
 
 
 
-The convex hull $\conv(X)$ is not known explicitly, and so $\phi^C$ cannot be evaluated directly. 
-Consequently, we additionally make use of the following minorization $\widecheck{\phi}$ of $\phi^C$ that can be evaluated.
-For $x^k \in \conv(X)$, $k \ge 0$, define $\widecheck{\phi}(\omega,x^k)$ as follows:
-\begin{equation}\label{PhiCheck}
-\widecheck{\phi}(\omega,x^k) := \min_x \braces{f(x^k) + \nabla_x f(x^k)(x-x^k) + \omega^\top Qx : x \in X}.
-\end{equation}
-%Note that the $\conv$ is dropped due to the linear form of the objective function, and so the evaluation of $\widecheck{\phi}$ is practically implementable. 
-Observe that, due to the linearity of the objective function with respect to $x$ in~\eqref{PhiCheck}, the use of constraint sets $X$ and $\conv(X)$ are interchangeable, 
-and so in evaluating $\widecheck{\phi}$, an explicit description of  $\conv(X)$ is not required. 
-Furthermore, from the definition of $\phi^C$, the convexity of $f$ over $\mathbb{R}^n$, and the interchangeability of $X$ and $\conv(X)$ in~\eqref{PhiCheck}, it is clear that for all $x^k \in \mathbb{R}^n$, $k \ge 0$, we have $\phi^C(\omega) \ge \widecheck{\phi}(\omega,x^k)$. Furthermore, when $f$ is linear, we have $\phi^C(\omega) \equiv \widecheck{\phi}(\omega,x^k)$ for all $x^k$, $k \ge 0$; the two functions collapse into the same function with the centering at $x^k$ of the latter function now  irrelevant. 
+%The convex hull $\conv(X)$ is not known explicitly, and so $\phi^C$ cannot be evaluated directly. 
+%Consequently, we additionally make use of the following minorization $\widecheck{\phi}$ of $\phi^C$ that can be evaluated.
+%For $x^k \in \conv(X)$, $k \ge 0$, define $\widecheck{\phi}(\omega,x^k)$ as follows:
+%\begin{equation}\label{PhiCheck}
+%\widecheck{\phi}(\omega,x^k) := \min_x \braces{f(x^k) + \nabla_x f(x^k)(x-x^k) + \omega^\top Qx : x \in X}.
+%\end{equation}
+%%Note that the $\conv$ is dropped due to the linear form of the objective function, and so the evaluation of $\widecheck{\phi}$ is practically implementable. 
+%Observe that, due to the linearity of the objective function with respect to $x$ in~\eqref{PhiCheck}, the use of constraint sets $X$ and $\conv(X)$ are interchangeable, 
+%and so in evaluating $\widecheck{\phi}$, an explicit description of  $\conv(X)$ is not required. 
+%Furthermore, from the definition of $\phi^C$, the convexity of $f$ over $\mathbb{R}^n$, and the interchangeability of $X$ and $\conv(X)$ in~\eqref{PhiCheck}, it is clear that for all $x^k \in \mathbb{R}^n$, $k \ge 0$, we have $\phi^C(\omega) \ge \widecheck{\phi}(\omega,x^k)$. Furthermore, when $f$ is linear, we have $\phi^C(\omega) \equiv \widecheck{\phi}(\omega,x^k)$ for all $x^k$, $k \ge 0$; the two functions collapse into the same function with the centering at $x^k$ of the latter function now  irrelevant. 
 
 In \cite{previouspaper}, we developed an efficiently parallelizable iterative procedure to solving problem~\eqref{P2}. 
 In this paper, we incorporate this procedure as part of the bounding mechanism within a branch-and-bound approach....
@@ -417,94 +417,94 @@ For review purposes, the iterative dual procedure is given as follows.
 \caption{A regular iteration of PSCG.\label{AlgDualAscentGSSSC}}
 \begin{algorithmic}
 \State {\bf Preconditions:} 
-\State \quad\quad$x^k \in \conv(X)$, $z^k \in \argmin_z \braces{\norm{Qx-z}^2: z \in Z \cap B}$, $\omega^k \in Z^\perp$, 
-\State \quad\quad$\widecheck{\phi}^k = \widecheck{\phi}(\omega^k,x^k)$, $\braces{x^k + \alpha (\widehat{x} - x^k) : \alpha \in [0,1]} \subseteq {D} \subseteq \conv(X)$ where
-\State \quad\quad\quad\quad$\widehat{x} \in \argmin_x \braces{\nabla_x L_\rho(x^k,z^k,\omega^k) (x - {x}^k) : x \in X}$.
-\State \quad\quad$\mathcal{S}:=\braces{f,Q,X,Z,B}$, $\mathcal{P}:=\braces{\rho,\gamma, \epsilon, t_{max}, k_{max}}$
+\State \quad\quad$(x^k,y^k) \in \conv(K)$, $z^k \in \argmin_z \braces{\sum_{i=1,\dots,m}\norm{x_i-z}^2}$, $\omega^k \in \Omega$, 
+\State \quad\quad${\phi}^k = {\phi}(\omega^k)$, $\braces{(x^k,y^k) + \alpha ((\widehat{x},\widehat{y}) - (x^k,y^k)) : \alpha \in [0,1]} \subseteq {D} \subseteq \conv(K)$ where
+\State \quad\quad\quad\quad$(\widehat{x},\widehat{y}) \in \argmin_{x,y} \braces{\nabla_{x,y} L_\rho(x^k,y^k,z^k,\omega^k) [(x - {x}^k);(y-y^k)] : (x,y) \in K}$.
+\State \quad\quad$\mathcal{S}:=\braces{c,d,K,B}$, $\mathcal{P}:=\braces{\rho,\gamma, \epsilon, t_{max}, k_{max}}$
 \end{algorithmic}
 \begin{algorithmic}[1]
-\Function{PSCG}{$\mathcal{S}$, $\mathcal{P}$, $D^k$, $x^k$, $z^k$, $\omega^k$, $\widecheck{\phi}^{k}$ }  
+\Function{PSCG}{$\mathcal{S}$, $\mathcal{P}$, $D^k$, $x^k$, $y^k$, $z^k$, $\omega^k$, ${\phi}^{k}$ }  
        \For{$k=1,2,\dots,k_{max}$}
-       \State Initialize $\omega^{k+1} \gets \omega^{k}$, $\widecheck{\phi}^{k+1} \gets \widecheck{\phi}^{k}$ \Comment{(Default, null-step updates)}
-       \State $(\widehat{x}^{k+1},x^{k+1},z^{k+1},D^{k+1},\Gamma) \gets$ SDM-GS($L_\rho(\cdot,\cdot,\omega^k)$, $X$, $Z \cap B$, $D^k$, $x^{k}$, $z^{k}$, $t_{max}$) \label{ReturnSDMGS}
-       \If{$L_\rho({x}^{k+1},{z} ^{k+1},\omega^k) + \frac{\rho}{2} \norm{Q{x}^{k+1}-{z}^{k+1}}_2^2-\widecheck{\phi}^k \le \epsilon$} \label{Alg4BeginTermCond}
-       	\State {\bf return} $(x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, D^{k+1}, \textbf{true})$
+       \State Initialize $\omega^{k+1} \gets \omega^{k}$, ${\phi}^{k+1} \gets {\phi}^{k}$ \Comment{(Default, null-step updates)}
+       \State $(\widehat{x}^{k+1},(x^{k+1},y^{k+1},z^{k+1}), D^{k+1},\Gamma) \gets$ SDM-GS($L_\rho(\cdot,\cdot,\cdot,\omega^k)$, $K \cap B$, $D^k$, $x^{k}$, $y^k$, $z^{k}$, $t_{max}$) \label{ReturnSDMGS}
+       \If{$L_\rho({x}^{k+1},y^{k+1},{z} ^{k+1},\omega^k) + \frac{\rho}{2} \sum_{i=1}^m\norm{{x}_i^{k+1}-{z}^{k+1}}_2^2-{\phi}^k \le \epsilon$} \label{Alg4BeginTermCond}
+       	\State {\bf return} $(x^{k+1},y^{k+1},z^{k+1},\omega^{k+1},{\phi}^{k+1}, D^{k+1}, \textbf{true})$
        \EndIf \label{Alg4EndTermCond}
-       \State $\widetilde{\phi} \gets  L_{\rho}({x}^{k+1},{z} ^{k+1},\omega^k) + \frac{\rho}{2} \norm{Q{x}^{k+1}-{z}^{k+1}}_2^2 - \Gamma$ \label{ComputePhiTilde}
-       \State $\widetilde{\gamma} \gets \frac{\widetilde{\phi} - \widecheck{\phi}^k}{L_\rho({x}^{k+1},{z}^{k+1}, \omega^k) + \frac{\rho}{2} \norm{Q{x}^{k+1}-{z} ^{k+1}}_2^2-\widecheck{\phi}^k}$ \label{ComputeCritVal}
+       \State $\widetilde{\phi} \gets  L_{\rho}({x}^{k+1},y^{k+1},{z} ^{k+1},\omega^k) + \frac{\rho}{2} \sum_{i=1}^m\norm{{x}_i^{k+1}-{z}^{k+1}}_2^2 - \Gamma$ \label{ComputePhiTilde}
+       \State $\widetilde{\gamma} \gets \frac{\widetilde{\phi} - {\phi}^k}{L_\rho({x}^{k+1},y^{k+1},{z}^{k+1}, \omega^k) + \frac{\rho}{2} \sum_{i=1}^m\norm{{x}_i^{k+1}-{z} ^{k+1}}_2^2-{\phi}^k}$ \label{ComputeCritVal}
        \If{$\widetilde{\gamma} \ge \gamma$} \label{Alg4LineSSC}
-         \State set $\omega^{k+1} \gets \omega^{k} + \rho (Q{x}^{k+1}-{z}^{k+1})$, $\widecheck{\phi}^{k+1} \gets \widetilde{\phi}$
+         \State set $\omega^{k+1} \gets \omega^{k} + \rho ({x}^{k+1}-{z}^{k+1})$, ${\phi}^{k+1} \gets \widetilde{\phi}$
         \EndIf
         \State Possibly update $\rho$, e.g., $\rho \gets \frac{1}{\min \braces{\max \braces{(2/\rho)(1-\widetilde{\gamma}),1/(10\rho),10^{-4}}, 10/\rho}}$ as in~\cite{Kiwiel1995} \label{Alg4RhoUpdate}
         \EndFor  
-      \State \textbf{return}  $(\widehat{x}^{k+1},x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, D^{k+1}, \textbf{false})$
+      \State \textbf{return}  $(\widehat{K}(\omega^{k+1}),(x^{k+1},y^{k+1},z^{k+1}),\omega^{k+1},{\phi}^{k+1}, D^{k+1}, \textbf{false})$
 \EndFunction
 \end{algorithmic}
 \medskip
 \begin{algorithmic}
-\State {\bf Preconditions:} $\widetilde{x} \in \conv(X)$, $\widetilde{z} \in \argmin_z \braces{F(\widetilde{x},z) : z \in Z}$, $D \subseteq \conv(X)$
+\State {\bf Preconditions:} $(\widetilde{x},\widetilde{y}) \in \conv(K)$, $\widetilde{z} \in \argmin_z \braces{F(\widetilde{x},\widetilde{y},z) : z \in Z}$, $D \subseteq \conv(K)$
 \end{algorithmic}
 \begin{algorithmic}[1]
 \Function{SDM-GS}{$F$, $X$, $Z$, $D$, $\widetilde{x}$, $\widetilde{z}$, $t_{max}$}  
         \For{$t=1,\dots,t_{max}$} \label{ForXYUpdateBegin}
-           \State $\widetilde{x} \gets \argmin_x \braces{F(x,\widetilde{z}) : x \in D}$ \label{SDMGSXUpdate}
-	\State $\widetilde{z} \gets \argmin_z \braces{F(\widetilde{x},z) : z \in Z}$ \label{SDMGSZUpdate}
+           \State $\widetilde{x} \gets \argmin_x \braces{F(x, y,\widetilde{z}) : (x,y) \in D}$ \label{SDMGSXUpdate}
+	\State $\widetilde{z} \gets \argmin_z \braces{F(\widetilde{x},\widetilde{y},z) : z \in Z}$ \label{SDMGSZUpdate}
         \EndFor \label{ForXYUpdateEnd}
-	\State $\widehat{x} \in \argmin_x \braces{\nabla_x F(\widetilde{x},\widetilde{z}) (x - \widetilde{x}) : x \in X}$ \label{SCGDirFindingSP}
+	\State $(\widehat{x},\widehat{y}) \in \argmin_{x,y} \braces{\nabla_{x,y} F(\widetilde{x},\widetilde{y},\widetilde{z}) [(x - \widetilde{x});(y-\widetilde{y})] : (x,y) \in K}$ \label{SCGDirFindingSP}
 	 \State Reconstruct ${D}$ to be any set such that \label{LineDa}
-	 \State \quad $\braces{\widetilde{x} + \alpha (\widehat{x} - \widetilde{x}) : \alpha \in [0,1]} \subseteq {D} \subseteq \conv(X)$ \label{LineDb}
-	 \State Set $\Gamma \gets - \nabla_x F(\widetilde{x},\widetilde{z}) (\widehat{x} - \widetilde{x})$ \label{GammaLine}
-      \State \textbf{return} $\left(\widehat{x},\widetilde{x},\widetilde{z},{D}, \Gamma \right)$ 
+	 \State \quad $\braces{(\widetilde{x},\widetilde{y}) + \alpha ((\widehat{x},\widehat{y}) - (\widetilde{x},\widetilde{y})) : \alpha \in [0,1]} \subseteq {D} \subseteq \conv(K)$ \label{LineDb}
+	 \State Set $\Gamma \gets - \nabla_{x,y} F(\widetilde{x},\widetilde{y},\widetilde{z}) [(\widehat{x} - \widetilde{x});(\widehat{y} -\widetilde{y})]$ \label{GammaLine}
+      \State \textbf{return} $\left(\widehat{K},\widetilde{x},\widetilde{y},\widetilde{z},{D}, \Gamma \right)$ 
 \EndFunction
 \end{algorithmic}
 \end{algorithm} 
 
 
 
-Algorithm PSCG addresses the solution to an alternative dual problem which is equivalent to~\eqref{P2} when $f$ is linear, but in general provides a weaker dual bound otherwise. This dual problem is used to address the more general setting where $f$ is convex but possibly nonlinear.%, so that $f_X^{**}$ never arises in the analysis or algorithm statement and need not be computed.
+%Algorithm PSCG addresses the solution to an alternative dual problem which is equivalent to~\eqref{P2} when $f$ is linear, but in general provides a weaker dual bound otherwise. This dual problem is used to address the more general setting where $f$ is convex but possibly nonlinear.%, so that $f_X^{**}$ never arises in the analysis or algorithm statement and need not be computed.
 
 
 
 
 \begin{proposition}\label{PropFWBCD}
-Let $\braces{(x^k,z^k,\omega^k)}$ be a sequence generated by Algorithm~\ref{AlgDualAscentGSSSC} applied to problem~\eqref{P1} with $X$ compact, $Z$ a linear subspace, $\omega^0 \in Z^{\perp}$, $B$ closed and convex, $\rho > 0$, $\gamma \in (0,1)$, $\epsilon=0$ and $k_{max}=\infty$. 
-If there exists a dual optimal solution $\omega^*$ to the dual problem~\eqref{P2C}, then either
+Let $\braces{(x^k,y^k,z^k,\omega^k)}$ be a sequence generated by Algorithm~\ref{AlgDualAscentGSSSC} applied to problem~\eqref{P1} with $X$ compact, $Z$ a linear subspace, $\omega^0 \in \Omega$, $B$ closed and convex, $\rho > 0$, $\gamma \in (0,1)$, $\epsilon=0$ and $k_{max}=\infty$. 
+If there exists a dual optimal solution $\omega^*$ to the dual problem~\eqref{D1}, then either
 \begin{enumerate}
-\item $\omega^k = \overline{\omega}$ is fixed and optimal for~\eqref{P2C} for $k \ge \bar{k}$ for some finite $\bar{k}$; or
+\item $\omega^k = \overline{\omega}$ is fixed and optimal for~\eqref{D1} for $k \ge \bar{k}$ for some finite $\bar{k}$; or
 %\item finite termination where, for some $\bar{k} \ge 1$,  $\omega^*=\omega^{\bar{k}}$ and $(x^{\bar{k}},z^{\bar{k}})$ is optimal for problem~\eqref{P1ConvB}; or 
-\item $\omega^k$ is never optimal for~\eqref{P2C} for any finite $k \ge 1$, but $\lim_{k \to \infty} \omega^k = \overline{\omega}$ is optimal,
+\item $\omega^k$ is never optimal for~\eqref{D1} for any finite $k \ge 1$, but $\lim_{k \to \infty} \omega^k = \overline{\omega}$ is optimal,
 \end{enumerate}
-and the sequence $\braces{(x^k,z^k)}$ has limit points $(\overline{x},\overline{z})$, each of which are optimal for problem~\eqref{P1ConvB}.
+and the sequence $\braces{(x^k,y^k,z^k)}$ has limit points $(\overline{x},\overline{y},\overline{z})$, each of which are optimal for problem~\eqref{D2}.
 \end{proposition}
 
 
-\subsection{Parallelization and workload}
-The opportunities for parallelization and distribution of the computational workload in PSCG, as stated in Algorithm~\ref{AlgDualAscentGSSSC}, are not immediately apparent.
-This subsection explicitly indicates which update problems may be solved in parallel, and the nature of the required communication between the parallel computational nodes.
+%\subsection{Parallelization and workload}
+%The opportunities for parallelization and distribution of the computational workload in PSCG, as stated in Algorithm~\ref{AlgDualAscentGSSSC}, are not immediately apparent.
+%This subsection explicitly indicates which update problems may be solved in parallel, and the nature of the required communication between the parallel computational nodes.
+%
+%The bulk of computational work, parallelization, and parallel communication occurs within the SDM-GS method stated in Algorithm~\ref{AlgBCD-XZ}, where for the problems of interest, the following decomposable structures apply: $X=\prod_{i=1}^m X_i$, $D=\prod_{i=1}^m D_i$,  and $F(x,z)=\sum_{i=1}^m F(x_i,z)$. 
+%In the larger context of Algorithm~\ref{AlgDualAscentGSSSC}, the subproblem of Line~\ref{SDMGSXUpdate} in Algorithm~\ref{AlgBCD-XZ} can be solved in parallel given fixed $\widetilde{z} \in Z$ and $\omega \in Z^\perp$ along the block indices $i=1,\dots,m$ as
+%\begin{equation}\label{Alg4QMP}
+%\min_{x} \braces{ f_i(x) + (\omega_i)^\top Q_i x + \frac{\rho}{2} \norm{Q_i x - \widetilde{z}_i}_2^2 : x \in D_i},
+%\end{equation}
+%while the subproblem of Line~\ref{SCGDirFindingSP} is solved as
+%$$
+%\min_x \braces{ \nabla_x f_i(\widetilde{x}_i) + \left( \omega_i + \rho(Q_i \widetilde{x}_i - \widetilde{z}_i) \right)^\top Q_i x : x \in X_i}.
+%$$
+%\begin{remark}
+%In the setting where problem~\eqref{P1} is a large-scale mixed-integer linear optimization problem, the subproblems of Line~\ref{SDMGSXUpdate} are continuous convex quadratic optimization problems for each block $i=1,\dots,m$, which can be solved independently of one another and in parallel. In the same setting, the Line~\ref{SCGDirFindingSP} subproblems are mixed-integer optimization problems for each block $i=1,\dots,m$, which can also be solved independently of one another and in parallel.
+%Additionally, the reconstruction of $D$ occurring in Line~\ref{LineDb} can be done in parallel for each $D_i$ along the indices $i=1,\dots,m$.
+%\end{remark}
 
-The bulk of computational work, parallelization, and parallel communication occurs within the SDM-GS method stated in Algorithm~\ref{AlgBCD-XZ}, where for the problems of interest, the following decomposable structures apply: $X=\prod_{i=1}^m X_i$, $D=\prod_{i=1}^m D_i$,  and $F(x,z)=\sum_{i=1}^m F(x_i,z)$. 
-In the larger context of Algorithm~\ref{AlgDualAscentGSSSC}, the subproblem of Line~\ref{SDMGSXUpdate} in Algorithm~\ref{AlgBCD-XZ} can be solved in parallel given fixed $\widetilde{z} \in Z$ and $\omega \in Z^\perp$ along the block indices $i=1,\dots,m$ as
-\begin{equation}\label{Alg4QMP}
-\min_{x} \braces{ f_i(x) + (\omega_i)^\top Q_i x + \frac{\rho}{2} \norm{Q_i x - \widetilde{z}_i}_2^2 : x \in D_i},
-\end{equation}
-while the subproblem of Line~\ref{SCGDirFindingSP} is solved as
-$$
-\min_x \braces{ \nabla_x f_i(\widetilde{x}_i) + \left( \omega_i + \rho(Q_i \widetilde{x}_i - \widetilde{z}_i) \right)^\top Q_i x : x \in X_i}.
-$$
-\begin{remark}
-In the setting where problem~\eqref{P1} is a large-scale mixed-integer linear optimization problem, the subproblems of Line~\ref{SDMGSXUpdate} are continuous convex quadratic optimization problems for each block $i=1,\dots,m$, which can be solved independently of one another and in parallel. In the same setting, the Line~\ref{SCGDirFindingSP} subproblems are mixed-integer optimization problems for each block $i=1,\dots,m$, which can also be solved independently of one another and in parallel.
-Additionally, the reconstruction of $D$ occurring in Line~\ref{LineDb} can be done in parallel for each $D_i$ along the indices $i=1,\dots,m$.
-\end{remark}
 
-
-Parallel communication is needed for the computation of the $z$ update. In the larger context of Algorithm~\ref{AlgDualAscentGSSSC}, this takes the form of solving
-$$
-\min_z \braces{\sum_{i=1}^m \norm{Q_i \widetilde{x}_i - z_i}_2^2 : z \in Z}.
-$$
-This is solved as an averaging that requires the reduce-sum type parallel communication.
-The computation of values required to compute $\gamma^k$ in Line~\ref{ComputeCritVal} in Algorithm~\ref{AlgDualAscentGSSSC} also requires a reduce-sum type parallel communication. 
-For implementation purposes, the computation of these values, including the computation of $\Gamma$ from the SDM-GS call, can be combined into one reduce-sum communication. In total, each iteration of Algorithm~\ref{AlgDualAscentGSSSC} requires two reduce-sum type communications, one for computing the $z$-update, and one combined reduce-sum communication to compute scalars associated with the Lagrangian bounds and the critical values for the termination conditions. 
-The storage and updates of $x^k$ and $\omega^k$ and $D$ can also be done in parallel, while $z^k$ and $\gamma^k$ need to be computed and stored by every processor at each iteration $k$.
+%Parallel communication is needed for the computation of the $z$ update. In the larger context of Algorithm~\ref{AlgDualAscentGSSSC}, this takes the form of solving
+%$$
+%\min_z \braces{\sum_{i=1}^m \norm{Q_i \widetilde{x}_i - z_i}_2^2 : z \in Z}.
+%$$
+%This is solved as an averaging that requires the reduce-sum type parallel communication.
+%The computation of values required to compute $\gamma^k$ in Line~\ref{ComputeCritVal} in Algorithm~\ref{AlgDualAscentGSSSC} also requires a reduce-sum type parallel communication. 
+%For implementation purposes, the computation of these values, including the computation of $\Gamma$ from the SDM-GS call, can be combined into one reduce-sum communication. In total, each iteration of Algorithm~\ref{AlgDualAscentGSSSC} requires two reduce-sum type communications, one for computing the $z$-update, and one combined reduce-sum communication to compute scalars associated with the Lagrangian bounds and the critical values for the termination conditions. 
+%The storage and updates of $x^k$ and $\omega^k$ and $D$ can also be done in parallel, while $z^k$ and $\gamma^k$ need to be computed and stored by every processor at each iteration $k$.
 
 %%%%%%%%%%%%%%%%%%%% BRANCH-AND-BOUND %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Branch-and-bound with SCG-GS-ALM as bounding procedure}
@@ -550,6 +550,32 @@ This approach is (somewhat) sensible for when restricting the branching to varia
 \end{remark}
 
 \section{Computational results}
+
+%\begin{tabular}{|c|rr|rr|}
+%\hline
+%& \multicolumn{4}{|c|}{DCAP 233-500}\\
+% \hline
+%Max. & \multicolumn{1}{c}{Best node value} & \multicolumn{1}{c}{Incumbent value} & \multicolumn{1}{c}{SDM-GS1-ALM} & \multicolumn{1}{c|}{SDM-GS5-ALM} \\
+%walltime (mins)  & \multicolumn{1}{c}{OOQP} & \multicolumn{1}{c}{PIPS-IPM} & \multicolumn{1}{c}{SDM-GS1-ALM} & \multicolumn{1}{c|}{SDM-GS5-ALM} \\
+%\hline
+%5		& (68, 16.15)		& (66, 12.71) 	& (68, 3.67) 		& (68, 5.21)	\\
+%10		& (68, 6.62)			& (70, 2.39) 		& (68, 0.53) 		& (68, 0.64)	\\
+%20		& (68, 5.75)			& (73, 1.56) 		& (68, 0.28) 		& (68, 0.33)	\\
+%40		& (68, 9.91)			& (70, 1.24) 		& (68, 0.16) 		& (68, 0.19)	\\
+%\hline
+%\end{tabular}
+\begin{footnotesize}
+\begin{tabular}{cccc|cccc}
+\multicolumn{8}{c}{DCAP233500}\\
+\multicolumn{4}{c}{Baseline DD} & \multicolumn{4}{c}{Improved DD}\\
+Time & $\phi_{best}$ & $f_{best}$ & Nodes & Time & $\phi_{best}$ & $f_{best}$ & Nodes \\
+\hline
+5 min & 1737.48989 & 1740.64181 & 56 & 5 min & 1737.50611 & 1737.64638 & 32 \\
+10 min & 1737.49820 & 1740.64181 & 79 & 10 min &1737.52050 &1737.52632 & 59 \\
+20 min & 1737.50103 & 1740.64181 & 102 & 20 min & 1737.52071 & 1737.52194 & 88\\
+40 min & 1737.50154 & 1737.53164 & 141 & 40 min & 1737.52081 & 1737.52115 & 148 
+\end{tabular}
+\end{footnotesize}
 
 %%%%%%%%%%%%%%%%%%%% CONCLUSION AND FUTURE WORK %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion and future work}\label{SectConclusion}

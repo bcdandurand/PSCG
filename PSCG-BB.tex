@@ -513,15 +513,28 @@ In order to inform branching decisions, we need a sense of dispersion based on s
 
 \subsection{Measure of feasibility}
 
-A criterion for fathoming by optimality may be given by
-\begin{equation}\label{FeasTol}
-\norm{x^* - \proj_X(x^*)} + \norm{Qx^*-z^*} < \epsilon.
+In the baseline DD branch-and-bound, a criterion for fathoming by optimality may be given by
+\begin{equation}\label{FeasTolDDBasic}
+\sqrt{\sum_{i=1}^m \norm{\widehat{x}_i-\widehat{z}}_2^2} < \epsilon,
 \end{equation}
-for some suitably small tolerance $\epsilon > 0$. If the feasibility criterion~\eqref{FeasTol} is not met, then branching must occur, and the branching should be informed by the dispersions measured in the two norm terms of~\eqref{FeasTol}. It will be convenient to to refine the dispersions, where the vector
+for some suitably small tolerance $\epsilon > 0$,
+where only the deviations from satisfaction of $\widehat{x}_i=\widehat{x}$, $i=1,\dots,m$, are taken into account since the integrality constraints on $\widehat{x}$ are satisfied by construction. We define for convenience the vector in $\mathbb{R}^n$:
 $$
-\sigma_X :=\left[\norm{x_i^* - \proj_{X_i}(x_i^*)} \right]_{i=1,\dots,m}
+\sigma_Z:=\brackets{\sum_{i=1}^m \norm{\widehat{x}_{i,j}-\widehat{z}_j}}_{j=1,\dots,n}.
 $$
-is defined. The diagonal matrix whose diagonal entries are taken from $\sigma_X$ will be denoted $\Sigma_X$.
+
+On the other hand, testing feasibility based on $(x^*,y^*)$, we take
+\begin{equation}\label{FeasTolDDImproved}
+\sqrt{\sum_{i=1}^m \norm{(x^*,y^*)-\proj_K((x^*,y^*))}_2^2} < \epsilon,
+\end{equation}
+for some suitably small tolerance $\epsilon > 0$,
+where it is assumed that the satisfaction of $x^*_i = z^*$ for each $i=1,\dots,m$ can be realized through the underlying dual iterative solution process at each node. We define for convenience the vector in $\mathbb{R}^m$:
+$$
+\sigma_K:=\left[\norm{(x_i^*,y_i^*)-\proj_{K_i}((x_i^*,y_i^*))} \right]_{i=1,\dots,m}.
+$$
+
+ If either of the feasibility criteria~\eqref{FeasTolDDBasic} or~\eqref{FeasTolDDImproved} are not met, then branching must occur, and the branching should be informed by the dispersions measured in the respective norm terms of~\eqref{FeasTolDDBasic} and~\eqref{FeasTolDDImproved}. 
+
 
 \subsection{Branching decisions}
 We have the following approaches at measuring dispersion from the constraint $Qx=z$ at iteration $k$:
@@ -554,7 +567,7 @@ This approach is (somewhat) sensible for when restricting the branching to varia
 %\begin{tabular}{|c|rr|rr|}
 %\hline
 %& \multicolumn{4}{|c|}{DCAP 233-500}\\
-% \hline
+% \hline(
 %Max. & \multicolumn{1}{c}{Best node value} & \multicolumn{1}{c}{Incumbent value} & \multicolumn{1}{c}{SDM-GS1-ALM} & \multicolumn{1}{c|}{SDM-GS5-ALM} \\
 %walltime (mins)  & \multicolumn{1}{c}{OOQP} & \multicolumn{1}{c}{PIPS-IPM} & \multicolumn{1}{c}{SDM-GS1-ALM} & \multicolumn{1}{c|}{SDM-GS5-ALM} \\
 %\hline
@@ -566,16 +579,67 @@ This approach is (somewhat) sensible for when restricting the branching to varia
 %\end{tabular}
 \begin{footnotesize}
 \begin{tabular}{cccc|cccc}
-\multicolumn{8}{c}{DCAP233500}\\
+\multicolumn{8}{c}{DCAP233500 (using 32 processors)}\\
 \multicolumn{4}{c}{Baseline DD} & \multicolumn{4}{c}{Improved DD}\\
 Time & $\phi_{best}$ & $f_{best}$ & Nodes & Time & $\phi_{best}$ & $f_{best}$ & Nodes \\
 \hline
-5 min & 1737.48989 & 1740.64181 & 56 & 5 min & 1737.50611 & 1737.64638 & 32 \\
-10 min & 1737.49820 & 1740.64181 & 79 & 10 min &1737.52050 &1737.52632 & 59 \\
-20 min & 1737.50103 & 1740.64181 & 102 & 20 min & 1737.52071 & 1737.52194 & 88\\
-40 min & 1737.50154 & 1737.53164 & 141 & 40 min & 1737.52081 & 1737.52115 & 148 
+5 min & 1737.48989 & 1740.64181 & 56 & 5 min & 1737.51795 & 1737.52526 & 35 \\
+10 min & 1737.49820 & 1740.64181 & 79 & 10 min & 1737.52047 & 1737.52069 & 64 \\
+20 min & 1737.50103 & 1740.64181 & 102 & 20 min* & 1737.52069 & 1737.52069 & 157 \\
+40 min & 1737.50154 & 1737.53164 & 141 & 40 min* & ********* & ********* & *** 
 \end{tabular}
+
+\medskip
+\begin{tabular}{cccc|cccc}
+\multicolumn{8}{c}{DCAP243500 (using 32 processors)}\\
+\multicolumn{4}{c}{Baseline DD} & \multicolumn{4}{c}{Improved DD}\\
+Time & $\phi_{best}$ & $f_{best}$ & Nodes & Time & $\phi_{best}$ & $f_{best}$ & Nodes \\
+\hline
+5 min &   2167.05580 & 2176.36500 & 44 & 5 min & 2167.31697 & 2169.47892 & 31 \\
+10 min & 2167.14788 & 2171.72801 & 57 & 10 min & 2167.33071 & 2167.36434 & 42 \\
+20 min & 2167.15808 & 2171.30679 & 74 & 20 min & 2167.34274 & 2167.35855 & 65\\
+40 min & 2167.19891 & 2169.36526 & 89 & 40 min & 2167.34750 & 2167.35373 & 104 
+\end{tabular}
+
+\medskip
+\begin{tabular}{cccc|cccc}
+\multicolumn{8}{c}{DCAP332500 (using 32 processors)}\\
+\multicolumn{4}{c}{Baseline DD} & \multicolumn{4}{c}{Improved DD}\\
+Time & $\phi_{best}$ & $f_{best}$ & Nodes & Time & $\phi_{best}$ & $f_{best}$ & Nodes \\
+\hline
+5 min &   1587.39480 & 1681.65011 & 50 & 5 min & 1588.08901 & 1616.57914 & 32 \\
+10 min & 1587.79126 & 1638.79564 & 71 & 10 min & 1588.40129 & 1591.17931 & 55 \\
+20 min & 1587.93833 & 1594.89727 & 97 & 20 min & 1588.60162 & 1590.96571 & 91\\
+40 min & 1588.18939 & 1593.11529 & 158 & 40 min & 1588.67017 & 1590.77970 & 128 
+\end{tabular}
+
+\medskip
+\begin{tabular}{cccc|cccc}
+\multicolumn{8}{c}{DCAP342500 (using 32 processors)}\\
+\multicolumn{4}{c}{Baseline DD} & \multicolumn{4}{c}{Improved DD}\\
+Time & $\phi_{best}$ & $f_{best}$ & Nodes & Time & $\phi_{best}$ & $f_{best}$ & Nodes \\
+\hline
+5 min &   1904.33558 & 1922.89408 & 55 & 5 min & 1904.30712 & 1912.75878 & 43 \\
+10 min & 1904.43416 & 1910.50410 & 104 & 10 min & 1904.49445 & 1908.06074 & 64 \\
+20 min & 1904.44938 & 1910.50410 & 140 & 20 min & 1904.63236 & 1905.78144 & 112\\
+40 min & 1904.46666 & 1904.70152 & 206 & 40 min & 1904.65008 & 1904.67035 & 166
+\end{tabular}
+
+%\medskip
+%\begin{tabular}{cccc|cccc}
+%\multicolumn{8}{c}{DCAP332500 (using 32 processors)}\\
+%\multicolumn{4}{c}{Baseline DD} & \multicolumn{4}{c}{Improved DD}\\
+%Time & $\phi_{best}$ & $f_{best}$ & Nodes & Time & $\phi_{best}$ & $f_{best}$ & Nodes \\
+%\hline
+%5 min &   * & * & 44 & 5 min & * & * & * \\
+%10 min & * & * & * & 10 min & * & * & * \\
+%20 min & * & * & * & 20 min & * & * & *\\
+%40 min & * & * & * & 40 min & * & * & * 
+%\end{tabular}
+
 \end{footnotesize}
+
+
 
 %%%%%%%%%%%%%%%%%%%% CONCLUSION AND FUTURE WORK %%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion and future work}\label{SectConclusion}

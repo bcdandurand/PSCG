@@ -137,23 +137,30 @@ class PSCGTreeNode : public BcpsTreeNode {
     	PSCGModel *m = dynamic_cast<PSCGModel*>(model);
     	PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
         m->findBranchingIndex();
-        desc->updateBranchingIndex(m);
+        //desc->updateBranchingIndex(m);
 	
 	vector< vector<var_branch> > newSPInfo = m->getNewNodeSPInfo();
 	for(int nn=0; nn<newSPInfo.size(); nn++){
             PSCGNodeDesc *childDesc = new PSCGNodeDesc(m);//desc->createChildNodeDescUp(desc->getBranchingIndex());
+	    #ifdef KEEP_OMEGA
+	    //childDesc->updateOmega(desc->getOmega(),m);
+	    #endif
 	    for(int oo=0; oo<newSPInfo[nn].size(); oo++){
 		childDesc->setZLB(newSPInfo[nn][oo].index, newSPInfo[nn][oo].lb);
 		childDesc->setZUB(newSPInfo[nn][oo].index, newSPInfo[nn][oo].ub);
+		#ifdef KEEP_OMEGA
+		    //childDesc->zeroOmegaRow(newSPInfo[nn][oo].index,m);
+		#endif
 	    }
-	    //childDesc->updateOmega(m);
-	    childDesc->setLB(quality_);
+	    
+	    //childDesc->setLB(quality_);
     	    childNodeDescs.push_back(CoinMakeTriple(static_cast<AlpsNodeDesc *>
 					    (childDesc),
 					    AlpsNodeStatusCandidate,
-					    quality_));
+					    childDesc->getLB()));
 	}
-	return m->getInfeasIndex();
+	//return m->getInfeasIndex();
+	return 0; //return value not actually used
     }
     /** Select a branching object based on give branching strategy. */
 #if 0
@@ -193,7 +200,7 @@ class PSCGTreeNode : public BcpsTreeNode {
         PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
         PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
 	cout << "(" << model->getBound() << "," << desc->getLB() << ")" << endl;
-	cout << "(" << model->getInfeasIndex() << "," << desc->getBranchingIndex() << ")" << endl;
+	//cout << "(" << model->getInfeasIndex() << "," << desc->getBranchingIndex() << ")" << endl;
     }
 };
 #endif

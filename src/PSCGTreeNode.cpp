@@ -74,11 +74,14 @@ int PSCGTreeNode::process(bool isRoot, bool rampUp)
     // Get model information and parameters.
     //------------------------------------------------------
     PSCGModel* model = dynamic_cast<PSCGModel*>(desc_->getModel());
+    #ifndef KEEP_OMEGA
     if(model->getBestNodeQuality()==model->getBound()){model->saveOmega();}
+    #endif
     bool isMPIRoot = model->getMPIRank()==0;
     int nodeDepth=getDepth();
 if(isMPIRoot) {cout << "***************BEGINNING OF PROCESSING NODE*******************" << endl;}
 if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
+    model->printBestBounds();
     PSCGNodeDesc* desc = dynamic_cast<PSCGNodeDesc*>(desc_);
     //------------------------------------------------------
     // Check if this can be fathomed by objective cutoff.
@@ -115,25 +118,30 @@ if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
 
       if(model->getNumNewNodeSPs()==0){
 	setStatus(AlpsNodeStatusFathomed);
-        desc->freeNodeInfo();
+        //desc->freeNodeInfo();
 	if(isMPIRoot) cout << "Fathomed by optimality" << endl;
+	//model->evaluateFeasibleZ();
+        model->findPrimalFeasSoln(20);
       }
       else{
         //desc->updateZ(model);
         //desc->updateBranchingZVals(model);
     	//desc->updateOmega(model); 
-    	desc->updateDesc(model);
+    	//desc->updateDesc(model);
 	setStatus(AlpsNodeStatusPregnant);
 	//free node information later when branching occurs
 	if(isMPIRoot) cout << "Node needs to branch...with branching information:" << endl;
 	if(isMPIRoot) model->printNewNodeSPInfo();
+        if(isMPIRoot) cout << "Searching for feasible solution, improvement on incumbent value..." << endl;
+        model->findPrimalFeasSoln(20);
       }
+        //desc->freeNodeInfo();
 
     //------------------------------------------------------
     // Try to find a feasible solution, improve the incumbent value 
     //------------------------------------------------------
-      if(isMPIRoot) cout << "Searching for feasible solution, improvement on incumbent value..." << endl;
-      model->findPrimalFeasSoln(20);
+      //if(isMPIRoot) cout << "Searching for feasible solution, improvement on incumbent value..." << endl;
+      //model->findPrimalFeasSoln(20);
     }
     else{
         if(model->getZStatus()==Z_INFEAS){
@@ -142,9 +150,10 @@ if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
 	else{ //z_status==Z_BOUNDED
 	    if(isMPIRoot) cout << "Fathomed by bound" << endl;
         }
-        desc->freeNodeInfo();
+        //desc->freeNodeInfo();
 	setStatus(AlpsNodeStatusFathomed);
     }
+    desc->freeNodeInfo();
     
     //------------------------------------------------------
     // End of process()
@@ -191,7 +200,7 @@ PSCGTreeNode::branch()
 #endif
     status_ = AlpsNodeStatusBranched;
     
-    desc->freeNodeInfo();
+    //desc->freeNodeInfo();
 //cout << "End branch()" << endl;
     return childNodeDescs;
 }
@@ -208,7 +217,22 @@ int PSCGTreeNode::bound(BcpsModel *model)
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
     int nodeDepth=getDepth();
     //updateQuality(m->computeBound(20,true));
-    updateQuality(m->computeBound(1+2*nodeDepth,true));
+    //if(m->getAlgorithm()==ALGDDBASIC){updateQuality(m->computeBound(100,true));}
+    //updateQuality(m->computeBound(min(500,20*(nodeDepth+1)),true));
+    //updateQuality(m->computeBound(min(500,2*(nodeDepth)+5),true));
+    //updateQuality(m->computeBound(2*(nodeDepth)+5,true));
+    //if(nodeDepth==0){
+    if(false){
+	updateQuality(m->computeBound(500,true));
+    }
+    else{
+	updateQuality(m->computeBound((nodeDepth*(nodeDepth+1))/2,true));
+    }
+    //updateQuality(m->computeBound(5,true));
+    //updateQuality(m->computeBound(5+2*nodeDepth,true));
+    //if(false){updateQuality(m->computeBound(100,true));}
+    //else{updateQuality(m->computeBound(5+2*nodeDepth,true));}
+    //updateQuality(m->computeBound(5,true));
     //if( m->getZStatus()==Z_UNKNOWN ){
       //desc->updateOmega(m); 
     //}

@@ -140,7 +140,9 @@ void finishInitialisation();
   cplexMP.end();
   weightSoln.end();
 }
-
+virtual void setInitialSolution(const int *indices, const double *startSol){
+    cout << "setInitialSolution(): default implementation, does nothing." << endl;
+}
 virtual int solveLagrangianProblem(const double* omega=NULL)=0;
 virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal)=0;
 virtual int solveFeasibilityProblem()=0;
@@ -149,9 +151,19 @@ virtual int getCPLEXErrorStatus(){
     return 0;
 }
 int getSolverStatus(){return solverStatus_;}
+virtual const char* getColTypes(){
+cout << "getColTypes(): Default implementation: doing nothing" << endl;
+    return NULL;
+}
 double* getC(){return c;}
 double* getD(){return d;}
 double* getDispersions(){return dispersions;}
+virtual double getMIPBestNodeVal(){
+    cout << "getMIPBestNodeVal(): default implementation, does nothing" << endl;
+}
+virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool doReducePrint=true){
+   cout << "setPrintLevel(): default implementation, does nothing" << endl;
+}
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 //virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual void setSolverStatus()=0;
@@ -214,6 +226,21 @@ double getXVertexEntry(int entry, int vertex){
   return xVertices[entry][vertex];
 }
 
+double computeIntegralityDiscr(){
+    double retval=0.0;
+    for(int ii=0; ii<n1; ii++){
+	if(getColTypes()[ii]!=0){
+	    retval+= fabs(x[ii]-round(x[ii]));
+	}
+    }
+    for(int ii=0; ii<n2; ii++){
+	if(getColTypes()[n1+ii]!=0){
+	    retval+= fabs(y[ii]-round(y[ii]));
+	}
+    }
+    return retval;
+}
+
 void compareLagrBds(const double* omega){
    cout << LagrBd << " ***versus*** " << evaluateVertexSolution(omega) << endl;
 }
@@ -229,7 +256,7 @@ cout << "Printing c: " << endl;
 virtual void printLagrSoln(){
 return;
 }
-#if 1
+#if 0
 bool roundIfClose(double &toBeRounded){
     if(fabs(toBeRounded-floor(toBeRounded)) < 1e-6){ 
 	toBeRounded = floor(toBeRounded);
@@ -498,6 +525,12 @@ void setQuadraticTerm(const double *scaling_vector) {
 
 void updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp=false); 
 void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp=false);
+void computeWeightsForCurrentSoln(const double *z); 
+void printDispersions(){
+  cout << "Printing dispersions for scenario " << tS << endl;
+  for(int ii=0; ii<n1; ii++){ cout << " " << dispersions[ii];}
+  cout << endl;
+}
 
 //void getLagrangianGradient(SMIP_qu_getLagrangianGradient* question, SMIP_ans_getLagrangianGradient* answer);
 
@@ -637,6 +670,7 @@ virtual void polishSolution(){
 	x_vertex[ii] = LagrMIPInterface_->getColUpper()[ii];
       }
       if(x_vertex[ii]==-0) x_vertex[ii]=0.0;
+      if(getColTypes()[ii]!=0)  x_vertex[ii]=round(x_vertex[ii]);
   }
   for(int ii=0; ii<n2; ii++){
       if(LagrMIPInterface_->getColLower()[n1+ii] > y_vertex[ii]){
@@ -646,6 +680,7 @@ virtual void polishSolution(){
 	y_vertex[ii] = LagrMIPInterface_->getColUpper()[n1+ii];
       }
       if(y_vertex[ii]==-0) y_vertex[ii]=0.0;
+      if(getColTypes()[n1+ii]!=0)  y_vertex[ii]=round(y_vertex[ii]);
   }
 }
 virtual void setSolverStatus(){
@@ -702,6 +737,8 @@ virtual void setSolverStatus(){
 		  case CPXMIP_INFEASIBLE:
 		      solverStatus_ = PSCG_PRIMAL_INF; 
 		      break;
+		  case CPXMIP_OPTIMAL_INFEAS:
+		      break;
 		  default:
         	    std::cout << "UNKNOWN SOLVER STATUS" << std::endl;
 		    std::cout << "CPLEX Error Code is: " << getCPLEXErrorStatus() << endl;
@@ -732,13 +769,59 @@ virtual void setUBs(const double *ubs, int nUBs){
     }
 }
 
-const char* getColTypes(){
+virtual const char* getColTypes(){
     return LagrMIPInterface_->getColType();
 } 
 
 virtual int getCPLEXErrorStatus(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
 	return CPXgetstat(osi->getEnvironmentPtr(), osi->getLpPtr());
+}
+
+virtual double getMIPBestNodeVal(){
+	double retval=0.0;
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+	CPXgetbestobjval(osi->getEnvironmentPtr(), osi->getLpPtr(), &retval);
+	return retval;
+}
+virtual void setInitialSolution(const int *indices, const double *startSol){
+    OsiCpxSolverInterface *osi = LagrMIPInterface_;
+    //LagrMIPInterface_->setColSolution(startSol);
+    int beg=0;
+    int effortLevel = CPX_MIPSTART_REPAIR;
+    char *names=NULL;
+    //for(int ii=0; ii<n1+n2; ii++) indices[ii]=ii;
+    CPXaddmipstarts(osi->getEnvironmentPtr(), osi->getLpPtr(), 1, n1+n2, &beg, indices, startSol,&effortLevel,&names);
+}
+
+void setCPXMIPParameters(){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+	osi->setIntParam(OsiOutputControl,0);
+	osi->setIntParam(OsiMIPOutputControl,0);
+	osi->setHintParam(OsiDoReducePrint,true);
+
+	if (nThreads >= 0) { osi->setIntParam(OsiParallelThreads, nThreads); }
+	//if (disableHeuristic) { osi->setIntParam(OsiHeurFreq, -1); }
+	//CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Preprocessing_BoundStrength, 1);
+	osi->setHintParam(OsiDoPresolveInInitial,true);
+	osi->setHintParam(OsiDoScale,true);
+	osi->setHintParam(OsiDoCrash,true);
+	osi->setHintParam(OsiLastHintParam, true);
+	//setGapTolerances(1e-9,1e-9);
+
+	//osi->setDblParam(OsiDualTolerance, 1e-9);
+	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_AbsMIPGap, 1e-9);
+	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_MIPGap, 1e-12);
+	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_Integrality, 1e-9);
+	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Simplex_Tolerances_Optimality, 1e-9);
+	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Simplex_Tolerances_Feasibility, 1e-9);
+}
+
+virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool doReducePrint=true){
+	OsiCpxSolverInterface *osi = LagrMIPInterface_;
+	osi->setIntParam(OsiOutputControl,outputControl);
+	osi->setIntParam(OsiMIPOutputControl,outputControlMIP);
+	osi->setHintParam(OsiDoReducePrint,doReducePrint);
 }
 
 int setGapTolerances(double absGap, double relGap){
@@ -939,8 +1022,6 @@ virtual void updateSolnInfo(){
 		//LagrBd = osi->getObjValue()*osi->getObjSense();
 		memcpy(x_vertex,solution,n1*sizeof(double));
 		memcpy(y_vertex,solution+n1,n2*sizeof(double));
-		//for(int ii=0; ii<n1; ii++){ roundIfClose(x_vertex[ii]);}
-		//for(int ii=0; ii<n2; ii++){ roundIfClose(y_vertex[ii]);}
 		//for(int ii=0; ii<n1; ii++){ (x_vertex[ii]);}
 		//for(int ii=0; ii<n2; ii++){ (y_vertex[ii]);}
 		polishSolution();

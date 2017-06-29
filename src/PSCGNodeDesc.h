@@ -35,6 +35,7 @@
 //class PSCGModel;
 #include "PSCGModel.h"
 #define CUTOFF 0.5
+#define KEEP_OMEGA
 //#############################################################################
 
 
@@ -43,11 +44,13 @@ class PSCGNodeDesc : public BcpsNodeDesc {
  protected:
     
     double lbd_;
-    int branchingIndex_;
-    bool branchingIndexIsInt_;
-    double branchingZVals[MAX_N_BRANCHINGS];
+    //int branchingIndex_;
+    //bool branchingIndexIsInt_;
+    //double branchingZVals[MAX_N_BRANCHINGS];
     int zLen_;
-    //vector<double* > omega_;
+#ifdef KEEP_OMEGA
+    vector<double* > omega_;
+#endif
     //vector<int> newBdInds_;
     //vector<int> newBdTypes_; //0 UP branch, setting LB; 1 DOWN branch, setting UB 
     //vector<double> newBds_;
@@ -60,19 +63,20 @@ class PSCGNodeDesc : public BcpsNodeDesc {
  public:
     /** Default constructor. */
     PSCGNodeDesc() : BcpsNodeDesc(),//newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0),
-	lbd_(-ALPS_DBL_MAX),origPenalty_(1.0),branchingIndex_(-1),branchingIndexIsInt_(false),zLBs(NULL),zUBs(NULL){;}
+	lbd_(-ALPS_DBL_MAX),origPenalty_(1.0),zLBs(NULL),zUBs(NULL){;}
 
     /** Useful constructor. */
     PSCGNodeDesc(PSCGModel *m) :
 	BcpsNodeDesc(m),//newBdInds_(),newBdTypes_(),newBds_(),nNewBds_(0),
-	lbd_(-ALPS_DBL_MAX),origPenalty_(1.0),branchingIndex_(-1),branchingIndexIsInt_(false)
+	lbd_(-ALPS_DBL_MAX),origPenalty_(1.0)
     {
 	    zLen_ = m->n1;
-	#if 0
+	#ifdef KEEP_OMEGA 
 	    for(int tS=0; tS<m->nNodeSPs; tS++){
 		omega_.push_back(new double[m->n1]);
-		for(int ii=0;ii<m->n1; ii++) omega_[tS][ii]=0.0;
+		//for(int ii=0;ii<m->n1; ii++) omega_[tS][ii]=0.0;
 	    }
+	    updateOmega(m);
 	#endif
 	origPenalty_ = m->getBaselinePenalty();
 	//origPenalty_ = m->getBaselinePenalty();
@@ -83,13 +87,16 @@ class PSCGNodeDesc : public BcpsNodeDesc {
         //setZUBs(m->getVarUBs());
 	//setZBounds(m->getOrigVarLbds(),m->getOrigVarUbds());
 	setZBounds(m->getCurrentVarLbds(),m->getCurrentVarUbds());
+	setLB(m->getBound());
     }
 	
 
 
     /** Destructor. */
     virtual ~PSCGNodeDesc() { 
-	//freeOmega();
+	#ifdef KEEP_OMEGA
+	freeOmega();
+	#endif
 	freeZBounds();
 	//delete [] zBounds;
 	//if(newBdInds_) delete [] newBdInds_;
@@ -99,8 +106,8 @@ class PSCGNodeDesc : public BcpsNodeDesc {
     //vector<int>& getNewBdInds(){return newBdInds_;}
     //vector<int>& getNewBdTypes(){return newBdTypes_;}
     //vector<double>& getNewBds(){return newBds_;}
-    //vector<double* >& getOmega(){return omega_;}
-    #if 0
+    #ifdef KEEP_OMEGA 
+    vector<double* >& getOmega(){return omega_;}
     void updateOmega(vector<double*> &omegaSrc, PSCGModel *m){
 	//vector<double*> &omega = m->getOmega();
 	for(int tS=0; tS<m->nNodeSPs; tS++){
@@ -139,7 +146,9 @@ class PSCGNodeDesc : public BcpsNodeDesc {
 	}
     }
     void freeNodeInfo(){
-	//freeOmega();
+	#ifdef KEEP_OMEGA
+	freeOmega();
+	#endif
 	freeZBounds();
     }
     double getLB(){return lbd_;}
@@ -168,7 +177,7 @@ class PSCGNodeDesc : public BcpsNodeDesc {
     void setZUBs(const double* ubs){memcpy(zUBs,ubs,zLen_*sizeof(double));}
     void setZLB(int index, double lb){ zLBs[index]=lb;}
     void setZUB(int index, double ub){ zUBs[index]=ub;}
-    int getBranchingIndex(){return branchingIndex_;}
+    //int getBranchingIndex(){return branchingIndex_;}
     double getOrigPenalty(){return origPenalty_;}
     void setOrigPenalty(double p){origPenalty_=p;}
     //void updateBranchingZVals(PSCGModel *m){
@@ -176,14 +185,14 @@ class PSCGNodeDesc : public BcpsNodeDesc {
  //   }
     void updateBd(PSCGModel *m){lbd_=m->getBound();}
     void updateBd(double val){lbd_=val;}
-    void updateBranchingIndex(PSCGModel *m){branchingIndex_=m->getInfeasIndex();}
-#if 1 
+    //void updateBranchingIndex(PSCGModel *m){branchingIndex_=m->getInfeasIndex();}
     void updateDesc(PSCGModel *m){
     	//updateBranchingZVals(m);
-    	//updateOmega(m); 
-    	updateBranchingIndex(m);
+	#ifdef KEEP_OMEGA
+    	 updateOmega(m); 
+	#endif
+    	//updateBranchingIndex(m);
     }
-#endif
 
 #if 0
     void assignNewBds(PSCGNodeDesc *parentNode){
@@ -346,8 +355,11 @@ class PSCGNodeDesc : public BcpsNodeDesc {
 	PSCGModel *model = dynamic_cast<PSCGModel*>(model_);
 	//printZBounds(model);
 	//model->installSubproblem(lbd_, newBdInds_, newBdTypes_, newBds_, nNewBds_, branchingIndex_, origPenalty_);
-	//model->installSubproblem(lbd_, omega_, zLBs, zUBs, branchingIndex_, origPenalty_);
-	model->installSubproblem(lbd_, zLBs, zUBs, branchingIndex_, origPenalty_);
+	#ifdef KEEP_OMEGA
+	 model->installSubproblem(lbd_, omega_, zLBs, zUBs, origPenalty_);
+	#else
+	 model->installSubproblem(lbd_, zLBs, zUBs, origPenalty_);
+	#endif
     }
     
 };

@@ -114,13 +114,15 @@ int PSCGModelScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int
 	}
 	delete [] ctype; //All other allocated data passed to assignProblem is owned by LagrMIPInterface_
 
+	setCPXMIPParameters();
+#if 0
 	//********Setting CPLEX Parameters*****************\\
 	LagrMIPInterface_->setIntParam(OsiParallelMode,0);
 	LagrMIPInterface_->setIntParam(OsiOutputControl,0);
 	LagrMIPInterface_->setIntParam(OsiMIPOutputControl,0);
 	if (nThreads >= 0) { LagrMIPInterface_->setIntParam(OsiParallelThreads, nThreads); }
 	if (disableHeuristic) { LagrMIPInterface_->setIntParam(OsiHeurFreq, -1); }
-	LagrMIPInterface_->setDblParam(OsiDualTolerance, 1e-8);
+	LagrMIPInterface_->setDblParam(OsiDualTolerance, 1e-9);
 	setGapTolerances(1e-9,1e-9);
 	LagrMIPInterface_->setHintParam(OsiDoPresolveInInitial,true);
 	LagrMIPInterface_->setHintParam(OsiDoScale,true);
@@ -128,6 +130,7 @@ int PSCGModelScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int
 	LagrMIPInterface_->setHintParam(OsiDoReducePrint,true);
 	LagrMIPInterface_->setHintParam(OsiLastHintParam, true);
 	//***********End setting parameters*********************//
+#endif
 
 	return errcode;
 }
@@ -169,9 +172,11 @@ void PSCGModelScen::finishInitialisation() {
 	//We use dual simplex due to the nature of the problem
 	//cplexMP.setParam(IloCplex::RootAlg, IloCplex::Dual);
 	cplexMP.setParam(IloCplex::RootAlg, IloCplex::Primal);
-        //cplexMP.setParam(IloCplex::SolutionType, CPX_BASIC_SOLN);
+        cplexMP.setParam(IloCplex::Param::SolutionType, CPX_BASIC_SOLN);
 	//cplexMP.setParam(IloCplex::RootAlg, 0);
 	cplexMP.setParam(IloCplex::OptimalityTarget, 1);
+	cplexMP.setParam(IloCplex::Param::Simplex::Tolerances::Optimality, 1e-9);
+        cplexMP.setParam(IloCplex::Param::Simplex::Tolerances::Feasibility, 1e-9);
 	
 	if (nThreads >= 0) { cplexMP.setParam(IloCplex::Threads, nThreads); }
 	cplexMP.setOut(env.getNullStream());
@@ -240,7 +245,7 @@ int PSCGModelScen_Bodur::solveFeasibilityProblem(){
 int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega) {
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
-        changeFromMIQPToMILP(); //This only does anything if the problem has not already been changed back
+        //changeFromMIQPToMILP(); //This only does anything if the problem has not already been changed back
 	//changeToMILP();
 	if(omega!=NULL){
 	  for (int i = 0; i < n1; i++) {
@@ -286,6 +291,11 @@ if(omega==NULL){
 	    //osi->markHotStart();
 	    //LagrBd = computeMIPVal(omega);
 	    LagrBd = osi->getObjValue()*osi->getObjSense();
+	    if( LagrBd - getMIPBestNodeVal() > 1e-6 ){
+		    cout << "Gap in solver was not closed adequately: " << getLagrBd() << " vs " 
+			<<  getMIPBestNodeVal() << endl;
+		    cout << "Solver status: " << getCPLEXErrorStatus() << endl;
+	    }
 	}
 #if 0
 	if(nVertices>0 && solverStatus_!=PSCG_PRIMAL_INF){
@@ -442,12 +452,60 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 		dir = x_vertex[i] - x[i];
 		oldX=x[i];
 		x[i] = x[i] + a * (x_vertex[i] - x[i]);
-		if(updateDisp){dispersions[i] = max( (1.0-a)*(dispersions[i]+fabs(x[i]-oldX)) , a*fabs(x[i]-x_vertex[i]) );}
+		if(updateDisp){dispersions[i] = (1.0-a)*fabs(x[i]-oldX) + a*fabs(x[i]-x_vertex[i]) ;}
+		//if(updateDisp){dispersions[i] = max( (1.0-a)*(dispersions[i]+fabs(x[i]-oldX)) , a*fabs(x[i]-x_vertex[i]) );}
 	}
 
 	for (int j = 0; j < n2; j++) {
 		y[j] = y[j] + a * (y_vertex[j] - y[j]);
 	}
+}
+
+void PSCGModelScen::computeWeightsForCurrentSoln(const double *z) {
+//double *oldDispersions = new double[n1];
+//double absDiffSum=0.0;
+//for(int ii=0; ii<n1; ii++) {oldDispersions[ii]=dispersions[ii];}
+   if(z==NULL){z=x;}
+   mpWeight0.setBounds(0.0,0.0);
+   try{
+	for (int wI = 0; wI < nVertices; wI++) {
+		weightObjective[wI] = 1.0;
+	}
+	mpObjective.setExpr(IloScalProd(mpWeightVariables, weightObjective) + quadraticTerm);
+	for (int i = 0; i < n1; i++) {
+		//mpVertexConstraints[i].setBounds(x[i], x[i]);
+		mpVertexConstraints[i].setBounds(z[i], z[i]);
+	}
+	if (!cplexMP.solve()) {
+		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
+		env.error() << "Failed to optimize in update step" << endl;
+		cout << "Number of vertices: " << getNVertices() << endl;
+		cplexMP.exportModel("infeasModel.lp");
+		//cout << "Refreshing solution..." << endl;
+		//refresh(omega,z,scaling_vector);
+	}
+	if(cplexMP.getCplexStatus()!=IloCplex::Optimal) {
+		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
+	}
+	cplexMP.getValues(weightSoln, mpWeightVariables);
+	polishWeights(); //fix any unfortunate numerical quirks
+	for (int ii = 0; ii < n1; ii++) {
+		dispersions[ii] = 0.0;
+		for(int wI=0; wI<nVertices; wI++) {
+		    dispersions[ii] += weightSoln[wI]*fabs(xVertices[ii][wI]-z[ii]) ; 
+		}
+	}
+   }
+   catch(IloException& e){
+	//cout << "MPSolve error: " << e.getMessage() << endl;
+	cout << "Exception caught...Refreshing solution..." << endl;
+	refresh();
+	e.end();
+   }
+   mpWeight0.setBounds(0.0,1.0);
+//for(int ii=0; ii<n1; ii++) {absDiffSum+= fabs(oldDispersions[ii]-dispersions[ii]);}
+//cout << "Difference between old and new dispersions " << absDiffSum << endl;
+//delete [] oldDispersions;
 }
 
 void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp) {
@@ -517,8 +575,6 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 	weight0 = cplexMP.getValue(mpWeight0);
 	
 	polishWeights(); //fix any unfortunate numerical quirks
-	double *oldX = new double[n1];
-	memcpy(oldX,x,n1*sizeof(double));
 	// note: the final weight corresponds to the existing x
 	for (int i = 0; i < n1; i++) {
 		x[i] = weight0 * x[i];
@@ -535,17 +591,12 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 	}
       if(updateDisp){
 	for (int ii = 0; ii < n1; ii++) {
-		//dispersions[ii] += weight0*fabs(oldX[ii]-x[ii]);
-		//dispersions[ii] += fabs(oldX[ii]-x[ii]);
 		dispersions[ii] = 0.0;
-		//dispersions[ii] = 0.0;
 		for(int wI=0; wI<nVertices; wI++) {
-		    //dispersions[ii] += weightSoln[wI]*fabs(xVertices[ii][wI]-x[ii]); 
 		    dispersions[ii] += weightSoln[wI]*fabs(xVertices[ii][wI]-x[ii]) ; 
 		}
 	}
       }
-        delete [] oldX;
 		
 	for(int wI=0; wI<nVertices; wI++) {
 		

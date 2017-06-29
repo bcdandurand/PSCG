@@ -46,6 +46,13 @@ enum Z_Statuses{
     Z_UNKNOWN
 };
 
+enum Algorithms{
+    ALGDDBASIC=-1,
+    ALGDD=0,
+    ALGDDD,
+    ALGZ
+};
+
 
 
 class PSCGParams{
@@ -73,12 +80,13 @@ public:
 	bool dataPathOverride;
 	bool LBcalc;
 	bool AlgorithmZ;
+	int Algorithm;
 	bool disableHeuristic;
 	PSCGParams() : filename(""), noScenarios(-1), maxStep(-1), maxSeconds(-1),
    fixInnerStep(-1), UseVertexHistory(-1), penalty(-1), penaltyMult(-1),
    filetype(0), verbose(false), debug(false), linRelaxFirst(false),
    linRelaxSecond(false), scaling(false), dataPathOverride(false),
-   LBcalc(false), AlgorithmZ(false), disableHeuristic(false), mpiSize(1),mpiRank(0) {}
+   LBcalc(false), AlgorithmZ(false), Algorithm(ALGDD), disableHeuristic(false), mpiSize(1),mpiRank(0) {}
 
 // ADDFLAG : Put the definition and declaration here.
     typedef struct CArgs {
@@ -91,6 +99,7 @@ public:
 	TCLAP::ValueArg<int> maxSecondsArg;
 	TCLAP::ValueArg<int> vertexHistoryArg;
 	TCLAP::ValueArg<int> threadsArg;
+	TCLAP::ValueArg<int> algArg;
 	TCLAP::ValueArg<double> ppArg;
 	TCLAP::ValueArg<double> pmultArg;
 
@@ -123,6 +132,7 @@ public:
 		pmultArg("", "pMultiplier", "Multiplier for penalty chosen by heuristic", false, -1, "float"),
 		nsArg("s", "noScenarios", "Number of scenarios to read", false, -1, "int"),
 		stepArg("", "maxStep", "Maximum number of outer loop steps. Defaults to 20.", false, -1, "int"),
+		algArg("", "alg", "Algorithm to use. Defaults to 0 (baseline dual decomposition).", false, -1, "int"),
 		maxSecondsArg("t", "maxTime", "Algorithm will terminate once it reaches this many seconds. Defaults to no limit. The job itself should have a time limit about 3 times this, just to be safe.", false, -1, "int"),
 		innerStepArg("", "innerStep", "Fixes the number of inner-loop iterations for each outer-loop iteration. If not set, we default to 1.", false, -1, "int"),
 		vertexHistoryArg("","vHistory", "Sets vertex history state (number of past vertices used, default is -1 for only most recent vertex. Zero means use all previous vertices.", false, -1, "int"),
@@ -147,6 +157,7 @@ public:
 		cmdL.add( pmultArg );
 		cmdL.add( nsArg );
 		cmdL.add( stepArg );
+		cmdL.add( algArg );
 		cmdL.add( maxSecondsArg );
 		cmdL.add( innerStepArg );
 		cmdL.add( vertexHistoryArg );
@@ -303,6 +314,23 @@ void updateParams(CArgs* a) {
 
 	if (a->AlgZ_Switch.getValue() == true) {
 		AlgorithmZ = true;
+	}
+	switch(a->algArg.getValue()){
+	    case ALGDDBASIC:
+		Algorithm=ALGDDBASIC;
+		break;
+	    case ALGDD:
+		Algorithm=ALGDD;
+		break;
+	    case ALGDDD:
+		Algorithm=ALGDDD;
+		break;
+	    case ALGZ:
+		Algorithm=ALGZ;
+		break;
+	    default:
+		Algorithm=ALGDDBASIC;
+		break;
 	}
 
 	if (a->Heur_Switch.getValue() == true) {

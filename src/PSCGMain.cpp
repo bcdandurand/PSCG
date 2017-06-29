@@ -83,6 +83,7 @@ int main(int argc, char **argv) {
         broker.setPhase(AlpsPhaseRampup);
 cout << "Begining search...." << endl;
 	broker.search(&model);
+	model.finalPrintout();
 cout << "...Ending search." << endl;
 	//model.upBranchAllSPsAt(9,1.0);
 #if 0

@@ -24,6 +24,7 @@ void PSCGModel::initialiseParameters(){
 	initialiseFileName();
 	nS = par->noScenarios;
 	penC = par->penalty;
+	algorithm = par->Algorithm;
 	baselinePenalty_=penC;
 	penMult = par->penaltyMult;
 	if (penC <= 0) {
@@ -113,6 +114,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	modelStatus_[SP_STATUS]=SP_ITER_LIM;
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
+    	    //subproblemSolvers[tS]->setInitialSolution(NULL);
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = ALPS_DBL_MAX;
@@ -127,8 +129,8 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    subproblemSolvers[tS]->setXToVertex();
 	    subproblemSolvers[tS]->setYToVertex();
 	    subproblemSolvers[tS]->updateOptSoln();
-	    recordKeeping[tS][0]=-ALPS_DBL_MAX;
-	    //recordKeeping[tS][0]=subproblemSolvers[tS]->getLagrBd();
+	    //recordKeeping[tS][0]=-ALPS_DBL_MAX;
+	    recordKeeping[tS][0]=subproblemSolvers[tS]->getLagrBd();
 	    recordKeeping[tS][1]=recordKeeping[tS][0];
 
 	    //updateTimer.stop();
@@ -216,6 +218,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 if(mpiRank==0){cerr << "End initialIteration()" << endl;}
 	return modelStatus_[SP_STATUS];
 }
+
 bool PSCGModel::solveRecourseProblemGivenFixedZ(){	
 if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
 //printOriginalVarBds();
@@ -225,7 +228,7 @@ if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
 	bool isFeas=true;
 	//memcpy(z_rounded,z_current,n1*sizeof(double));
 	//for(int ii=0; ii<numIntVars_; ii++) {z_rounded[intVar_[ii]] = round(z_current[intVar_[ii]]);}
-        roundCurrentZ();
+        //roundCurrentZ();
 	//for(int ii=0; ii<n1; ii++) {cout << z_current[ii] << " vs " << z_rounded[ii] << endl;}
 //printZRounded();
 	for (int tS = 0; tS < nNodeSPs; tS++) {
@@ -321,8 +324,13 @@ int PSCGModel::performColGenStep(){
 	reduceBuffer[1]=0.0;
 	reduceBuffer[2]=0.0;
 	double gapVal = 0.0, sqrDiscrNorm = 0.0;
+	double ALVal_tS;
+	double LagrLB_tS;
+	double lhsCritVal;
 	
 	for (int tS = 0; tS < nNodeSPs; tS++) {
+		//if(mpiRank==10) subproblemSolvers[tS]->setMIPPrintLevel(1, 5, false);
+		lhsCritVal=0.0;
 		//****************** Compute Next Vertex **********************
 	// Find next vertex and Lagrangian lower bound
 //if(tS==0) subproblemSolvers[tS]->printC();
@@ -337,6 +345,17 @@ int PSCGModel::performColGenStep(){
 		}
 
 		//Solve Lagrangian MIP
+		//if(mpiRank==10) cout << "************************************************************" << endl;
+#if 1
+    double *xSoln = subproblemSolvers[tS]->getXVertex();
+    memcpy(totalSoln_,xSoln,n1*sizeof(double));
+    double *ySoln = subproblemSolvers[tS]->getYVertex();
+    memcpy(totalSoln_+n1,ySoln,n2*sizeof(double));
+    int *all_indices = new int[n1+n2];
+    for(int jj=0; jj<n1+n2; jj++){ all_indices[jj]=jj;}
+    //subproblemSolvers[tS]->setInitialSolution(all_indices,totalSoln_);
+    delete [] all_indices;
+#endif
 		spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 		if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = ALPS_DBL_MAX;
@@ -344,6 +363,29 @@ int PSCGModel::performColGenStep(){
 cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
 	    	    break;
 		}
+#if 1
+		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
+		ALVal_tS = subproblemSolvers[tS]->getALVal();
+		lhsCritVal = ALVal_tS+0.5*sqrDiscrNorm;
+		for(int ii=0; ii<n1; ii++){
+		    lhsCritVal += scaling_matrix[tS][ii]*z_current[ii]*(x_current[tS][ii]-z_current[ii]);
+		}
+		if(lhsCritVal + 1e-6 < LagrLB_tS){
+		    cout << "performColGenStep(): scenario " << tS << " of node " << mpiRank << ": lhsCritVal condition not met: " 
+			<< lhsCritVal << " should be >= " << LagrLB_tS << endl;
+			subproblemSolvers[tS]->evaluateVertexHistory(omega_tilde[tS]);
+		    if(mpiRank==10) subproblemSolvers[tS]->printLinCoeffs();
+		    if(mpiRank==10) subproblemSolvers[tS]->printLagrSoln();
+#if 0
+    		    subproblemSolvers[tS]->setInitialSolution(NULL);
+		    cout << "performColGenStep(): trying again with scenario " << tS << " of node " << mpiRank << endl; 
+		    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
+#endif
+		}
+#endif
+		//if(mpiRank==10) cout << "************************************************************" << endl;
+
+
 		subproblemSolvers[tS]->updateSolnInfo();
 		//subproblemSolvers[tS]->compareLagrBds(omega_tilde[tS]);
 		gapVal=subproblemSolvers[tS]->updateGapVal(omega_tilde[tS]);
@@ -494,6 +536,7 @@ void PSCGModel::displayParameters(){
 	std::cout << "Debug output: " << debug << std::endl;
 	std::cout << "Finding feasible point for first vertex: Yes" << std::endl;
 	std::cout << "Using Algorithm variant to branch using z: " << AlgorithmZ << std::endl;
+	printAlgorithm();
 
 	if (nVerticesUsed < 0) {
 		std::cout << "Number of vertexes used: 1"<< std::endl;

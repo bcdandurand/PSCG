@@ -629,11 +629,11 @@ double findBranchingIndex(double *z=NULL, int branchingNo=0){
   //if(integrDiscrSum > 1e-10 || totalZDisp > 1e-6){
   //if(integrDiscrSum < 1e-10 && discrepNorm < 1e-20){
   if(integrDiscrSum < 1e-10){
-    roundCurrentZ();
+    //roundCurrentZ();
   }
   else{
     solveContinuousMPs(true);
-    roundCurrentZ();
+    //roundCurrentZ();
     averageOfVertices();
     averageOfVertices1();
     averageOfVertices2();
@@ -1048,6 +1048,7 @@ if(mpiRank==0){cout << "computeBound(): Terminating due to reaching tolerance cr
     //if(currentLagrLB < referenceLagrLB && mpiRank==0){
 if(mpiRank==0 && ii>=(nIters-1) && exceedingReferenceBd && omegaUpdatedAtLeastOnce){cout << "computeBound(): Terminating due to reaching the maximum number of iterations." << endl;}
     }
+    roundCurrentZ();
     //shouldFathomByOpt = integralityDisc < 1e-10 && (shouldTerminate || discrepNorm < 1e-20);
 #if 0
 integralityDisc=evaluateIntegralityDiscrepancies();

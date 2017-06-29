@@ -1044,7 +1044,7 @@ if(mpiRank==0){cout << "computeBound(): Terminating due to reaching tolerance cr
 	}
 #endif
 	integralityDisc=evaluateIntegralityDiscrepancies();
-	shouldContinue = (ii<nIters) || exceedingReferenceBd || (integralityDisc < 1e-10 && discrepNorm >=1e-20); 
+	shouldContinue = (ii<nIters) || !exceedingReferenceBd || (integralityDisc < 1e-10 && discrepNorm >=1e-20); 
     //if(currentLagrLB < referenceLagrLB && mpiRank==0){
 if(mpiRank==0 && ii>=(nIters-1) && exceedingReferenceBd && omegaUpdatedAtLeastOnce){cout << "computeBound(): Terminating due to reaching the maximum number of iterations." << endl;}
     }

@@ -18,7 +18,9 @@
 #define ptrNumVarArray IloNumVarArray*
 
 #define ptrDouble double*
+
 #define MIP_TOL 1e-9
+
 
 ILOSTLBEGIN
 
@@ -144,11 +146,13 @@ void finishInitialisation();
 virtual void setInitialSolution(const int *indices, const double *startSol){
     cout << "setInitialSolution(): default implementation, does nothing." << endl;
 }
+
 virtual int initialLPSolve(const double* omega=NULL){
 cerr << "initialLPSolve(): default implementation does nothing" << endl;
 return 0;
 }
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false)=0;
+
 virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal)=0;
 virtual int solveFeasibilityProblem()=0;
 virtual int getCPLEXErrorStatus(){
@@ -297,8 +301,10 @@ bool roundIfClose(double &toBeRounded){
     return false;
 }
 #endif
+
 double getWeight0(){return weight0;}
 double getWeight(int vv){return weightSoln[vv];}
+
 
 void printWeights(){
   cout << "Printing weight solutions in continuous MP: " << endl;
@@ -320,11 +326,14 @@ catch(IloException& e){
 
 //x,y,x_vertex, and y_vertex should all be set to something meaningful
 double updateGapVal(const double *omega){
+
 #if 0
+
   gapVal=0.0;
   if(omega==NULL){for(int ii=0; ii<n1; ii++) {gapVal-= (c[ii])*(x_vertex[ii]-x[ii]);}}
   else{for(int ii=0; ii<n1; ii++) {gapVal-= (c[ii]+omega[ii])*(x_vertex[ii]-x[ii]);}}
   for(int jj=0; jj<n2; jj++) {gapVal-= d[jj]*(y_vertex[jj]-y[jj]);}
+
 #endif
   gapVal=-LagrBd + evaluateSolution(omega);
 #if 0
@@ -332,6 +341,7 @@ double updateGapVal(const double *omega){
   else{for(int ii=0; ii<n1; ii++) {gapVal+= (c[ii]+omega[ii])*(x[ii]);}}
   for(int jj=0; jj<n2; jj++) {gapVal+= d[jj]*(y[jj]);}
 #endif
+
   return gapVal;
 }
 
@@ -570,7 +580,6 @@ void printDispersions(){
   cout << endl;
 }
 
-
 //void getLagrangianGradient(SMIP_qu_getLagrangianGradient* question, SMIP_ans_getLagrangianGradient* answer);
 
 double getDefaultPenaltyParameter();
@@ -697,8 +706,10 @@ virtual void fixVarAt(int index, double fixVal){
       LagrMIPInterface_->setColBounds(index,fixVal,fixVal);
 }
 
+
 virtual int initialLPSolve(const double* omega=NULL);
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
+
 virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void polishSolution(){
@@ -850,6 +861,7 @@ void setCPXMIPParameters(){
 	//setGapTolerances(1e-9,1e-9);
 
 	//osi->setDblParam(OsiDualTolerance, 1e-9);
+
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_AbsMIPGap, MIP_TOL);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_MIPGap, MIP_TOL*1e-3);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_Integrality, MIP_TOL);
@@ -860,6 +872,7 @@ void setCPXMIPParameters(){
         CPXsetintparam( osi->getEnvironmentPtr(), CPX_PARAM_SCRIND, CPX_OFF); //turn off display
         CPXsetintparam( osi->getEnvironmentPtr(), CPXPARAM_Barrier_Display, 0); //turn off display
 	osi->messageHandler()->setLogLevel(0);
+
 }
 
 virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool doReducePrint=true){
@@ -978,11 +991,13 @@ virtual bool checkSolnForFeasibility(const double *soln, vector<double> &constrV
 for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
 #endif
     for(int ii=0; ii<mat->getNumRows(); ii++){
+
 	if( !( (rowLHS[ii] <=  constrVals[ii]+MIP_TOL) && (constrVals[ii]-MIP_TOL <= rowRHS[ii]) ) ) 
 	{
 #if 1
 //for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
 cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
+
 #endif
 	    return false;
 	}
@@ -1044,7 +1059,9 @@ virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, c
    fixXToZ(z,colTypes);
 //printColTypesFirstStage();
 //printColBds();
+
    solverStatus_ = solveLagrangianProblem(omega,true);
+
    //unfixX(origLBs, origUBs, colTypes); 
    unfixX(origLBs, origUBs); 
 //printColTypesFirstStage();
@@ -1093,7 +1110,9 @@ PSCGModelScen_Bodur(const PSCGModelScen_Bodur &other):PSCGModelScen(other),
 cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}
 
 void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
+
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
+
 virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
@@ -1101,7 +1120,9 @@ virtual void setSolverStatus(){
 }
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes){
    fixXToZ(z,colTypes);
+
    int solveStatus = solveLagrangianProblem(omega,true);
+
    unfixX(origLBs, origUBs); 
    return solveStatus;
 }

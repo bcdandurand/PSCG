@@ -115,6 +115,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
     	    //subproblemSolvers[tS]->setInitialSolution(NULL);
+
     	   try{
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->initialLPSolve(omega_current[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
@@ -124,6 +125,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    	    continue;
 
 	    }
+
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = ALPS_DBL_MAX;
@@ -134,10 +136,12 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    	    continue;
 
 	    }
+
 	   }
 	   catch(CoinError &e){
 		cerr << "Exception thrown during MIP solve phase." << endl;
 	   }
+
 	    subproblemSolvers[tS]->updateSolnInfo();
 	    subproblemSolvers[tS]->setXToVertex();
 	    subproblemSolvers[tS]->setYToVertex();
@@ -185,7 +189,9 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    LagrLB = LagrLB_Local;
 	}
 	
+
 	currentLagrLB =-ALPS_DBL_MAX;
+
 	//recordKeeping[0]=LagrLB;
 	assert(ALPS_DBL_MAX > ALPS_INFINITY);
 	if(LagrLB > ALPS_INFINITY){ modelStatus_[SP_STATUS]=SP_INFEAS;} //for parallel
@@ -260,8 +266,10 @@ if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
 		{
 	    	    //LagrLB = ALPS_DBL_MAX;	    
 		    objVal = ALPS_DBL_MAX;
+
 		    //if(mpiRank==0){cerr << "Recourse problem given fixed z is infeasible due to subproblem " << tS << endl;}
 		    //if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << objVal << endl;}
+
 		    isFeas=false;
 		    localObjVal = ALPS_DBL_MAX;
 		    //return isFeas;
@@ -336,12 +344,15 @@ int PSCGModel::performColGenStep(){
 	reduceBuffer[0]=0.0;
 	reduceBuffer[1]=0.0;
 	reduceBuffer[2]=0.0;
+
 	double gapVal = 0.0, sqrDiscrNorm_tS = 0.0;
+
 	double ALVal_tS;
 	double LagrLB_tS;
 	double lhsCritVal;
 	
 	for (int tS = 0; tS < nNodeSPs; tS++) {
+
 		lhsCritVal=0.0;
 		//****************** Compute Next Vertex **********************
 	// Find next vertex and Lagrangian lower bound
@@ -349,7 +360,9 @@ int PSCGModel::performColGenStep(){
 		recordKeeping[tS][2]=subproblemSolvers[tS]->getALVal();
 		recordKeeping[tS][3]=subproblemSolvers[tS]->getSqrNormDiscr();
 		ALVal_Local += pr[tS]*subproblemSolvers[tS]->getALVal();
+
 		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
+
 		localDiscrepNorm += pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
 	
 		for (int i = 0; i < n1; i++) {
@@ -358,7 +371,9 @@ int PSCGModel::performColGenStep(){
 
 		//Solve Lagrangian MIP
 		//if(mpiRank==10) cout << "************************************************************" << endl;
+
 #if 0
+
     double *xSoln = subproblemSolvers[tS]->getXVertex();
     memcpy(totalSoln_,xSoln,n1*sizeof(double));
     double *ySoln = subproblemSolvers[tS]->getYVertex();
@@ -368,8 +383,10 @@ int PSCGModel::performColGenStep(){
     //subproblemSolvers[tS]->setInitialSolution(all_indices,totalSoln_);
     delete [] all_indices;
 #endif
+
 		
 		dynamic_cast<PSCGModelScen_SMPS*>(subproblemSolvers[tS])->getOSI()->resolve();
+
 		spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 		if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = ALPS_DBL_MAX;
@@ -380,6 +397,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 #if 1
 		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
 		ALVal_tS = subproblemSolvers[tS]->getALVal();
+
     //if(ALVal + 0.5*discrepNorm  - LagrLB < -SSC_DEN_TOL){
 		lhsCritVal = ALVal_tS+0.5*sqrDiscrNorm_tS;
 		for(int ii=0; ii<n1; ii++){
@@ -401,17 +419,21 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		    }
 			//subproblemSolvers[tS]->evaluateVertexHistory(omega_tilde[tS]);
 		    //if(mpiRank==10) subproblemSolvers[tS]->printLagrSoln();
+
 #if 0
     		    subproblemSolvers[tS]->setInitialSolution(NULL);
 		    cout << "performColGenStep(): trying again with scenario " << tS << " of node " << mpiRank << endl; 
 		    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 #endif
 		}
+
 		else{
 		    subproblemSolvers[tS]->updateSolnInfo();
 		}
+
 #endif
 		//if(mpiRank==10) cout << "************************************************************" << endl;
+
 
 
 		//subproblemSolvers[tS]->compareLagrBds(omega_tilde[tS]);
@@ -422,6 +444,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 2.0:1.0;//2.0:0.5;
 		//scaleVec_[tS] = pow(1.001,0.5*sqrDiscrNorm_tS - gapVal);//2.0:0.5;
 //cerr << "ScaleVec: " << scaleVec_[tS] << endl;
+
 		//Acumulate the values for the Lagrangian subproblems
 	        recordKeeping[tS][0]=subproblemSolvers[tS]->getLagrBd();
 	    	//cout << recordKeeping[tS][0] << " versus " << subproblemSolvers[tS]->evaluateVertexSolution(omega_tilde[tS]) << endl;
@@ -477,8 +500,10 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2]+0.5*recordKeeping[tS][3] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
 		cout << "Current solution value: " << subproblemSolvers[tS]->evaluateSolution(omega_current[tS]) << endl;;
+
 		//subproblemSolvers[tS]->evaluateVertexHistory(omega_current[tS]);
 	        //subproblemSolvers[tS]->printWeights();	
+
 	    }
 	    //assert(recordKeeping[tS][1] <=  1e-2 + recordKeeping[tS][2] + 0.5*recordKeeping[tS][3]);
 	}

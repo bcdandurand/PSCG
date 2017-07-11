@@ -188,7 +188,9 @@ void PSCGModelScen::finishInitialisation() {
 }
 
 #if 1
+
 int PSCGModelScen_Bodur::solveLagrangianProblem(const double *omega, bool doInitialSolve) {
+
 	if(omega!=NULL){
 	  for (int i = 0; i < n1; i++) {
 	        slpObjective.setLinearCoef(xVariables[i], c_vec[i]+omega[i]);
@@ -265,6 +267,7 @@ int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega, bool doIniti
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
 	double bestUB;
+
         //changeFromMIQPToMILP(); //This only does anything if the problem has not already been changed back
 	//changeToMILP();
 	if(omega!=NULL){
@@ -288,10 +291,12 @@ int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega, bool doIniti
 	    startLagrBd = evaluateVertexSolution(omega);
 	}
 #endif
+
 	if(doInitialSolve){
 	    osi->initialSolve();
 	}
 	else{osi->resolve();}
+
 	osi->branchAndBound();
 #if 0
 if(omega==NULL){ 
@@ -314,11 +319,13 @@ if(omega==NULL){
 	else{
 	    //osi->markHotStart();
 	    //LagrBd = computeMIPVal(omega);
+
 	    //LagrBd = osi->getObjValue()*osi->getObjSense();
 	    bestUB = osi->getObjValue()*osi->getObjSense();
 	    LagrBd = getMIPBestNodeVal();
 	    if( bestUB - getMIPBestNodeVal() > 1e-6 ){
 		    cout << "Gap in solver was not closed adequately: " << bestUB << " vs " 
+
 			<<  getMIPBestNodeVal() << endl;
 		    cout << "Solver status: " << getCPLEXErrorStatus() << endl;
 	    }
@@ -615,7 +622,9 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 			x[i] += weightSoln[wI] * xVertices[i][wI];
 		}
 	}
+
 #if 0
+
       if(updateDisp){
 	for (int ii = 0; ii < n1; ii++) {
 		dispersions[ii] = 0.0;
@@ -624,7 +633,9 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 		}
 	}
       }
+
 #endif		
+
 	for(int wI=0; wI<nVertices; wI++) {
 		
 		for (int j = 0; j < n2; j++) {

@@ -121,7 +121,9 @@ if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
         //desc->freeNodeInfo();
 	if(isMPIRoot) cout << "Fathomed by optimality" << endl;
 	//model->evaluateFeasibleZ();
+
         //model->findPrimalFeasSoln(0);
+
       }
       else{
         //desc->updateZ(model);
@@ -133,7 +135,9 @@ if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
 	if(isMPIRoot) cout << "Node needs to branch...with branching information:" << endl;
 	if(isMPIRoot) model->printNewNodeSPInfo();
         if(isMPIRoot) cout << "Searching for feasible solution, improvement on incumbent value..." << endl;
+
         //model->findPrimalFeasSoln(1);
+
       }
         //desc->freeNodeInfo();
 
@@ -213,6 +217,7 @@ PSCGTreeNode::branch()
 int PSCGTreeNode::bound(BcpsModel *model) 
 {
 //cout << "Begin bound()" << endl;
+
 #if 0
     cout << "Number of nodes processed: " << getKnowledgeBroker()->getNumNodesProcessed() << endl;;
     cout << "Number of nodes branched: " << getKnowledgeBroker()->getNumNodesBranched() << endl;;
@@ -236,6 +241,7 @@ int PSCGTreeNode::bound(BcpsModel *model)
     //int maxNoNullSteps = max( (int)floor(log2(treeDepth+1)), 1);
     int maxNoNullSteps = max( (int)floor(log2(treeDepth+1)), 2);
     //int maxNoNullSteps = 2;
+
     //updateQuality(m->computeBound(20,true));
     //if(m->getAlgorithm()==ALGDDBASIC){updateQuality(m->computeBound(100,true));}
     //updateQuality(m->computeBound(min(500,20*(nodeDepth+1)),true));
@@ -243,11 +249,13 @@ int PSCGTreeNode::bound(BcpsModel *model)
     //updateQuality(m->computeBound(2*(nodeDepth)+5,true));
     //if(nodeDepth==0){
     if(false){
+
 	updateQuality(m->computeBound(maxNoNullSteps,true));
     }
     else{
 	//updateQuality(m->computeBound((nodeDepth*(nodeDepth+1))/2,true));
 	updateQuality(m->computeBound(maxNoNullSteps,true));
+
     }
     //updateQuality(m->computeBound(5,true));
     //updateQuality(m->computeBound(5+2*nodeDepth,true));

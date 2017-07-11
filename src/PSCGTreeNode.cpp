@@ -121,7 +121,9 @@ if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
         //desc->freeNodeInfo();
 	if(isMPIRoot) cout << "Fathomed by optimality" << endl;
 	//model->evaluateFeasibleZ();
-        model->findPrimalFeasSoln(20);
+
+        //model->findPrimalFeasSoln(0);
+
       }
       else{
         //desc->updateZ(model);
@@ -133,7 +135,9 @@ if(isMPIRoot) {cout << "This node has depth: " << nodeDepth << endl;}
 	if(isMPIRoot) cout << "Node needs to branch...with branching information:" << endl;
 	if(isMPIRoot) model->printNewNodeSPInfo();
         if(isMPIRoot) cout << "Searching for feasible solution, improvement on incumbent value..." << endl;
-        model->findPrimalFeasSoln(20);
+
+        //model->findPrimalFeasSoln(1);
+
       }
         //desc->freeNodeInfo();
 
@@ -213,9 +217,31 @@ PSCGTreeNode::branch()
 int PSCGTreeNode::bound(BcpsModel *model) 
 {
 //cout << "Begin bound()" << endl;
+
+#if 0
+    cout << "Number of nodes processed: " << getKnowledgeBroker()->getNumNodesProcessed() << endl;;
+    cout << "Number of nodes branched: " << getKnowledgeBroker()->getNumNodesBranched() << endl;;
+    cout << "Depth of tree: " << getKnowledgeBroker()->getTreeDepth() << endl;
+    cout << "Number of nodes discarded: " << getKnowledgeBroker()->getNumNodesDiscarded() << endl;;
+    cout << "Number of pregnant nodes: " << getKnowledgeBroker()->getNumNodesPartial() << endl;;
+    cout << "Number of nodes left: " << getKnowledgeBroker()->getNumNodeLeftSystem() << endl;;
+#endif
     PSCGModel *m = dynamic_cast<PSCGModel *>(model);
     PSCGNodeDesc *desc = dynamic_cast<PSCGNodeDesc*>(desc_);
-    int nodeDepth=getDepth();
+    int treeDepth=getKnowledgeBroker()->getTreeDepth();
+    int noProcessed=getKnowledgeBroker()->getNumNodesProcessed();
+    int noLeft=getKnowledgeBroker()->getNumNodeLeftSystem();
+    int noPregnant=getKnowledgeBroker()->getNumNodesPartial();
+    int noBranched=getKnowledgeBroker()->getNumNodesBranched();
+    //int maxNoNullSteps = max((treeDepth/10), ((int)log2(1+noProcessed+noLeft+noPregnant+noBranched))-3)+1;
+    //int maxNoNullSteps = max((treeDepth/10), ((int)log2(max(1,noProcessed+noLeft+noPregnant+noBranched))))+1;
+    //int maxNoNullSteps = max((treeDepth/10), ((int)log2(max(1,noProcessed))))+1;
+    //int maxNoNullSteps = max((treeDepth/10), ((int)log2(max(1,noProcessed))))+1;
+    //int maxNoNullSteps = max((treeDepth/10), 0)+1;
+    //int maxNoNullSteps = max( (int)floor(log2(treeDepth+1)), 1);
+    int maxNoNullSteps = max( (int)floor(log2(treeDepth+1)), 2);
+    //int maxNoNullSteps = 2;
+
     //updateQuality(m->computeBound(20,true));
     //if(m->getAlgorithm()==ALGDDBASIC){updateQuality(m->computeBound(100,true));}
     //updateQuality(m->computeBound(min(500,20*(nodeDepth+1)),true));
@@ -223,10 +249,13 @@ int PSCGTreeNode::bound(BcpsModel *model)
     //updateQuality(m->computeBound(2*(nodeDepth)+5,true));
     //if(nodeDepth==0){
     if(false){
-	updateQuality(m->computeBound(500,true));
+
+	updateQuality(m->computeBound(maxNoNullSteps,true));
     }
     else{
-	updateQuality(m->computeBound((nodeDepth*(nodeDepth+1))/2,true));
+	//updateQuality(m->computeBound((nodeDepth*(nodeDepth+1))/2,true));
+	updateQuality(m->computeBound(maxNoNullSteps,true));
+
     }
     //updateQuality(m->computeBound(5,true));
     //updateQuality(m->computeBound(5+2*nodeDepth,true));

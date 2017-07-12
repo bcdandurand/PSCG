@@ -1,0 +1,28 @@
+#!/bin/bash
+# Usage: qsub pbs-FWMM-CAP
+
+#PBS -N PSCG-CAP101-5000
+# PBS -J 1-8
+
+# makes job rerunnable, necessary for array job for some reason
+#PBS -r y 
+
+#PBS -o /short/ka3/mpi_implementation/ParallelSCG/Algorithm/outCAP
+#PBS -e /short/ka3/mpi_implementation/ParallelSCG/Algorithm/errCAP
+
+# PBS -l mem=128GB
+#PBS -l mem=32GB
+
+#PBS -l ncpus=4
+# PBS -l walltime=06:00:00
+#PBS -l walltime=00:20:00
+
+cd $PBS_O_WORKDIR
+
+# parameters=`sed -n "${PBS_ARRAY_INDEX} p" ./pCAP`
+
+# parameterArray=($parameters)
+
+# penalty=${parameterArray[0]}
+mpirun -np 4 ./bin/ParallelSCG --CAP -f /Bodur/CAP/cap101.dat -p 2500 --vHistory 0 -s 25 --maxStep 20 --innerStep 1 -t 6000 --threads 1
+#mpirun -np 32 ./bin/ParallelSCG --CAP -f /Bodur/CAP/cap101.dat -p 2500 --vHistory 0 -s 5000 --maxStep 20 --innerStep 1 -t 21600 --threads 1

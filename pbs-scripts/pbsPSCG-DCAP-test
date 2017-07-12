@@ -1,0 +1,31 @@
+#!/bin/bash
+# Usage: qsub pbs-FWMM-CAP
+
+#PBS -N PSCG-DCAP
+# PBS -J 1-8
+
+# makes job rerunnable, necessary for array job for some reason
+#PBS -r y 
+
+#PBS -o /short/ka3/mpi_implementation/ParallelSCG/Algorithm/outDCAP
+#PBS -e /short/ka3/mpi_implementation/ParallelSCG/Algorithm/errDCAP
+
+#PBS -l mem=32GB
+# PBS -l mem=64GB
+
+#PBS -l ncpus=32
+#PBS -l walltime=02:00:00
+
+cd $PBS_O_WORKDIR
+
+# parameters=`sed -n "${PBS_ARRAY_INDEX} p" ./pCAP`
+
+# parameterArray=($parameters)
+
+# penalty=${parameterArray[0]}
+#mpirun -np 4 ./bin/ParallelSCG --SMPS -f /SIPLIB/DCAP/dcap342/dcap342_500 -p 100 --vHistory 0 -s 500 --maxStep 20 --innerStep 1 -t 2000 --threads 1
+#mpirun -np 1 ./bin/ParallelSCG --SMPS -f /SIPLIB/DCAP/dcap233/dcap233_500 -p 100 --vHistory 0 -s 500 --maxStep 68 --innerStep 1 -t 20000 --threads 1
+#mpirun -np 32 ./bin/ParallelSCG --SMPS -f /SIPLIB/DCAP/dcap233/dcap233_500 -p 1 --vHistory 0 -s 500 --maxStep 68 --innerStep 5 -t 20000 --threads 1
+#mpirun -np 8 ./bin/ParallelSCG --SMPS -f /SIPLIB/DCAP/dcap243/dcap243_500 -p 1 --vHistory 0 -s 500 --maxStep 57 --innerStep 1 -t 20000 --threads 1
+#mpirun -np 32 ./bin/ParallelSCG --SMPS -f /SIPLIB/DCAP/dcap332/dcap332_500 -p 1 --vHistory 0 -s 500 --maxStep 82 --innerStep 5 -t 20000 --threads 1
+mpirun -np 32 ./bin/ParallelSCG --SMPS -f /SIPLIB/DCAP/dcap342/dcap342_500 -p 1 --vHistory 0 -s 500 --maxStep 59 --innerStep 5 -t 20000 --threads 1

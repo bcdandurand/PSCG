@@ -441,7 +441,28 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		//updateTimer.addTime(updateTimeThisStep);
 		//scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 1.618:0.618;//2.0:0.5;
 		//scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 1.618:0.618;//2.0:0.5;
-		scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 2.0:1.0;//2.0:0.5;
+		if(sqrDiscrNorm_tS < SSC_DEN_TOL || gapVal <= 0.0) scaleVec_[tS] = 1.0;
+		else{
+		   scaleVec_[tS] = min(max(0.1,sqrt(sqrDiscrNorm_tS/gapVal)),10.0); 
+		}
+#if 0
+		if(gapVal <= 0.25*sqrDiscrNorm_tS){
+		    scaleVec_[tS] = 2.0;
+		}
+		else if(gapVal <= 0.5*sqrDiscrNorm_tS){
+		    scaleVec_[tS] = 1.414;
+		}
+		else if(gapVal > 4*sqrDiscrNorm_tS){
+		    scaleVec_[tS] = 0.5;
+		}
+		else if(gapVal > 2*sqrDiscrNorm_tS){
+		    scaleVec_[tS] = 0.7071;
+		}
+		else{
+		    scaleVec_[tS] = 1.0;
+		}
+#endif
+		//scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 2.0:1.0;//2.0:0.5;
 		//scaleVec_[tS] = pow(1.001,0.5*sqrDiscrNorm_tS - gapVal);//2.0:0.5;
 //cerr << "ScaleVec: " << scaleVec_[tS] << endl;
 

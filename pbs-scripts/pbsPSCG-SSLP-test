@@ -1,0 +1,30 @@
+#!/bin/bash
+# Usage: qsub pbs-FWMM-CAP
+
+#PBS -N PSCG-SSLP
+# PBS -J 1-8
+
+# makes job rerunnable, necessary for array job for some reason
+#PBS -r y 
+
+#PBS -o /homes/bcdandurand/PSCG/outSSLP
+#PBS -e /homes/bcdandurand/PSCG/errSSLP
+
+# PBS -l mem=64GB
+#PBS -l mem=32GB
+
+#PBS -l ncpus=4
+#PBS -l walltime=06:00:00
+
+cd $PBS_O_WORKDIR
+
+# parameters=`sed -n "${PBS_ARRAY_INDEX} p" ./pCAP`
+
+# parameterArray=($parameters)
+
+# penalty=${parameterArray[0]}
+#mpirun -np 1 ./bin/ParallelSCG --SMPS -f /SIPLIB/SSLP/sslp_5_25_50 -p 50 --vHistory 0 -s 50 --maxStep 8 --innerStep 1 -t 21600 --threads 1
+#mpirun -np 32 ./bin/ParallelSCG --SMPS -f /SIPLIB/SSLP/sslp_10_50_500 -p 50 --vHistory 0 -s 500 --maxStep 20 --innerStep 1 -t 21600 --threads 1
+#mpirun -np 32 ./bin/ParallelSCG --SMPS -f /SIPLIB/SSLP/sslp_5_25_100 -p 1 --vHistory 0 -s 100 --maxStep 8 --innerStep 5 -t 21600 --threads 1
+mpirun -np 4 ./bin/ParallelSCG --SMPS -f /SIPLIB/SSLP/sslp_10_50_500 -p 1 --vHistory 0 -s 500 --maxStep 30 --innerStep 5 -t 21600 --threads 1
+#mpirun -np 64 ./bin/ParallelSCG --SMPS -f /SIPLIB/SSLP/sslp_10_50_2000 -p 1 --vHistory 0 -s 2000 --maxStep 20 --innerStep 5 -t 21600 --threads 1

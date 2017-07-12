@@ -910,9 +910,10 @@ if(mpiRank==0) cerr << "Regular iteration " << ii << endl;
     	     regularIteration(false,false);
 	}
 #endif
-	if(ii<10) {regularIteration(false,adjustPenalty);}
-	else {regularIteration(true,false);}
-	//regularIteration(true,false);
+	//if(ii<10) {regularIteration(false,adjustPenalty);}
+	//else {regularIteration(true,false);}
+
+	regularIteration(true,false);
 	//if(omegaUpdated_) omegaUpdatedAtLeastOnce=true;
 	if(omegaUpdated_){ 
             noConseqTimesOmegaNotUpdated=0;
@@ -2429,7 +2430,6 @@ double computeNormedDiscrepancies(double** scaling_matrix, double** x, double* z
 void computeFeasibleStartingPoint(int tS, double* x, double* yFeasible);
 };
 #endif
-=======
 /*Header for the main procedure ParallelSCG. */
 
 #ifndef PSCGMODEL_H

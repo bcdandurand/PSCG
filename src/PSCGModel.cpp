@@ -116,6 +116,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
  	    //updateTimer.start();
     	    //subproblemSolvers[tS]->setInitialSolution(NULL);
 
+	   subproblemSolvers[tS]->resetDispersionsToZero();
     	   try{
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->initialLPSolve(omega_current[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
@@ -145,7 +146,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    subproblemSolvers[tS]->updateSolnInfo();
 	    subproblemSolvers[tS]->setXToVertex();
 	    subproblemSolvers[tS]->setYToVertex();
-	    subproblemSolvers[tS]->updateOptSoln();
+	    //subproblemSolvers[tS]->updateOptSoln();
 	    //recordKeeping[tS][0]=-ALPS_DBL_MAX;
 	    recordKeeping[tS][0]=subproblemSolvers[tS]->getLagrBd();
 	    recordKeeping[tS][1]=recordKeeping[tS][0];
@@ -190,7 +191,8 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	}
 	
 
-	currentLagrLB =-ALPS_DBL_MAX;
+	//currentLagrLB =-ALPS_DBL_MAX;
+	currentLagrLB = LagrLB;
 
 	//recordKeeping[0]=LagrLB;
 	assert(ALPS_DBL_MAX > ALPS_INFINITY);
@@ -352,18 +354,20 @@ int PSCGModel::performColGenStep(){
 	double lhsCritVal;
 	
 	for (int tS = 0; tS < nNodeSPs; tS++) {
-
+		//ALVal_tS = subproblemSolvers[tS]->getALVal();
 		lhsCritVal=0.0;
+	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_current[tS],z_current,scaling_matrix[tS]);
+		ALVal_Local += pr[tS]*ALVal_tS;
+		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
+		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
+
 		//****************** Compute Next Vertex **********************
 	// Find next vertex and Lagrangian lower bound
 //if(tS==0) subproblemSolvers[tS]->printC();
-		recordKeeping[tS][2]=subproblemSolvers[tS]->getALVal();
-		recordKeeping[tS][3]=subproblemSolvers[tS]->getSqrNormDiscr();
-		ALVal_Local += pr[tS]*subproblemSolvers[tS]->getALVal();
+		recordKeeping[tS][2]=ALVal_tS;
+		recordKeeping[tS][3]=sqrDiscrNorm_tS;
 
-		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
 
-		localDiscrepNorm += pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
 	
 		for (int i = 0; i < n1; i++) {
 		    omega_tilde[tS][i] = omega_current[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
@@ -396,7 +400,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		}
 #if 1
 		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
-		ALVal_tS = subproblemSolvers[tS]->getALVal();
+		//ALVal_tS = subproblemSolvers[tS]->getALVal();
 
     //if(ALVal + 0.5*discrepNorm  - LagrLB < -SSC_DEN_TOL){
 		lhsCritVal = ALVal_tS+0.5*sqrDiscrNorm_tS;
@@ -407,14 +411,18 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		    if(lhsCritVal + 1e-6 < LagrLB_tS){cout << "performColGenStep(): scenario " << tS << " of node " << mpiRank << ": lhsCritVal condition not met: " 
 			<< setprecision(10) << lhsCritVal << " should be >= " << setprecision(10) << LagrLB_tS << endl;
 		        subproblemSolvers[tS]->setMIPPrintLevel(1, 5, false);
-			spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
+			//spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 			//dynamic_cast<PSCGModelScen_SMPS*>(subproblemSolvers[tS])->getOSI()->resolve();
-		        subproblemSolvers[tS]->setMIPPrintLevel(0, 0, false);
+		        //subproblemSolvers[tS]->setMIPPrintLevel(0, 0, false);
 		    }
-		    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		    //subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		    //subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		    //subproblemSolvers[tS]->refresh(omega_current[tS], z_current, scaling_matrix[tS]);
+		    //updateZ();
+		    //updateOmegaTilde();
     		    if(lhsCritVal + 1e-6 < LagrLB_tS){
 		        //subproblemSolvers[tS]->printLinCoeffs();
-			cout << "Repairing Lagrangian subproblem solution: opt value was: " << setprecision(10) << LagrLB_tS << " and is now " << subproblemSolvers[tS]->getLagrBd() << endl;
+			//cout << "Repairing Lagrangian subproblem solution: opt value was: " << setprecision(10) << LagrLB_tS << " and is now " << subproblemSolvers[tS]->getLagrBd() << endl;
 			//subproblemSolvers[tS]->evaluateVertexHistory(omega_tilde[tS]);
 		    }
 			//subproblemSolvers[tS]->evaluateVertexHistory(omega_tilde[tS]);
@@ -427,9 +435,9 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 #endif
 		}
 
-		else{
+		//else{
 		    subproblemSolvers[tS]->updateSolnInfo();
-		}
+		//}
 
 #endif
 		//if(mpiRank==10) cout << "************************************************************" << endl;
@@ -439,11 +447,11 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		//subproblemSolvers[tS]->compareLagrBds(omega_tilde[tS]);
 		gapVal=subproblemSolvers[tS]->updateGapVal(omega_tilde[tS]);
 		//updateTimer.addTime(updateTimeThisStep);
-		//scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 1.618:0.618;//2.0:0.5;
-		//scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 1.618:0.618;//2.0:0.5;
-		if(sqrDiscrNorm_tS < SSC_DEN_TOL || gapVal <= 0.0) scaleVec_[tS] = 1.0;
+		if(sqrDiscrNorm_tS < SSC_DEN_TOL*SSC_DEN_TOL) scaleVec_[tS] = 1.0;
 		else{
-		   scaleVec_[tS] = min(max(0.1,sqrt(sqrDiscrNorm_tS/gapVal)),10.0); 
+		   scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 2.0:1.0;//2.0:0.5;
+		   //scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 1.618:0.618;//2.0:0.5;
+		   //scaleVec_[tS] = min(max(0.5,sqrt(pow( gapVal/sqrDiscrNorm_tS , -1.0))),1.5) + 0.5; 
 		}
 #if 0
 		if(gapVal <= 0.25*sqrDiscrNorm_tS){

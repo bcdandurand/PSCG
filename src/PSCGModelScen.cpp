@@ -145,13 +145,15 @@ void PSCGModelScen::finishInitialisation() {
 	y_vertex = new double[n2];
 	x = new double[n1];
 	dispersions = new double[n1];
+	dispersions2 = new double[n1];
 	for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
+	for(int ii=0; ii<n1; ii++){ dispersions2[ii]=0.0;}
 	y = new double[n2];
 	//x_vertex.add(n1,0.0);
 	//y_vertex.add(n2,0.0);
 		
-	for(int i=0; i<n1; i++) xVertices.push_back(vector<double>());// = new ptrIloNumArray[n1];
-	for(int j=0; j<n2; j++) yVertices.push_back(vector<double>());// = new ptrDouble[n2];
+	//for(int i=0; i<n1; i++) xVertices.push_back(vector<double>());// = new ptrIloNumArray[n1];
+	//for(int j=0; j<n2; j++) yVertices.push_back(vector<double>());// = new ptrDouble[n2];
 		
 		
 	//add objective
@@ -172,7 +174,8 @@ void PSCGModelScen::finishInitialisation() {
 	//We use dual simplex due to the nature of the problem
 	//cplexMP.setParam(IloCplex::RootAlg, IloCplex::Dual);
 	cplexMP.setParam(IloCplex::RootAlg, IloCplex::Primal);
-        cplexMP.setParam(IloCplex::Param::SolutionType, CPX_BASIC_SOLN);
+	//cplexMP.setParam(IloCplex::RootAlg, CPX_ALG_BARRIER);
+        //cplexMP.setParam(IloCplex::Param::SolutionType, CPX_BASIC_SOLN);
 	//cplexMP.setParam(IloCplex::RootAlg, 0);
 	cplexMP.setParam(IloCplex::OptimalityTarget, 1);
 	cplexMP.setParam(IloCplex::Param::Simplex::Tolerances::Optimality, 1e-9);
@@ -454,20 +457,25 @@ cout << endl;
 
 
 //Not tested!
-void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp) {
+void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, double *z_average, int vertexIndex) {
 	
 	double numerator = 0.0;
 	double denominator = 0.0;
 	double dir = 0.0;
+	double *vertX, *vertY;
+	if(vertexIndex==-1){
+	    vertX = x_vertex;
+	    vertY = y_vertex;
+	}
 	
 	for (int i = 0; i < n1; i++) {
-		if(omega==NULL){numerator -= (c[i] + scaling_vector[i] * (x[i] - z[i])) * (x_vertex[i] - x[i]);}
-		else{numerator -= (c[i] + omega[i] + scaling_vector[i] * (x[i] - z[i])) * (x_vertex[i] - x[i]);}
-		denominator += (x_vertex[i] - x[i]) * scaling_vector[i] * (x_vertex[i] - x[i]);
+		if(omega==NULL){numerator -= (c[i] + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
+		else{numerator -= (c[i] + omega[i] + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
+		denominator += (vertX[i] - x[i]) * scaling_vector[i] * (vertX[i] - x[i]);
 	}
 	
 	for (int j = 0; j < n2; j++) {
-		numerator -= d[j] * (y_vertex[j] - y[j]);
+		numerator -= d[j] * (vertY[j] - y[j]);
 	}
 	
 	double a;
@@ -482,15 +490,15 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 	if (a < 0) {a = 0;}
 	double oldX;
 	for (int i = 0; i < n1; i++) {
-		dir = x_vertex[i] - x[i];
+		dir = vertX[i] - x[i];
 		oldX=x[i];
-		x[i] = x[i] + a * (x_vertex[i] - x[i]);
-		if(updateDisp){dispersions[i] = (1.0-a)*fabs(x[i]-oldX) + a*fabs(x[i]-x_vertex[i]) ;}
+		x[i] = x[i] + a * (vertX[i] - x[i]);
+		if(z_average!=NULL){dispersions2[i] = (1.0-a)*dispersions2[i] + a*fabs(z_average[i]-vertX[i]) ;}
 		//if(updateDisp){dispersions[i] = max( (1.0-a)*(dispersions[i]+fabs(x[i]-oldX)) , a*fabs(x[i]-x_vertex[i]) );}
 	}
 
 	for (int j = 0; j < n2; j++) {
-		y[j] = y[j] + a * (y_vertex[j] - y[j]);
+		y[j] = y[j] + a * (vertY[j] - y[j]);
 	}
 }
 
@@ -525,14 +533,14 @@ void PSCGModelScen::computeWeightsForCurrentSoln(const double *z) {
 	for (int ii = 0; ii < n1; ii++) {
 		dispersions[ii] = 0.0;
 		for(int wI=0; wI<nVertices; wI++) {
-		    dispersions[ii] += weightSoln[wI]*fabs(xVertices[ii][wI]-z[ii]) ; 
+		    dispersions[ii] += weightSoln[wI]*fabs(xVertices[wI][ii]-z[ii]) ; 
 		}
 	}
    }
    catch(IloException& e){
 	//cout << "MPSolve error: " << e.getMessage() << endl;
-	cout << "Exception caught...Refreshing solution..." << endl;
-	refresh();
+	cout << "Exception caught...weights not computed accurately!" << endl;
+	//refresh();
 	e.end();
    }
    mpWeight0.setBounds(0.0,1.0);
@@ -541,16 +549,23 @@ void PSCGModelScen::computeWeightsForCurrentSoln(const double *z) {
 //delete [] oldDispersions;
 }
 
-void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp) {
+void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+	const double *scaling_vector, bool updateDisp) {
    double direction=1.0;
    try{
+#if 0
+	for(int i=0; i<n1; i++){
+	    mpAuxVariables[i].setLB(zLBs[i]-z[i]);
+	    mpAuxVariables[i].setUB(zUBs[i]-z[i]);
+	}
+#endif
 	if(updateDisp) mpWeight0.setBounds(0.0,0.0);
 	IloNum weightObj0(0.0);
 	for (int wI = 0; wI < nVertices; wI++) {
 		weightObjective[wI] = baseWeightObj[wI];
 		if(omega!=NULL){	
 		    for (int i = 0; i < n1; i++) {
-			weightObjective[wI] += xVertices[i][wI] * omega[i];
+			weightObjective[wI] += xVertices[wI][i] * omega[i];
 		    }
 		}
 	}
@@ -618,12 +633,13 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 		y[j] = weight0 * y[j];
 	}
 	for(int wI=0; wI<nVertices; wI++) {
+		vecWeights[wI] = weight0*vecWeights[wI] + weightSoln[wI];
 		for (int i = 0; i < n1; i++) {
-			x[i] += weightSoln[wI] * xVertices[i][wI];
+			x[i] += weightSoln[wI] * xVertices[wI][i];
 		}
+#if 0
 	}
 
-#if 0
 
       if(updateDisp){
 	for (int ii = 0; ii < n1; ii++) {
@@ -634,12 +650,12 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
 	}
       }
 
-#endif		
 
 	for(int wI=0; wI<nVertices; wI++) {
+#endif		
 		
 		for (int j = 0; j < n2; j++) {
-			y[j] += weightSoln[wI] * yVertices[j][wI];
+			y[j] += weightSoln[wI] * yVertices[wI][j];
 		}
 	}
 	
@@ -648,7 +664,8 @@ void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega
    catch(IloException& e){
 	//cout << "MPSolve error: " << e.getMessage() << endl;
 	cout << "Exception caught...Refreshing solution..." << endl;
-	refresh();
+	//refresh();
+	refresh(omega,z,scaling_vector);
 	e.end();
    }
 }

@@ -70,6 +70,7 @@ double gapVal;
 
 double *x;
 double *dispersions;
+double *dispersions2;
 double *y;
 
 int nVertices;
@@ -77,10 +78,11 @@ int maxNVertices;
 int oldestVertexIndex;
 double* x_vertex;
 double* y_vertex;
-double* x_vertex_opt;
-double* y_vertex_opt;
+//double* x_vertex_opt;
+//double* y_vertex_opt;
 vector< vector<double> > xVertices; //row ordered
 vector< vector<double> > yVertices;
+vector<double> vecWeights;
 
 IloCplex cplexMP;
 IloModel mpModel;
@@ -104,7 +106,7 @@ int solverStatus_;
 public:
 PSCGModelScen():
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),x_vertex_opt(NULL),y_vertex_opt(NULL),oldestVertexIndex(-1),
+x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
@@ -125,13 +127,12 @@ void finishInitialisation();
 ~PSCGModelScen(){
   delete [] x;
   delete [] dispersions;
+  delete [] dispersions2;
   delete [] y;
   delete [] c;
   delete [] d;
   delete [] x_vertex;
   delete [] y_vertex;
-  delete [] x_vertex_opt;
-  delete [] y_vertex_opt;
 
   mpModel.end();
   mpObjective.end();
@@ -167,6 +168,7 @@ cout << "getColTypes(): Default implementation: doing nothing" << endl;
 double* getC(){return c;}
 double* getD(){return d;}
 double* getDispersions(){return dispersions;}
+double* getDispersions2(){return dispersions2;}
 virtual double getMIPBestNodeVal(){
     cout << "getMIPBestNodeVal(): default implementation, does nothing" << endl;
 }
@@ -184,6 +186,7 @@ cerr << "setLBs(): Default implementation does nothing." << endl;
 virtual void setUBs(const double *ubs, int nUBs){
 cerr << "setLBs(): Default implementation does nothing." << endl;
 }
+#if 0
 void updateOptSoln(){
    if(x_vertex_opt==NULL) x_vertex_opt = new double[n1];
    if(y_vertex_opt==NULL) y_vertex_opt = new double[n2];
@@ -197,6 +200,7 @@ double evaluateVertexOptSolution(const double* omega){
     for(int jj=0; jj<n2; jj++) retVal+= d[jj]*y_vertex_opt[jj];
     return retVal;
 }
+#endif
 double evaluateVertexSolution(const double* omega){
     double retVal=0.0;
     if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*x_vertex[ii];}
@@ -223,9 +227,9 @@ void evaluateVertexHistory(const double *omega){
     double retVal;
     for(int vv=0; vv<nVertices; vv++){
     	retVal=0.0;
-    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[ii][vv];}
-    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[ii][vv];}
-    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[jj][vv];
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[vv][ii];}
+    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
+    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
 	cout << "\tVertex " << vv << " results in a value of " << retVal << endl;
     }
 //virtual void setColSolution(const double *colsol) = 0;
@@ -237,9 +241,9 @@ void optimiseLagrOverVertexHistory(const double *omega){
     int optIndex = -1;
     for(int vv=0; vv<nVertices; vv++){
     	retVal=0.0;
-    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[ii][vv];}
-    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[ii][vv];}
-    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[jj][vv];
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[vv][ii];}
+    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
+    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
 	//cout << "\tVertex " << vv << " results in a value of " << retVal << endl;
 	if(retVal < LagrBd){
 	    LagrBd = retVal;
@@ -247,15 +251,15 @@ void optimiseLagrOverVertexHistory(const double *omega){
 	}
     }
     if(optIndex != -1){
-        for(int ii=0; ii<n1; ii++){ x_vertex[ii]=xVertices[ii][optIndex];}
-        for(int jj=0; jj<n2; jj++){ y_vertex[jj]=yVertices[jj][optIndex];}
-        polishSolution();
+        for(int ii=0; ii<n1; ii++){ x_vertex[ii]=xVertices[optIndex][ii];}
+        for(int jj=0; jj<n2; jj++){ y_vertex[jj]=yVertices[optIndex][jj];}
+        //polishSolution();
     }
 //virtual void setColSolution(const double *colsol) = 0;
 }
 
 double getXVertexEntry(int entry, int vertex){
-  return xVertices[entry][vertex];
+  return xVertices[vertex][entry];
 }
 
 double computeIntegralityDiscr(){
@@ -314,6 +318,10 @@ try{
     cout << "  " << weightSoln[ii];
   }
   cout << endl;
+  for(int ii=0; ii<nVertices; ii++){
+    cout << "  " << vecWeights[ii];
+  }
+  cout << endl;
 }
 catch(IloException& e){
   cout << "printWeights() error: " << e.getMessage() << endl;
@@ -359,20 +367,29 @@ double computeXDispersion(const double *z){
 
 void addVertex(){
     if(nVertices==maxNVertices){
+	if(vecWeights.size()==0){vecWeights.push_back(1.0);}
+	else{vecWeights.push_back(0.0);}
+//vector<double> vecWeights;
+	xVertices.push_back(vector<double>(n1));
+	yVertices.push_back(vector<double>(n2));
+	nVertices++;
+	maxNVertices++;
 	for(int i=0; i<n1; i++) {
-	   xVertices[i].push_back(x_vertex[i]);
+	   //xVertices[i].push_back(x_vertex[i]);
+	   xVertices[nVertices-1][i] = x_vertex[i];
 	}
 	for(int i=0; i<n2; i++) { 
-	   yVertices[i].push_back(y_vertex[i]);
+	   //yVertices[i].push_back(y_vertex[i]);
+	   yVertices[nVertices-1][i] = y_vertex[i];
 	}
 
 	//upvhWeightVariables.add(IloNumVar(env, 0.0, 1.0));
 	//upvhWeightConstraints[0].setLinearCoef(upvhWeightVariables[nVertices], 1.0);	
 	mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
-	mpWeightVariables[nVertices].setBounds(0.0,1.0);
+	mpWeightVariables[nVertices-1].setBounds(0.0,1.0);
 	
 	for(int i=0; i<n1; i++) {
-	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[nVertices], x_vertex[i]);
+	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[nVertices-1], x_vertex[i]);
 	}
 
 	baseWeightObj.push_back(0.0);
@@ -380,15 +397,13 @@ void addVertex(){
 	weightObjective.add(0.0);
 
 	for (int i = 0; i < n1; i++) {
-		baseWeightObj[nVertices] += x_vertex[i] * c[i];
+		baseWeightObj[nVertices-1] += x_vertex[i] * c[i];
 	}
 
 	for (int j = 0; j < n2; j++) {
-		baseWeightObj[nVertices] += y_vertex[j] * d[j];
+		baseWeightObj[nVertices-1] += y_vertex[j] * d[j];
 	}
 
-	nVertices++;
-	maxNVertices++;
     }
     else{ //nVertices<maxNVertices
 	assert(nVertices < maxNVertices);
@@ -405,10 +420,10 @@ void replaceVertexAtIndex(int iii){
 	assert(iii>=0);
 	assert(iii<maxNVertices);
 	for(int i=0; i<n1; i++) {
-	   xVertices[i][iii] = x_vertex[i];
+	   xVertices[iii][i] = x_vertex[i];
 	}
 	for(int i=0; i<n2; i++) { 
-	   yVertices[i][iii] = y_vertex[i];
+	   yVertices[iii][i] = y_vertex[i];
 	}
 
 	for(int i=0; i<n1; i++) {
@@ -455,6 +470,12 @@ void clearVertexHistory(){
   oldestVertexIndex=-1;
   nVertices=0;
   for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
+  for(int ii=0; ii<n1; ii++){ dispersions2[ii]=0.0;}
+}
+
+void resetDispersionsToZero(){
+    for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
+    for(int ii=0; ii<n1; ii++){ dispersions2[ii]=0.0;}
 }
 
 virtual void printLinCoeffs(){
@@ -466,7 +487,7 @@ void printVertices(){
 cout << "Printing Vertices: " << endl;
   for(int ii=0; ii<n1; ii++){
       for(int vv=0; vv<nVertices; vv++){
-	cout << " " << xVertices[ii][vv];
+	cout << " " << xVertices[vv][ii];
       }
       cout << endl;
   }
@@ -544,6 +565,7 @@ void unfixWeight(int index){
 int getNVertices(){return nVertices;}
 
 //Not tested, purpose is to modify quadratic master problem formulation to reflect removing of vertices.
+#if 0
 void removeBackVertex() {
     if(nVertices>0) {
 		for(int i=0;i<n1;i++) xVertices[i].erase(xVertices[i].begin());
@@ -558,6 +580,7 @@ void removeBackVertex() {
 		nVertices--;
     }
 }
+#endif
 
 void setQuadraticTerm(const double scaling_const) {
 	for (int i = 0; i < n1; i++) {
@@ -571,8 +594,9 @@ void setQuadraticTerm(const double *scaling_vector) {
 	}
 }
 
-void updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp=false); 
-void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *scaling_vector, bool updateDisp=false);
+void updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, double *z_average=NULL, int vertIndex=-1); 
+void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+	const double *scaling_vector, bool updateDisp=false);
 void computeWeightsForCurrentSoln(const double *z); 
 void printDispersions(){
   cout << "Printing dispersions for scenario " << tS << endl;
@@ -588,15 +612,15 @@ int getNumVertices(){return nVertices;}
 double * getX(){return x;}
 double * getY(){return y;}
 double * getXVertex(){return x_vertex;}
-double * getXVertexOpt(){return x_vertex_opt;}
 double * getYVertex(){return y_vertex;}
-double * getYVertexOpt(){return y_vertex_opt;}
 
-void setXToVertex(){for(int i=0;i<n1;i++) x[i]=x_vertex[i];}
+void setXToVertex(){
+    resetDispersionsToZero();
+    for(int i=0;i<n1;i++) x[i]=x_vertex[i];
+}
 void setYToVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex[i];}
-void setXToOptVertex(){for(int i=0;i<n1;i++) x[i]=x_vertex_opt[i];}
-void setYToOptVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex_opt[i];}
 
+#if 0
 void refresh(){
     clearVertexHistory();
     memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
@@ -608,16 +632,17 @@ void refresh(){
     weightSoln[0]=1.0;//(env, nVertices);
     for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
 }
+#endif
 void refresh(const double *omega, const double *z, const double *scaling_vector){
     
     //setXToOptVertex();
     //setYToOptVertex();
     updatePrimalVariables_OneScenario(omega, z, scaling_vector);
 
-    clearVertexHistory();
-    memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
-    memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
-    addVertex();
+    //clearVertexHistory();
+    //memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
+    //memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
+    //addVertex();
 
     //weightSoln[0]=1.0;//(env, nVertices);
     //for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
@@ -628,6 +653,10 @@ cerr << "polishSolution(): Doing nothing." << endl;
 }
 
 void polishWeights(){
+#if 0
+cout << "PolishWeights(): before" << endl;
+printWeights();
+#endif
 //assert(weight0 >=0 && weight0 <=1);
 	double weightSum=0.0;
 	if(weight0 >=0 && weight0 <=1){
@@ -662,12 +691,19 @@ void polishWeights(){
 	for(int wI=0; wI<nVertices; wI++) {
 	    weightSoln[wI] /=weightSum;
 	}
+#if 0
+cout << "PolishWeights(): after" << endl;
+printWeights();
+weightSum=weight0;
+for(int wI=0; wI<nVertices; wI++){weightSum+= weightSoln[wI];}
+cout << "PolishWeights(): sum: " << weightSum << endl;
+#endif
 }
 
 double getLagrBd(){return LagrBd;}
 double getProbabilities(){return pr;}
 
-void updateALValues(const double *omega, const double *z, const double *scaling_vector){
+double updateALValues(const double *omega, const double *z, const double *scaling_vector){
     ALVal = 0.0;
     sqrNormDiscr = 0.0;
     for(int ii=0; ii<n1; ii++) {
@@ -680,6 +716,7 @@ void updateALValues(const double *omega, const double *z, const double *scaling_
     for(int jj=0; jj<n2; jj++) {
 		ALVal += d[jj]*y[jj];
     }
+    return ALVal;
 }
 double getALVal(){return ALVal;}
 double getSqrNormDiscr(){return sqrNormDiscr;}
@@ -715,22 +752,26 @@ virtual int solveFeasibilityProblem();
 virtual void polishSolution(){
   for(int ii=0; ii<n1; ii++){
       if(LagrMIPInterface_->getColLower()[ii] > x_vertex[ii]){
-	x_vertex[ii] = LagrMIPInterface_->getColLower()[ii];
+cerr << "polishSolution(): Flagging" << endl;
+	//x_vertex[ii] = LagrMIPInterface_->getColLower()[ii];
       }
       if(LagrMIPInterface_->getColUpper()[ii] < x_vertex[ii]){
-	x_vertex[ii] = LagrMIPInterface_->getColUpper()[ii];
+cerr << "polishSolution(): Flagging" << endl;
+	//x_vertex[ii] = LagrMIPInterface_->getColUpper()[ii];
       }
-      if(x_vertex[ii]==-0) x_vertex[ii]=0.0;
+      //if(x_vertex[ii]==-0) x_vertex[ii]=0.0;
       if(getColTypes()[ii]!=0)  x_vertex[ii]=round(x_vertex[ii]);
   }
   for(int ii=0; ii<n2; ii++){
       if(LagrMIPInterface_->getColLower()[n1+ii] > y_vertex[ii]){
-	y_vertex[ii] = LagrMIPInterface_->getColLower()[n1+ii];
+cerr << "polishSolution(): Flagging" << endl;
+	//y_vertex[ii] = LagrMIPInterface_->getColLower()[n1+ii];
       }
       if(LagrMIPInterface_->getColUpper()[n1+ii] < y_vertex[ii]){
-	y_vertex[ii] = LagrMIPInterface_->getColUpper()[n1+ii];
+cerr << "polishSolution(): Flagging" << endl;
+	//y_vertex[ii] = LagrMIPInterface_->getColUpper()[n1+ii];
       }
-      if(y_vertex[ii]==-0) y_vertex[ii]=0.0;
+      //if(y_vertex[ii]==-0) y_vertex[ii]=0.0;
       if(getColTypes()[n1+ii]!=0)  y_vertex[ii]=round(y_vertex[ii]);
   }
 }
@@ -996,7 +1037,7 @@ for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constr
 	{
 #if 1
 //for(int ii=0; ii<mat->getNumRows(); ii++) cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
-cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
+//cout << rowLHS[ii] << " <= " << constrVals[ii] << " <= " << rowRHS[ii] << endl;
 
 #endif
 	    return false;
@@ -1087,7 +1128,7 @@ virtual void updateSolnInfo(){
 		memcpy(y_vertex,solution+n1,n2*sizeof(double));
 		//for(int ii=0; ii<n1; ii++){ (x_vertex[ii]);}
 		//for(int ii=0; ii<n2; ii++){ (y_vertex[ii]);}
-		polishSolution();
+		//polishSolution();
 	}
 	else{
 		cerr << "Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;

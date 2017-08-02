@@ -239,7 +239,8 @@ int PSCGTreeNode::bound(BcpsModel *model)
     //int maxNoNullSteps = max((treeDepth/10), ((int)log2(max(1,noProcessed))))+1;
     //int maxNoNullSteps = max((treeDepth/10), 0)+1;
     //int maxNoNullSteps = max( (int)floor(log2(treeDepth+1)), 1);
-    int maxNoNullSteps = max( (int)floor(log2(treeDepth+1)), 2);
+    //int maxNoNullSteps = max( (int)floor(log2(treeDepth+1)), 2);
+    int maxNoNullSteps = max( (int)round(sqrt(treeDepth+1)), 3);
     //int maxNoNullSteps = 2;
 
     //updateQuality(m->computeBound(20,true));

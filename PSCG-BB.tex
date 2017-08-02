@@ -229,9 +229,13 @@ where $K$ is a bounded polyhedral set intersected with mixed-integrality constra
 We develop a branch-and-bound approach to solving~\eqref{P1} based on solving Lagrangian relaxations due to relaxing $Qx=z$.
 At each node, we use the recently developed algorithm SDM-GS-ALM to solve two equivalent characterizations of the Lagrangian dual problem.
 The Lagrangian dual function is defined 
-$$\phi(\omega) := \min_{x,y,z} \braces{p_i \left[ c^\top x_i + \omega_i^\top(x_i-z) + d_i^\top y_i \right] : (x_i,y_i) \in K_i, z \in \mathbb{R}^{n_1}}.$$ 
+$$\phi(\omega) := \min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ c^\top x_i + \omega_i^\top(x_i-z) + d_i^\top y_i \right] : (x_i,y_i) \in K_i,\text{ for }i=1,\dots,m,\; z \in \mathbb{R}^{n_1}}.$$ 
 Under the dual feasibility condition $\sum_{i=1}^m p_i \omega_i = 0$, we have 
-$$\phi(\omega) = \min_{x,y,z} \braces{p_i \left[ \left(c+\omega_i\right)^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i, z \in \mathbb{R}^{n_1}}$$ 
+$$\phi(\omega) = \min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ \left(c+\omega_i\right)^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i, \text{ for }i=1,\dots,m,\;z \in \mathbb{R}^{n_1}}.$$ 
+The set of solutions verifying the value of $\phi(\omega)$ is denoted
+$$
+K^*(\omega):=\argmin_{x,y} \braces{\sum_{i=1}^m p_i \left[ \left(c+\omega_i\right)^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i, \text{ for }i=1,\dots,m,\; z \in \mathbb{R}^{n_1}}.
+$$
 %When $f$ is not linear, we also need to refer to the convexified Lagrangian dual funciton  
 %$\phi^C(\omega) := \min_{x,z} \braces{f(x) + \omega^\top (Qx-z) : x \in \conv(X), z \in Z},$ 
 %for which analogously,
@@ -269,7 +273,7 @@ It is well-known [under our standing assumptions] that $f_C^*=\phi^*$, although 
 %Let $f : \mathbb{R}^2 \mapsto \mathbb{R}$ be defined by $f(x)=(x_1-0.5)^2+(x_2-0.5)^2$, $X=\braces{0,1} \times \braces{0,1}$, and let $Qx=z$ be defined to model the constraints $x_1 -z_1 = 0$ and $x_2 - z_2 = 0$ where $Z = \braces{(z_1,z_2) : z_1=z_2} \subset \mathbb{R}^2$. We see trivially that $\phi_C^* = 0$, which is verified with the saddle point $x_1^*=x_2^*=z_1^*=z_2^*=0.5$ and $\omega^*=(0,0)$. However,
 %$\phi^* = 0.5$, which is verified with either of the saddle points $x_1^*=x_2^*=z_1^*=z_2^*=0$ and $\omega^*=(0,0)$, or $x_1^*=x_2^*=z_1^*=z_2^*=1$ and $\omega^*=(0,0)$. Thus,  $\phi_C^* < \phi^*$.
 
-Dual optimal solutions to~\eqref{D1}, when they exist, are generically denoted by $\omega^*$, and and the set of corresponding optimal primal solutions verifying the value $\phi(\omega^*)$ is denoted by $K^*(\omega^*)$. The optimal solutions to the second characterization~\eqref{D2}, when they exist, are denoted $(x^*,y^*,z^*)$. We shall denote the set $Z:=\braces{(x,y) \in K : \exists \; z \in \mathbb{R}^n \; \text{s.t.} \; x_i=z\; \text{for }i=1,\dots,m}$. 
+Dual optimal solutions to~\eqref{D1}, when they exist, are generically denoted by $\omega^*$, and and the set of corresponding optimal primal solutions verifying the value $\phi(\omega^*)$ is denoted by $K^*(\omega^*)$. The optimal solutions to the second characterization~\eqref{D2}, when they exist, are denoted $(x^*,y^*,z^*)$. We shall denote the set $Z:=\braces{(x,y) \in \conv(K) : \exists \; z \in \mathbb{R}^n \; \text{s.t.} \; x_i=z\; \text{for }i=1,\dots,m}$. 
 %$$K_Z := \braces{ (x,y) \in K : \exists \; z \in \mathbb{R}^n \; \text{s.t.} \; x_i=z\; \text{for }i=1,\dots,m}.$$ 
 %It is straightforward to show that $\conv(X_Z) = \braces{x \in \conv(X)  : \exists \; z \in Z \; \text{s.t.} \; Qx=z}$ under the assumption that $Z$ is convex.
 
@@ -281,9 +285,9 @@ but $(x^*,y^*) \not\in K$ in the case of strict duality gap $\phi_C^* < f^*$. Th
 %Under this paradigm, bounding is applied to $K$.
 \item Viewing the node subproblems as instances of problem~\eqref{D1}, assuming we have a dual optimal solution $\omega^*$, we have corresponding sets of primal certificate solutions $K^*(\omega^*)$. For these solutions, we have $K^*(\omega^*) \cap  Z = \emptyset$ in the case of duality gap $\phi_C^* < f^*$. We consider one of two projections:
 \begin{enumerate}
-\item Take the projection $\proj_Z(K(\omega^*))$. Conceptually, we want to accumulate the dispersions in some set-wise or point-wise fashion.
-Ideally, we do not consider the dispersion of only one $\widehat{x} \in K^*(\omega^*)$, but the entire set $K^*(\omega^*)$, which is contained in the highest dimensional face of $\conv(K)$ for which $(x^*,y^*)$ is in its relative interior.
-\item Rather than projection, we use the information from $x^*$, $z^*$ and $\omega^*$. (Or, more practically, $x^k$, $z^k$ and $\omega^k$.) We still work with the set $K^*(\omega^k)$, whose vertex description is available from computing $\widehat{x}^t \in K^*(\omega^t)$ at each iteration $t=1,\dots,k$.
+\item Take the projection $\proj_Z(K^*(\omega^*))$. Conceptually, we want to accumulate the dispersions in some set-wise or point-wise fashion.
+Ideally, we do not consider the dispersion of only one $(\widehat{x},\widehat{y}) \in K^*(\omega^*)$, but the entire set $K^*(\omega^*)$, which is contained in the highest dimensional face of $\conv(K)$ for which $(x^*,y^*)$ is in its relative interior.
+\item Rather than projection, we use the information from $x^*$, $y^*$, $z^*$ and $\omega^*$. (Or, more practically, $x^k$, $y^k$, $z^k$ and $\omega^k$.) We still work with the set $K^*(\omega^k)$, whose vertex description is available from computing $(\widehat{x}^t,\widehat{y}^t) \in K^*(\omega^t)$ at each iteration $t=1,\dots,k$.
 %Take the projection of $Q\widehat{x}(\omega^*)$ onto $Q\conv(X) \cap Z$, denoted by 
 %$$P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*)).$$ We shall show that
 %$z^*$ is an element of $P_{Q\conv(X) \cap Z}(Q\widehat{x}(\omega^*))$, and so we consider the discrepancies $Q\widehat{x}(\omega^*)-z^*$.
@@ -305,7 +309,7 @@ f_B^*:=\min_{x,y,z} \braces{\sum_{i=1}^m p_i \left[ c^\top x_i + d_i^\top y_i \r
 \end{equation}
 with
 \begin{equation}\label{PhiCB}
-\phi_B(\omega) = \min_{x,y,z} \braces{p_i \left[ \left(c+\omega_i\right)^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i,\; x_i \in B_i,\; z \in \mathbb{R}^{n_1}}
+\phi_B(\omega) = \min_{x,y} \braces{ \sum_{i=1}^m p_i \left[ \left(c+\omega_i\right)^\top x_i + d_i^\top y_i \right] : (x_i,y_i) \in K_i,\; x_i \in B_i \; \forall i=1,\dots,m}
 \end{equation} 
 and
 \begin{equation}\label{D2B}
@@ -343,7 +347,7 @@ and updating $\upsilon \gets f_B^*$ if that is the case. (In Caroe and Schultz, 
 % \State $(\widehat{x}^{k+1},x^{k+1},z^{k+1},\omega^{k+1},\widecheck{\phi}^{k+1}, \textbf{term}) \gets \text{PSCG}(\mathcal{S},\mathcal{P},D^k,x^k,z^k,\omega^k,\widecheck{\phi}^k)$
 % \State $k \gets k+1$
 %\EndWhile
-\If{$\widecheck{\phi}^{*} > \upsilon$ \textbf{or} $\widecheck{\phi}^* = \infty$}
+\If{${\phi}^{*} > \upsilon$ \textbf{or} ${\phi}^* = \infty$}
  \State \textbf{fathom node}
  \State $\mathcal{B} \gets \emptyset$
  \State \textbf{return} $(\upsilon, \widetilde{z}, \mathcal{B})$
@@ -477,6 +481,9 @@ If there exists a dual optimal solution $\omega^*$ to the dual problem~\eqref{D1
 and the sequence $\braces{(x^k,y^k,z^k)}$ has limit points $(\overline{x},\overline{y},\overline{z})$, each of which are optimal for problem~\eqref{D2}.
 \end{proposition}
 
+\subsection{Adjustment of penalties}
+
+One important feature of PSCG is the dynamic adjustment of penalty for speeding up convergence. Adjustments using information from the test for the serious step condition are used.
 
 %\subsection{Parallelization and workload}
 %The opportunities for parallelization and distribution of the computational workload in PSCG, as stated in Algorithm~\ref{AlgDualAscentGSSSC}, are not immediately apparent.
@@ -518,7 +525,7 @@ In the baseline DD branch-and-bound, a criterion for fathoming by optimality may
 \sqrt{\sum_{i=1}^m \norm{\widehat{x}_i-\widehat{z}}_2^2} < \epsilon,
 \end{equation}
 for some suitably small tolerance $\epsilon > 0$,
-where only the deviations from satisfaction of $\widehat{x}_i=\widehat{x}$, $i=1,\dots,m$, are taken into account since the integrality constraints on $\widehat{x}$ are satisfied by construction. We define for convenience the vector in $\mathbb{R}^n$:
+where only the deviations from satisfaction of $\widehat{x}_i=\widehat{z}$, $i=1,\dots,m$, $\widehat{z} \in \proj_Z(\widehat{x})$, are taken into account since the integrality constraints on $\widehat{x}$ are satisfied by construction. We define for convenience the vector in $\mathbb{R}^n$:
 $$
 \sigma_Z:=\brackets{\sum_{i=1}^m \norm{\widehat{x}_{i,j}-\widehat{z}_j}}_{j=1,\dots,n}.
 $$
@@ -537,21 +544,28 @@ $$
 
 
 \subsection{Branching decisions}
-We have the following approaches at measuring dispersion from the constraint $Qx=z$ at iteration $k$:
+We have the following approaches at measuring dispersion from the constraint $x_i=z$, $i=1,\dots,m$, at iteration $k$:
 \begin{enumerate}
-\item Given a dual feasible solution $\omega^k$, for some $\widehat{x}^k \in \widehat{x}(\omega^k)$, 
-setting $\widehat{x}^k=\brackets{\widehat{x}_i^k}_{i=1,\dots,m}$, we take an average $\widehat{z}^k = \proj_Z(Q\widehat{x}^k)$. Based on this average,
+\item Given $\widehat{x}^k \in K^*(\omega^k)$ for some dual feasible solution $\omega^k$, and 
+setting $\widehat{x}^k=\brackets{\widehat{x}_i^k}_{i=1,\dots,m}$, we take an average $\widehat{z}^k = \proj_Z(\widehat{x}^k)$. Based on this average,
 we compute a component-wise dispersion 
-$$\sigma_j^k:=\sum_{i=1,\dots,m} \left| \brackets{Q_i\widehat{x}_i^k - \widehat{z}_i^k}_j \right|$$% +  \left| \brackets{Q_i{x}_i^k - {z}_i^k}_j \right|$$ 
-for each component index $j=1,\dots,n_x$, and denote $\sigma:=\brackets{\sigma_j}_{j=1,\dots,n_x}$. This is the approach [in Caroe and Schultz]. One quirk with this approach is that, at the optimal dual solution $\omega^*$, any of the previously generated solutions $\widehat{x} \in \widehat{x}(\omega^k)$ may also satisfy $\widehat{x} \in \widehat{\omega}^*$. This is especially true in the typically satisfied case that $c \in Z$. Also, the approach does not use information from the dispersions $\norm{x^* - \proj_X(x^*)}$. The latter issue is addressed with the following modification to $\sigma_j^k$:
+$$\sigma_j^k:=\sum_{i=1,\dots,m} \left| \brackets{\widehat{x}_i^k - \widehat{z}^k}_j \right|$$% +  \left| \brackets{Q_i{x}_i^k - {z}_i^k}_j \right|$$ 
+for each component index $j=1,\dots,n_x$, and denote $\sigma:=\brackets{\sigma_j}_{j=1,\dots,n_x}$. This is the approach [in Caroe and Schultz]. One quirk with this approach is that, at the optimal dual solution $\omega^*$, any of the previously generated solutions $\widehat{x} \in K^*(\omega^k)$ may also satisfy $\widehat{x} \in K^*(\omega^*)$. 
+%This is especially true in the typically satisfied case that $c \in Z$. 
+%Also, the approach does not use information from the dispersions $\norm{(x^*,y^*) - \proj_K((x^*,y^*))}$. The latter issue is addressed with the following modification to $\sigma_j^k$:
+%$$
+%\sigma_j^k:=\norm{ \left[([\sigma_X]_i+\epsilon)[Q_i\widehat{x}_{i}^k) - \widehat{z}_i^k]_j\right]_{i=1,\dots,m} } + \norm{Qx^k-z^k}
+%$$
+\item Let $\widehat{x}^t \in K^*(\omega^t)$ for $t=0,1,\dots,k$. We have for each $i=1,\dots,m$ that $x_i^k = \sum_{t} \alpha^t \widehat{x}^t$. Furthermore, we take 
+$$\widecheck{z} = \sum_{i=1}^m \beta_i x^i.$$ 
+where we assume that the weights $\beta \ge 0$, $i=1,\dots,m$, have been normalized so that $\sum_{i=1}^m \beta_i = 1$.
+Then we define the dispersions
 $$
-\sigma_j^k:=\norm{ \left[([\sigma_X]_i+\epsilon)[Q_i\widehat{x}_{i}^k) - \widehat{z}_i^k]_j\right]_{i=1,\dots,m} } + \norm{Qx^k-z^k}
+\sigma_j := \sum_{i=1,\dots,m} \beta_i \sum_{t=1,\dots,T_i} \alpha_t \left|\widehat{x}_{i,j}^t - \widecheck{z}_{j}^k \right| 
 $$
-\item Let $\widehat{x}^t \in \widehat{x}(\omega^t)$ for $t=0,1,\dots,k$. We have for each $i=1,\dots,m$ that $x_i^k = \sum_{t} \alpha^t \widehat{x}^t$. Then another form of dispersion is given by:
-$$
-\sigma_j := \sum_{i=1,\dots,m} \beta_i \sum_{t=1,\dots,k} \alpha_t \left|Q_i \widehat{x}_{i,j}^t - z_{i,j}^k \right| $$
-$$ \sigma_j := \frac{1}{\sum_{i=1} [\sigma_X]_i+\epsilon}\sum_{i=1,\dots,m} [\sigma_X+\epsilon]_i \sum_{t=1,\dots,k} \alpha_t \left|Q_i\left( \widehat{x}_{i,j}^t - x_{i,j}^k \right) \right| + \rho_{i,j}\left| Q_i x_{i,j}^k - z_j^k \right|, $$
-where $0 \le \alpha_t \le 1$ for $t=1,\dots,T_i$ and $\sum_{t=1,\dots,T_i} \alpha_t = 1$ are the convex multipliers used to form a convex combination $x^k = \sum_{t=1,\dots,k} \alpha_t\widehat{x}^t$.
+%$$ \sigma_j := \frac{1}{\sum_{i=1} [\sigma_X]_i+\epsilon}\sum_{i=1,\dots,m} [\sigma_X+\epsilon]_i \sum_{t=1,\dots,k} \alpha_t \left|Q_i\left( \widehat{x}_{i,j}^t - x_{i,j}^k \right) \right| + \rho_{i,j}\left| Q_i x_{i,j}^k - z_j^k \right|, 
+%$$
+where $0 \le \alpha_t \le 1$ for $t=1,\dots,T_i$ and $\sum_{t=1,\dots,T_i} \alpha_t = 1$ are the convex multipliers used to form a convex combination $x^k = \sum_{t=1,\dots,k} \alpha_t\widehat{x}^t$. The weights $\beta_i \ge 0$ are chosen by some "sensible" rationale, for example, using information from the feasibility measure, we might choose $\beta_i = \sigma_{K,i}$ for $i=1,\dots,m$. In the case of branching on continuous variables, we add the branch constraints $x_j \le \widecheck{z}_j$ and $x_j \ge \widecheck{z}_j$; while for integer-restricted variables, we add $x_j \le \lfloor \widecheck{z}_j \rfloor$ and $x_j \ge \lceil \widecheck{z}_j \rceil$. Notice that $\widecheck{z}$ and $z^*$ are not the same.
 \end{enumerate}
 
 \begin{remark}

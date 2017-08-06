@@ -22,23 +22,12 @@
 #include "TssModel.h"
 #include "PSCGModelScen.h"
 #include "PSCGParams.h"
-#include "Alps.h"
-#include "AlpsModel.h"
-#include "AlpsKnowledge.h"
-#include "BcpsSolution.h"
-#include "BcpsModel.h"
-#include "AlpsTreeNode.h"
 
-//#define smallNumber 0.000001
 #define SSC_PARAM 0.05
 #define SSC_DEN_TOL 1e-10
-//#define ROUNDING_TOLERANCE 1e-6
 #define DEFAULT_THREADS 1
 #define KIWIEL_PENALTY 1 //set 1 to use Kiwiel (2006) penalty update rule
 #define MIN_PEN 0.0 
-//#define MAX_N_BRANCHINGS 1
-//#define BRANCHING_EPS 1e-2
-#define IDEPS 1e-10
 
 #ifdef USING_MPI
    #include <mpi.h>
@@ -60,16 +49,6 @@ BINARY,
 INTEGER
 };
 
-enum BRANCH_TYPE{
-UP=0,
-DOWN
-};
-
-typedef struct{
-  int index;
-  double lb;
-  double ub;
-} var_branch;
 
 #if 0
 enum SolverReturnStatus {
@@ -94,14 +73,14 @@ enum SolverReturnStatus {
 
 // ADDFLAG : Add the variable here
 
-class PSCGModel : public BcpsModel{
+class PSCGModel {
 public:
 PSCGParams *par;
 TssModel smpsModel;
 int algorithm;
 vector<int> scenariosToThisModel;
 vector<PSCGModelScen*> subproblemSolvers;
-vector< vector<var_branch> > newNodeSPInfo;
+//vector< vector<var_branch> > newNodeSPInfo;
 int nS;
 int n1;
 int n2;
@@ -115,7 +94,6 @@ vector<double*> omega_saved;
 bool omegaIsZero_;
 bool omegaUpdated_;
 bool shouldTerminate;
-bool shouldFathomByOpt;
 
 double *scaleVec_;
 
@@ -123,16 +101,10 @@ vector<double*> x_current;
 vector<double*> y_current;
 
 double* z_current;// = new double[n1];
-double* z_intdisp;// = new double[n1];
 double* z_old;// = new double[n1];
-double* z_average;
-double* z_vertex_average;
-double* z_average1;
-double* z_average2;
 double* z_local;// = new double[n1];
 double* z_incumbent_; //this should be the last feasible z with best obj
 double *z_rounded;
-bool selectOnlyIntegerVars;
 double *z_saved;
 double* totalSoln_; //new double[n1+n2];
 vector<double> constrVec_; //This is filled with the value of Ax
@@ -205,10 +177,10 @@ char zOptFile[128];
 
 ProblemDataBodur pdBodur;
 
-PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),algorithm(ALGDD),referenceLagrLB(-ALPS_DBL_MAX),currentLagrLB(-ALPS_DBL_MAX),LagrLB(-ALPS_DBL_MAX),
-LagrLB_Local(0.0),ALVal_Local(ALPS_DBL_MAX),ALVal(ALPS_DBL_MAX),objVal(ALPS_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),infeasIndex_(-1),selectOnlyIntegerVars(false),maxNoSteps(20),
-	nIntInfeas_(-1),omegaUpdated_(false),scaleVec_(NULL),BcpsModel(){
+PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),algorithm(ALGDD),referenceLagrLB(-COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),LagrLB(-COIN_DBL_MAX),
+LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
+	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(20),
+	nIntInfeas_(-1),omegaUpdated_(false),scaleVec_(NULL){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -224,13 +196,6 @@ LagrLB_Local(0.0),ALVal_Local(ALPS_DBL_MAX),ALVal(ALPS_DBL_MAX),objVal(ALPS_DBL_
 	initialiseModel();
 	
 
-	if (mpiRank==0) {
-		std::cout << std::endl;
-		std::cout << "Problem data: " << std::endl;
-		std::cout << "Number of first stage variables: " << n1 << std::endl;
-		std::cout << "Number of second stage variables: " << n2 << std::endl;
-		std::cout << "Number of scenarios: " << nS << std::endl;
-    	}
 
 	//******************Assign Scenarios**********************
 	assignSubproblems();
@@ -250,6 +215,7 @@ LagrLB_Local(0.0),ALVal_Local(ALPS_DBL_MAX),ALVal(ALPS_DBL_MAX),objVal(ALPS_DBL_
 	}
 	//delete[] z_current;
 	delete [] z_current;
+#if 0
 	delete [] z_intdisp;
 	delete [] z_old;
 	delete [] z_saved;
@@ -257,6 +223,7 @@ LagrLB_Local(0.0),ALVal_Local(ALPS_DBL_MAX),ALVal(ALPS_DBL_MAX),objVal(ALPS_DBL_
 	delete [] z_vertex_average;
 	delete [] z_average1;
 	delete [] z_average2;
+#endif
 	delete [] z_local;
 	delete [] z_incumbent_;
 	delete [] z_rounded;
@@ -290,29 +257,7 @@ void assignSubproblems(){
 
 
 void initialiseParameters();
-void setAlgorithm(int algNo){
-   algorithm=algNo;
-}
 
-int getAlgorithm(){return algorithm;}
-void printAlgorithm(){
-  if(mpiRank==0){
-    switch(algorithm){
-	case ALGDDBASIC:
-	    cout << "Using baseline DDBB" << endl;
-	    break;
-	case ALGDD:
-	    cout << "Using slightly enhanced DDBB" << endl;
-	    break;
-	case ALGDDD:
-	    cout << "Using enhanced DDBB" << endl;
-	    break;
-	case ALGZ:
-	    cout << "Using Z BB" << endl;
-	    break;
-    }
-  }
-}
 
 void initialiseFileName(){
 char str[] ="- This, a sample string.";
@@ -369,13 +314,8 @@ void initialiseModel(){
 	}
 	//z_current = new double[n1];
 	z_current = new double[n1];
-	z_intdisp = new double[n1];
 	z_old = new double[n1];
 	z_saved = new double[n1];
-	z_average = new double[n1];
-	z_vertex_average = new double[n1];
-	z_average1 = new double[n1];
-	z_average2 = new double[n1];
 	z_local = new double[n1];
 	z_incumbent_ = new double[n1];
 	z_rounded = new double[n1];
@@ -403,6 +343,13 @@ void initialiseModel(){
 	    throw(-1);
 	    break;
 	}
+	if (mpiRank==0) {
+		std::cout << std::endl;
+		std::cout << "Problem data: " << std::endl;
+		std::cout << "Number of first stage variables: " << n1 << std::endl;
+		std::cout << "Number of second stage variables: " << n2 << std::endl;
+		std::cout << "Number of scenarios: " << nS << std::endl;
+    	}
 }
 
 void setupSolvers();
@@ -414,14 +361,6 @@ void fixVarAllSPsAt(int index, double fixVal){
     currentVarLB_[index]=fixVal;		
     currentVarUB_[index]=fixVal;		
 }
-#if 0
-void upBranchAllSPsAt(int index, double bound){
-    for(int tS=0; tS<nNodeSPs; tS++){
-	subproblemSolvers[tS]->upBranchOnVar(index, bound);
-    }
-    currentVarLB_[index]=bound;		
-}
-#endif
 void setLBsAllSPs(const double *lbs){
     for(int tS=0; tS<nNodeSPs; tS++){
 	subproblemSolvers[tS]->setLBs(lbs, n1);
@@ -434,14 +373,6 @@ void setUBsAllSPs(const double *ubs){
     }
     memcpy(currentVarUB_,ubs,n1*sizeof(double));		
 }
-#if 0
-void downBranchAllSPsAt(int index, double bound){
-    for(int tS=0; tS<nNodeSPs; tS++){
-	subproblemSolvers[tS]->downBranchOnVar(index, bound);
-    }
-    currentVarUB_[index]=bound;		
-}
-#endif
 
 void restoreOriginalVarBounds(){
     for(int tS=0; tS<nNodeSPs; tS++){
@@ -455,42 +386,6 @@ void clearSPVertexHistory(){
 	subproblemSolvers[tS]->clearVertexHistory();
     }
 }
-#if 0
-void installSubproblem(double lb, vector<double*> & omega, vector<int> &indices, vector<int> &fixTypes, vector<double> &bds, int nFix, int infeasIndex, double pen){
-//if(mpiRank==0){cerr << "Begin installSubproblem ";}
-    restoreOriginalVarBounds();
-//if(mpiRank==0){cout << "Branching at (indices,bounds,type): ";}
-    for(int ii=0; ii<nFix; ii++){
-//if(mpiRank==0){cout << "(" << indices[ii] << "," << bds[ii] << "," << fixTypes[ii] << ") ";}
-	switch( fixTypes[ii] ){
-	    case UP:
-		//up-branch
-		upBranchAllSPsAt(indices[ii],bds[ii]);
-		break;
-	    case DOWN:
-		//down-branch
-		downBranchAllSPsAt(indices[ii],bds[ii]);
-		break;
-	}
-    }
-//if(mpiRank==0){cout << endl;}
-    //TODO: resolve ownership questions for current_z, current_omega
-//if(mpiRank==0){cerr << "Reading z...";}
-    //readZIntoModel(z);
-//if(mpiRank==0){cerr << "Reading omega...";}
-    readOmegaIntoModel(omega);
-    //loadOmega();
-    //zeroOmega();
-    currentLagrLB=lb;
-    infeasIndex_=infeasIndex;
-    setPenalty(pen);
-    baselinePenalty_=pen;
-    printOriginalVarBds();
-    printCurrentVarBds();
-    //subproblemSolvers[0]->printXBounds();
-//if(mpiRank==0){cerr << "End installSubproblem ";}
-}
-#endif
 
 
 void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs, double pen){
@@ -504,7 +399,7 @@ void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, co
     readOmegaIntoModel(omega);
     //loadOmega();
     //zeroOmega();
-    currentLagrLB=-ALPS_DBL_MAX;
+    currentLagrLB=-COIN_DBL_MAX;
     referenceLagrLB=lb;
     setPenalty(pen);
     printOriginalVarBds();
@@ -523,7 +418,7 @@ void installSubproblem(double lb, const double *zLBs, const double *zUBs, double
     //readOmegaIntoModel(omega);
     //loadOmega();
     //zeroOmega();
-    currentLagrLB=-ALPS_DBL_MAX;
+    currentLagrLB=-COIN_DBL_MAX;
     referenceLagrLB=lb;
     setPenalty(pen);
     printOriginalVarBds();
@@ -533,257 +428,12 @@ void installSubproblem(double lb, const double *zLBs, const double *zUBs, double
 }
 
 double *getZ(){return z_current;}
-double *getZAverage(){return z_average;}
-double *getZAverage1(){return z_average1;}
-double *getZAverage2(){return z_average2;}
-vector< vector<var_branch> >& getNewNodeSPInfo(){return newNodeSPInfo;}
-int getNumNewNodeSPs(){return newNodeSPInfo.size();}
-
-
-//double evaluateXDispersion(double *z=NULL, int branchingNo=0){
-double findBranchingIndex(double *z=NULL, int branchingNo=0){
-    //if(z==NULL) z=z_current; //Default behaviour
-    newNodeSPInfo.clear();
-    printTwoZDiscr();
-    printAlgorithm();
-#if 0
-    if(AlgorithmZ){
-        if(mpiRank==0){ cout << "Using the consensus vector z to determine branching..." << endl;}
-    }
-    else{
-	if(mpiRank==0){ cout << "Using the average of scenario-specific optimal columns to determine branching..." << endl;}	
-    }
-#endif
-    double maxDisp=ALPS_DBL_MAX;
-    double zVal;
-    double cVarLB,cVarUB;
-    double *dispZAver = new double[n1];
-    double *dispZAver1 = new double[n1];
-    double *dispZAver2 = new double[n1];
-    double *dispZ = new double[n1];
-    double *dispOmega = new double[n1];
-    double *dispVertices = new double[n1];
-    double *dispVerticesAll = new double[n1];
-    //double *coeffLocal = new double[n1];
-    //double *coeff = new double[n1];
-    double *penSumLocal = new double[n1];
-    double *penSum = new double[n1];
-    double discrep;
-    double branchingVal;
-    int nVertices,nVerticesAdded;
-    double integrDiscr;
-    double integrDiscrSum=0.0;
-    double integrDiscrSumLocal=0.0;
-    double integrDiscrMax=0.0;
-    double integrDiscrMaxLocal=0.0;
-    //double totalWeightLocal=0.0;
-    //double totalWeightLocal2=0.0;
-    //double totalWeight=0.0;
-    //double totalWeight2=0.0;
-    double totalZDisp;
-
-    for(int tS=0; tS<nNodeSPs; tS++){
-	integrDiscr = subproblemSolvers[tS]->computeIntegralityDiscr();  
-	integrDiscrSumLocal += integrDiscr;  
-	integrDiscrMaxLocal = max(integrDiscrMaxLocal,integrDiscr);
-	//if(integrDiscr > 1e-10) cout << "Node " << mpiRank << " scenario " << tS << " integrality discrepancy: " << integrDiscr << endl;  
-    }
-#ifdef USING_MPI
-    if(mpiSize>1){
-        MPI_Allreduce(&integrDiscrSumLocal, &integrDiscrSum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Allreduce(&integrDiscrMaxLocal, &integrDiscrMax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    }
-#endif
-    if(mpiSize==1){
-	integrDiscrSum=integrDiscrSumLocal;
-	integrDiscrMax=integrDiscrMaxLocal;
-    }
-    updateZ(z_current,dispZ);
-    //for(int ii=0; ii<n1; ii++){dispZ[ii]/=penSum[ii];}
-    if(mpiRank==0){
-	cout << "dispZ is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispZ[ii];}
-	cout << endl;
-    }
-    totalZDisp = 0.0;
-    for(int ii=0; ii<n1; ii++){totalZDisp+=dispZ[ii];} 
-    if(mpiRank==0) cout << "total integer dispersions: " << integrDiscrSum << endl;// || selectOnlyIntegerVars){ 
-    if(mpiRank==0) cout << "maximum integer dispersions: " << integrDiscrMax << endl;// || selectOnlyIntegerVars){ 
-    if(mpiRank==0) cout << "total z dispersions: " << totalZDisp << endl;// || selectOnlyIntegerVars){ 
-    if(mpiRank==0) cout << "discrepNorm: " << discrepNorm << endl;// || selectOnlyIntegerVars){ 
-
-  //if(integrDiscrSum > 1e-10 || totalZDisp > 1e-6){
-  //if(integrDiscrSum < 1e-10 && discrepNorm < 1e-20){
-    if(mpiRank==0) cout << "After computing bound, we have LB: " << currentLagrLB << " and UB: " << objVal << endl;
-  //if(integrDiscrSum >= 1e-10){
-  if( objVal - currentLagrLB >= 1e-6){ //otherwise, fathom node by optimality
-    //roundCurrentZ();
-    averageOfXweightedByIntDisp();
-    averageOfVertices(z_average,dispZAver);
-    averageOfVertices1(z_average1,dispZAver1);
-    averageOfVertices2(z_average2,dispZAver2);
-    averageOfVerticesZ(z_intdisp,dispVertices);
-    //computeVertexDispAroundX(dispVertices);
-    sumWeightedVertexDisp(dispVerticesAll);
-    if(mpiRank==0){ 
-	cout << "-----------------------------" << endl;
-#if 0
-	cout << "coeff is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << coeff[ii];}
-	cout << endl;
-#endif
-	cout << "ZAverage is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << z_average[ii];}
-	cout << endl;
-#if 1
-	cout << "ZAverage1 is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << z_average1[ii];}
-	cout << endl;
-#endif
-	cout << "ZAverage2 is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << z_average2[ii];}
-	cout << endl;
-	cout << "ZCurrent is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << z_current[ii];}
-	cout << endl;
-#if 1
-	cout << "Z int disp is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << z_intdisp[ii];}
-	cout << endl;
-#endif
-	cout << "-----------------------------" << endl;
-	cout << "dispZAver is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispZAver[ii];}
-	cout << endl;
-#if 1
-	cout << "dispZAver1 is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispZAver1[ii];}
-	cout << endl;
-#endif
-	cout << "dispZAver2 is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispZAver2[ii];}
-	cout << endl;
-	cout << "dispOmega is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispOmega[ii];}
-	cout << endl;
-	cout << "dispVertices is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispVertices[ii];}
-	cout << endl;
-	cout << "dispVerticesAll is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispVerticesAll[ii];}
-	cout << endl;
-#if 0
-	cout << "Sum of dispVertices and dispZ is: " << endl;
-	for(int ii=0; ii<n1; ii++){ cout << " " << dispVertices[ii]+dispZ[ii];}
-	cout << endl;
-#endif
-	cout << "-----------------------------" << endl;
-    }
-
-
-
-	//Now decide on branching index...
-	maxDisp=0.0;
-	//if(selectOnlyIntegerVars && mpiRank==0) cout << "findBranchingIndex(): only selecting integer variables" << endl;
-	double minDisp=0.0;//fabs(disp[0]);
-	double testDisp=0.0;
-	double gapMin;
-    	for(int ii=0; ii<n1; ii++){ 
-	    switch(algorithm){
-		case ALGDDBASIC:
-		    testDisp = dispZAver[ii];//+dispZ[ii];
-		    break;
-		case ALGDD:
-		    testDisp = dispZAver1[ii];//+dispZ[ii];
-		    break;
-		case ALGDDD:
-		    testDisp = dispZAver2[ii];//+dispZ[ii];
-		    break;
-		case ALGZ:
-		    testDisp = dispVertices[ii];//+dispZ[ii];}
-		    //if(useVertexHistory){testDisp = dispVertices[ii];}//+dispZ[ii];}
-		    //else{testDisp = dispVerticesAll[ii]+dispZ[ii];}
-  		    //if(integrDiscrSum >= 1e-10){testDisp = dispVertices[ii];}
-		    //else{ testDisp = dispZ[ii];}
-		    //testDisp = dispZAver2[ii];//+dispZ[ii];
-		    break;
-		default:
-		    testDisp = dispZAver[ii];//+dispZ[ii];
-		    break;
-	    }
-	  if(testDisp > maxDisp){// && (colType_[ii]=='C' || AlgorithmZ)){
-	    	maxDisp = testDisp;
-	    	infeasIndex_ = ii;
-	  }
-    	}
-	  switch(algorithm){
-		case ALGDDBASIC:
-	    	    zVal=z_average[infeasIndex_];
-		    break;
-		case ALGDD:
-	    	    zVal=z_average1[infeasIndex_];
-		    break;
-		case ALGDDD:
-	    	    zVal=z_average2[infeasIndex_];
-		    break;
-		case ALGZ:
-	    	    zVal=z_current[infeasIndex_];
-	    	    //zVal=z_intdisp[infeasIndex_];
-	    	    //zVal=z_average2[infeasIndex_];
-		    break;
-		default:
-	    	    zVal=z_average[infeasIndex_];
-		    break;
-	  }
-	  cVarLB=currentVarLB_[infeasIndex_];
-	  cVarUB=currentVarUB_[infeasIndex_];
-	  
-	  if(colType_[infeasIndex_]=='C'){
-		newNodeSPInfo.push_back(vector<var_branch>());
-		if( cVarLB > zVal ){
-		    if(mpiRank==0)cerr << cVarLB << " > " << zVal << endl;
-		    //zVal = cVarLB;
-		}
-		newNodeSPInfo[0].push_back({infeasIndex_, cVarLB, zVal });
-
-		newNodeSPInfo.push_back(vector<var_branch>());
-		if(zVal > cVarUB){
-		    if(mpiRank==0) cerr << zVal << " > " << cVarUB << endl; 
-		    //zVal = cVarUB;
-		}
-		newNodeSPInfo[1].push_back({infeasIndex_, zVal, cVarUB });
-	  }
-	  else{//branching var is integer
-		 if( cVarLB <= round(zVal) && round(zVal) <= cVarUB){
-		   newNodeSPInfo.push_back(vector<var_branch>());
-		   newNodeSPInfo[newNodeSPInfo.size()-1].push_back({infeasIndex_, round(zVal), round(zVal) });
-		 }
-		 if( cVarLB <= round(zVal)-1){
-		    newNodeSPInfo.push_back(vector<var_branch>());
-		    newNodeSPInfo[newNodeSPInfo.size()-1].push_back({infeasIndex_, cVarLB, round(zVal)-1 });
-		 }
-		 if( round(zVal)+1 <= cVarUB){
-		    newNodeSPInfo.push_back(vector<var_branch>());
-		    newNodeSPInfo[newNodeSPInfo.size()-1].push_back({infeasIndex_, round(zVal)+1, cVarUB });
-		 }
-
-	  }
-	  //printNewNodeSPInfo();
-    }//if(integrDiscrSum > 1e-10 || totalZDisp > 1e-6){
-    delete [] dispZAver;
-    delete [] dispZAver1;
-    delete [] dispZAver2;
-    delete [] dispZ;
-    delete [] dispOmega;
-    delete [] dispVertices;
-    delete [] dispVerticesAll;
-    return maxDisp;
-}
 
 double* getOrigVarLbds(){return origVarLB_;}
 double* getOrigVarUbds(){return origVarUB_;}
 double* getCurrentVarLbds(){return currentVarLB_;}
 double* getCurrentVarUbds(){return currentVarUB_;}
+
 void printOriginalVarBds(){
   if(mpiRank==0){
     cout << "Printing original variable bounds:" << endl;
@@ -809,10 +459,7 @@ void printCurrentVarBds(){
 
 vector<double*>& getOmega(){return omega_current;}
 double *getIncumbentZ(){return z_incumbent_;}
-double getIncumbentVal(){return getKnowledgeBroker()->getIncumbentValue();}
 double getObjVal(){return objVal;}
-int getInfeasIndex(){return infeasIndex_;}
-void setInfeasIndex(int ii){infeasIndex_=ii;}
 
 void readZIntoModel(const double* z){
     memcpy(z_current,z,n1*sizeof(double));
@@ -838,6 +485,9 @@ void readOmegaIntoModel(vector<double*> &omega){
     omegaIsZero_=false;
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_current[tS],omega[tS],n1*sizeof(double));
 }
+void saveOmega(){
+    for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_saved[tS],omega_current[tS],n1*sizeof(double));
+}
 void loadOmega(){
     omegaIsZero_=false;
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_current[tS],omega_saved[tS],n1*sizeof(double));
@@ -850,18 +500,6 @@ void zeroOmega(){
     omegaIsZero_=true;
     for(int tS=0; tS<nNodeSPs; tS++){ for(int ii=0; ii<n1; ii++){omega_current[tS][ii]=0.0;}}
 }
-void decimateOmega(double byFactor = 0.2){
-    if(byFactor < 0.0) byFactor=0.0;
-    else if(byFactor > 1) byFactor=1.0;
-    for(int tS=0; tS<nNodeSPs; tS++){ for(int ii=0; ii<n1; ii++){omega_current[tS][ii]*=byFactor;}}
-}
-void saveOmega(){
-    for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_saved[tS],omega_current[tS],n1*sizeof(double));
-}
-
-#if 1
-virtual AlpsTreeNode* createRoot();
-#endif
 
 int initialIteration();
 
@@ -893,16 +531,14 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
     //fixInnerStep = 20;
     modelStatus_[Z_STATUS]=Z_UNKNOWN;
     clearSPVertexHistory();
-    int treeDepth=getKnowledgeBroker()->getTreeDepth();
-    //int maxNoIts = 10 + (int)round(sqrt(treeDepth));
-    int maxNoIts = 10 + treeDepth;
+    int maxNoIts = 40;
     int SPStatus=initialIteration();
     if(mpiRank==0) cout << "After initial iteration: currentLB: " << LagrLB << " versus refLB: " << referenceLagrLB << endl;;
     
     //bool exceedingReferenceBd = currentLagrLB + SSC_DEN_TOL >= referenceLagrLB;
     bool exceedingReferenceBd = false;
     bool omegaUpdatedAtLeastOnce=false;
-    shouldFathomByOpt = false;
+    //shouldFathomByOpt = false;
     double integralityDisc = 100.0;
     discrepNorm = 100.0;
     shouldTerminate=false;
@@ -910,7 +546,8 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
 	modelStatus_[Z_STATUS]=Z_INFEAS;
 if(mpiRank==0){cout << "Terminating due to subproblem infeasibility..." << endl;}
     }
-    else if(currentLagrLB >= getIncumbentVal()){
+    //else if(currentLagrLB >= getIncumbentVal()){
+    else if(false){
 	modelStatus_[Z_STATUS]=Z_BOUNDED;
 if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
       	//printStatus();
@@ -940,13 +577,6 @@ if(mpiRank==0) cerr << "Regular iteration " << ii << endl;
 	//{regularIteration(false,adjustPenalty);}
 	if(ii<10) {regularIteration(false,adjustPenalty);}
 	else{regularIteration(true,false);}
-#if 0
-	else if(ii<40){regularIteration(true,false);}
-	else{
-    	     if(ii%2==0){computeScalingPenaltyUpdate(2.0);}	
-    	     regularIteration(false,false);
-	}
-#endif
 
 	//regularIteration(true,false);
 	//if(omegaUpdated_) omegaUpdatedAtLeastOnce=true;
@@ -959,13 +589,16 @@ if(mpiRank==0) cerr << "Regular iteration " << ii << endl;
 	}
 	else{noConseqTimesOmegaNotUpdated++;}
 	//omegaUpdatedAtLeastOnce=true;
-      	printStatusAsErr();
+      	//printStatusAsErr();
+	printStatus();
+#if 0
         if(currentLagrLB >= getIncumbentVal()){
       	    modelStatus_[Z_STATUS]=Z_BOUNDED;
 if(mpiRank==0){cout << "computeBound(): Terminating due to exceeding cutoff..." << endl;}
       	    //printStatus();
 	    break;
 	}
+#endif
         exceedingReferenceBd = currentLagrLB + SSC_DEN_TOL >= referenceLagrLB;
 	integralityDisc=evaluateIntegralityDiscrepancies();
 	//postprocessing = ((integralityDisc < 1e-10) && (ii>20)) || postprocessing;
@@ -974,7 +607,7 @@ if(mpiRank==0){cout << "computeBound(): Terminating due to exceeding cutoff..." 
 #if 1
 	//if(shouldTerminate()){
         reachedMaxNoIts = (ii>=maxNoIts);
-	if((shouldTerminate) || reachedMaxNoIts || noTimesOmegaUpdated > 50){
+	if((shouldTerminate) || reachedMaxNoIts){// || noTimesOmegaUpdated > 50){
 if(mpiRank==0 && reachedMaxNoIts){cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << ii << endl;}
 else{
    if(mpiRank==0){cout << "computeBound(): Terminating due to reaching maximum number of iterations: " << ii << endl;}
@@ -994,11 +627,12 @@ if(mpiRank==0) cerr << "Omega updated " << noTimesOmegaUpdated << " times, max n
     //if(currentLagrLB < referenceLagrLB && mpiRank==0){
 //if(mpiRank==0 && ii>=(nIters-1) && exceedingReferenceBd && omegaUpdatedAtLeastOnce){cout << "computeBound(): Terminating due to reaching the maximum number of iterations." << endl;}
     }
-    //solveContinuousMPs(true);
+    solveContinuousMPs();
+    printStatus();
     //integralityDisc=evaluateIntegralityDiscrepancies();
     objVal=findPrimalFeasSolnWith(z_current);
 #if 1
-    if(integralityDisc < 1e-10 && modelStatus_[Z_STATUS]!=Z_BOUNDED && (shouldTerminate) ){
+    if(objVal - currentLagrLB >= 1e-6 && integralityDisc < 1e-10 && modelStatus_[Z_STATUS]!=Z_BOUNDED && (shouldTerminate) ){
     //if(false){
     //if(true){
 	//setPenalty(1.0);
@@ -1015,84 +649,14 @@ if(mpiRank==0) cerr << "Omega updated " << noTimesOmegaUpdated << " times, max n
 	//cerr << "My rank " << mpiRank << " remoteNNodeSPs " << remoteNNodeSPs << endl;     
 	}
 	delete [] zBuffer;
-#if 0
-        for(int tS=0; tS<nNodeSPs; tS++){}
-	int noInfeasLocal;
-	int noInfeas;
-	int isInfeas;
-	double *z_perturbedLocal = new double[n1];
-	double *z_perturbed = new double[n1];
-	double *localWeights = new double[n1];
-	double *totalWeights = new double[n1];
-	delete [] z_perturbed;
-	delete [] z_perturbedLocal;
-	delete [] localWeights;
-	delete [] totalWeights;
-	//setPenalty(1.0);
-#endif
     }
 #endif
-//virtual bool checkSolnForFeasibility(const double *soln, vector<double> &constrVec){
-    //shouldFathomByOpt = integralityDisc < 1e-10 && (shouldTerminate || discrepNorm < 1e-20);
-#if 0
-integralityDisc=evaluateIntegralityDiscrepancies();
-if(mpiRank==0)  cout << "computeBound(): Integrality discrepancy in total: " << integralityDisc << endl;
-if(integralityDisc < 1e-10){
-  if(mpiRank==0){cout << "computeBound(): Integrality satisfied: Commence with postprocessing..." << endl;}
-  setPenalty(baselinePenalty_);
-  for(int ii=0; (ii<200 || (discrepNorm >= 1e-20)) && integralityDisc < 1e-10; ii++){
-	regularIteration(true,false);
-      	printStatusAsErr();
-        if(currentLagrLB >= getIncumbentVal()){
-      	    modelStatus_[Z_STATUS]=Z_BOUNDED;
-	    break;
-	}
-#if 1
-	if(shouldTerminate){
-	    if(mpiRank==0){cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << ii << endl;}
-	    break;
-	}
-#endif
-	integralityDisc=evaluateIntegralityDiscrepancies();
-  }
-    if(mpiRank==0){cout << "New incumbent value should be: " << currentLagrLB << endl;}
-    //roundCurrentZ();
-}
-else{
-#endif
-//if(mpiRank==0){cout << "computeBound(): Commencing another loop of iterations since." << endl;}
-    //}while(currentLagrLB < referenceLagrLB);
-    #if 0
-    if(currentLagrLB < referenceLagrLB && mpiRank==0){
-	cout << "computeBound(): Lagr bound does not meet reference: " << currentLagrLB << " < " << referenceLagrLB << endl;
-    }
-    #endif
-      //assert(SPStatus!=SP_INFEAS);
-      //assert(modelStatus_[Z_STATUS]==Z_UNKNOWN);
-      //updateModelStatusZ();
-      //loopIter++;
-    //}
-    //while(getZStatus()==Z_REC_INFEAS && loopIter < maxNLoopIters);
-#if 0
-    if(getZStatus()==Z_REC_INFEAS){
-	modelStatus_[Z_STATUS]=Z_FEAS;
-    }
-#endif
-//if(mpiRank==0) cout << "End computeBound()" << endl;
-    //saveOmega(); //omega should only be saved under certain circumstances
-    //saveZ();
-    //setPenalty(baselinePenalty_);
-//}//else integrality not satisfied
-    printStatus();
-    //printOmegaProperties();
-    //repairOmega();
+    //printStatus();
     }//else
-    //solveContinuousMPs();
     //for (int tS = 0; tS < nNodeSPs; tS++){subproblemSolvers[tS]->computeWeightsForCurrentSoln();}
     //loadSavedZ();
     //printOmegaProperties();
     //averageOfOptVertices();
-    //double bestNodeQuality = getKnowledgeBroker()->getBestNode()->getQuality();
     return currentLagrLB;
 }
 
@@ -1126,24 +690,6 @@ void resetOmega(){
 #endif
 
 //Perform more iterations, e.g., to obtain recourse when integrality met.
-#if 0
-double findPrimalFeasSoln2(int nIters){
-
-  for(int ii=0; ii<10; ii++){
-    setPenalty(pow(2.0,ii));
-    solveQMIPsGS();
-//printZ();
-  }
-  if(solveRecourseProblemGivenFixedZ()){
-    if(mpiRank==0) {cout << "findPrimalFeasSoln(): Terminating: Found primal feas soln..." << endl;}
-    evaluateFeasibleZ();
-  }
-  else{
-    if(mpiRank==0) cout << "findPrimalFeasSoln(): Terminating: Primal feas soln not found." << endl;
-  }
-  return currentLagrLB;
-}
-#endif
 double findPrimalFeasSolnWith(double *z){
      roundCurrentZ(z);
      if(solveRecourseProblemGivenFixedZ()){
@@ -1154,121 +700,7 @@ double findPrimalFeasSolnWith(double *z){
      }
      return objVal;
 }
-double findPrimalFeasSoln(int fathomSwitch=0){
-//fathomSwitch==0 fathomed by opt, ==1 node is branching
-//if(mpiRank==0){cout << "Before z: " << endl;}
-//printZ();
-  bool foundCandidateSoln=true;
-  double bestObjVal=getIncumbentVal();
-  double *zVec = new double[n1];
-  double *zVecTrial = new double[n1];
-  double weight;
-  int precision;// = 8;
-  if(getIncumbentVal() > 1e75){precision=1;}
-  else{precision=20;}
-  //bool foundCandidateSoln=!selectOnlyIntegerVars;
-  if(fathomSwitch==1){ 
-    averageOfXUniformWeights(zVec);
-    for(int aa=0; aa<precision; aa++){
-      weight = pow(0.5,aa);
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0-weight)*z_incumbent_[ii]+weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << weight << endl;
-        bestObjVal=objVal; 
-      }
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0+weight)*z_incumbent_[ii]-weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-        bestObjVal=objVal; 
-      }
-    }
 
-    averageOfVertices(zVec);
-    for(int aa=0; aa<precision; aa++){
-      weight = pow(0.5,aa);
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0-weight)*z_incumbent_[ii]+weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << weight << endl;
-        bestObjVal=objVal; 
-      }
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0+weight)*z_incumbent_[ii]-weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-        bestObjVal=objVal; 
-      }
-    }
-#if 0
-    averageOfVertices1(zVec);
-    for(int aa=0; aa<precision; aa++){
-      weight = pow(0.5,aa);
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0-weight)*z_incumbent_[ii]+weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << weight << endl;
-        bestObjVal=objVal; 
-      }
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0+weight)*z_incumbent_[ii]-weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-        bestObjVal=objVal; 
-      }
-    }
-
-    averageOfVertices2(zVec);
-    for(int aa=0; aa<precision; aa++){
-      weight = pow(0.5,aa);
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0-weight)*z_incumbent_[ii]+weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << weight << endl;
-        bestObjVal=objVal; 
-      }
-      for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0+weight)*z_incumbent_[ii]-weight*zVec[ii]; }
-      objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-      if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-        bestObjVal=objVal; 
-      }
-    }
-#endif
- } //if fathomSwitch==1
-  for(int aa=0; aa<precision; aa++){
-    weight = pow(0.5,aa);
-    for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0-weight)*z_incumbent_[ii]+weight*z_current[ii]; }
-    objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << weight << endl;
-    if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << setprecision(10) << objVal << " with offset " << weight << endl;
-     bestObjVal=objVal; 
-    }
-    for(int ii=0; ii<n1; ii++){zVecTrial[ii] = (1.0+weight)*z_incumbent_[ii]-weight*z_current[ii]; }
-    objVal=findPrimalFeasSolnWith(zVecTrial);
-//if(mpiRank==0) cout << "Candidate UB: " << objVal << " with offset " << -weight << endl;
-    if(objVal < bestObjVal){
-if(mpiRank==0) cerr << "Candidate UB: " << setprecision(10) << objVal << " with offset " << -weight << endl;
-     bestObjVal=objVal; 
-    }
-  }
-
-
-  delete [] zVec;
-  delete [] zVecTrial;
-  objVal=bestObjVal;
-  return objVal;
-}
 
 double getBound(){return currentLagrLB;}
 void setBound(double bd){currentLagrLB=bd;}
@@ -1283,42 +715,30 @@ void solveForWeights(){
    }
 
 }
-void solveContinuousMPs(bool updateDisp=false){
+void solveContinuousMPs(){
 	bool isLastGSIt;
 	double zDiff;
 	//double integrDiscr;
 	//for(int itGS=0; itGS < fixInnerStep || (updateDisp && zDiff > 1e-6); itGS++) { //The inner loop has a fixed number of occurences
-        int treeDepth=getKnowledgeBroker()->getTreeDepth();
 	assert(currentIter_ >=0 && currentIter_ < 1000);
-	//int maxNoGSIts = max(50,fixInnerStep + (currentIter_)/2 + treeDepth*2);
-	int maxNoGSIts = 20;
-	averageOfVertices(z_vertex_average);
+	int maxNoGSIts = 20+currentIter_;
+	//averageOfVertices(z_vertex_average);
 	for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	    memcpy(z_old,z_current, n1*sizeof(double));
 	    zDiff=0.0;
-	    isLastGSIt = (itGS==maxNoGSIts-1) && updateDisp;
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
-#if 0
-		if(updateDisp){
- 	            integrDiscr = subproblemSolvers[tS]->computeIntegralityDiscr();  
-		    setPenalty(tS,(integrDiscr+1e-10)*baselinePenalty_);
-		}
-#endif
-
 		//*************************** Quadratic subproblem ***********************************
 			    
 		    if (useVertexHistory && subproblemSolvers[tS]->getNVertices()>2) { //Compute Next X, Y (With History)
 
 					
 			//Solve the quadratic master problem for x and y
-			//subproblemSolvers[tS]->updatePrimalVariablesHistory_OneScenario(omega_current[tS],z_current,scaling_matrix[tS],isLastGSIt);
 			subproblemSolvers[tS]->updatePrimalVariablesHistory_OneScenario(omega_current[tS],z_current,currentVarLB_, currentVarUB_, scaling_matrix[tS],false);
-    			//if(isLastGSIt) subproblemSolvers[tS]->computeWeightsForCurrentSoln();
 			
-			// note: the final weight corresponds to the existing x
 		    }
 		    else if(!useVertexHistory || subproblemSolvers[tS]->getNVertices()==2){ //might not work correctly, untested! Compute Next X, Y (Without History)
-			subproblemSolvers[tS]->updatePrimalVariables_OneScenario(omega_current[tS],z_current,scaling_matrix[tS],z_vertex_average);
+			//subproblemSolvers[tS]->updatePrimalVariables_OneScenario(omega_current[tS],z_current,scaling_matrix[tS],z_vertex_average);
+			subproblemSolvers[tS]->updatePrimalVariables_OneScenario(omega_current[tS],z_current,scaling_matrix[tS],NULL);
 		    }
 	    }
 	    					
@@ -1328,22 +748,7 @@ void solveContinuousMPs(bool updateDisp=false){
 	    for(int ii=0; ii<n1; ii++){zDiff=max(zDiff,fabs(z_current[ii]-z_old[ii]));}
 	    //if(zDiff < SSC_DEN_TOL){ break; }
 	}
-#if 0
-	if (useVertexHistory && updateDisp) { 
-    	    for (int tS = 0; tS < nNodeSPs; tS++) {
-    		//subproblemSolvers[tS]->computeWeightsForCurrentSoln(z_current);
-    		subproblemSolvers[tS]->computeWeightsForCurrentSoln(NULL);
-	    }
-	}
-#endif
 
-	
-#if 0
-    	for (int tS = 0; tS < nNodeSPs; tS++) {
-	    subproblemSolvers[tS]->updateALValues(omega_current[tS],z_current,scaling_matrix[tS]);
-	    //if(tS==0) subproblemSolvers[tS]->printXVertices();
-	}
-#endif
 //if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
 }
 #if 0
@@ -1439,7 +844,7 @@ void averageOfVertices(double *z=NULL, bool roundZ=false){
 }
 #endif
 void averageOfXUniformWeights(double* z=NULL, double *dispZ=NULL){
-	if(z==NULL) z=z_average;
+	//if(z==NULL) z=z_average;
 	double *penSumLocal = new double[n1];
 	double *penSum = new double[n1];
 	double integrDiscr;
@@ -1498,7 +903,7 @@ void averageOfVertices(double *z=NULL, bool roundZ=false){
 }
 #endif
 void averageOfXweightedByIntDisp(double* z=NULL,bool roundZ=false){
-	if(z==NULL) z=z_intdisp;
+	//if(z==NULL) z=z_intdisp;
 	double *penSumLocal = new double[n1];
 	double *penSum = new double[n1];
 	double integrDiscr;
@@ -1531,7 +936,7 @@ void averageOfXweightedByIntDisp(double* z=NULL,bool roundZ=false){
 	delete [] penSum;
 }
 void averageOfVertices(double* z=NULL, double *zDisp=NULL){
-	if(z==NULL) z=z_average;
+	//if(z==NULL) z=z_average;
 #if 0
 	for(int tS=0; tS<nNodeSPs; tS++){
 	  if(!(subproblemSolvers[tS]->getXVertex()[ii] >= currentVarLB_[ii] && subproblemSolvers[tS]->getXVertex()[ii] <= currentVarUB_[ii])){
@@ -1585,7 +990,7 @@ cout << "Scenario " << tS << " index " << ii << " with value " << subproblemSolv
 	delete [] penSum;
 }
 void averageOfVerticesWeightedByRho(double* z=NULL, double *zDisp=NULL){
-	if(z==NULL) z=z_average;
+	//if(z==NULL) z=z_average;
 	double *penSumLocal = new double[n1];
 	double *penSum = new double[n1];
 	for (int i = 0; i < n1; i++)
@@ -1664,7 +1069,7 @@ void averageOfVertices1(double *z=NULL, bool roundZ=false){
 }
 #endif
 void averageOfVertices1(double *z=NULL, double *zDisp=NULL){
-	if(z==NULL) z=z_average1;
+	//if(z==NULL) z=z_average1;
 	int numVertices;
 	double localTotalWeight=0.0;
 	double totalWeight=0.0;
@@ -1721,7 +1126,7 @@ void averageOfVertices1(double *z=NULL, double *zDisp=NULL){
 	}
 }
 void averageOfVertices2(double *z=NULL, double *zDisp=NULL){
-	if(z==NULL) z=z_average2;
+	//if(z==NULL) z=z_average2;
 	int numVertices;
 	double localTotalWeight=0.0;
 	double totalWeight=0.0;
@@ -1780,7 +1185,7 @@ void averageOfVertices2(double *z=NULL, double *zDisp=NULL){
 
 }
 void averageOfVerticesZ(double *z=NULL, double *zDisp=NULL){
-	if(z==NULL) z=z_intdisp;
+	//if(z==NULL) z=z_intdisp;
         solveForWeights();
 	int numVertices;
 	//double localTotalWeight=0.0;
@@ -1955,7 +1360,6 @@ void averageOfOptVertices(double *z=NULL, bool roundZ=false){
 	  }
 	}
 }
-#endif
 void printTwoZDiscr(){
 if(mpiRank==0){
     cout << "Printing difference between z_current and z_average:" << endl;
@@ -1965,6 +1369,7 @@ if(mpiRank==0){
     cout << endl;
 }
 }
+#endif
 
 
 /** Check if a value is integer. */
@@ -2000,10 +1405,12 @@ assert(ii < n1);
 
 }
 
+#if 0
 bool checkForCutoff(){
 if(mpiRank==0){cout << getIncumbentVal() << " <= " << currentLagrLB << "???" << endl;}
     return (getIncumbentVal() <= currentLagrLB);
 }
+#endif
 
 void roundCurrentZ(double *z=NULL){
     if(z==NULL){z=z_current;}
@@ -2016,20 +1423,18 @@ void roundCurrentZ(double *z=NULL){
     for(int ii=0; ii<numIntVars_; ii++) {z_rounded[intVar_[ii]] = round(z[intVar_[ii]]);}
     double roundingDisc = 0.0;
     for(int ii=0; ii<n1; ii++){roundingDisc += fabs(z_rounded[ii]-z[ii]);}
-    selectOnlyIntegerVars = (roundingDisc > 1e-10);
-    //if(mpiRank==0) cout << "roundCurrentZ(): Rounding discrepancy is: " << roundingDisc << endl;
 }
 
 bool evaluateFeasibleZ(){
-    if(getIncumbentVal() > objVal){ 
+    //if(getIncumbentVal() > objVal){ 
+    if(true){ 
 if(mpiRank==0){
     cout << "New incumbent value: " << objVal << " and its corresponding solution: " << endl;
     printZRounded();
 }
-	//getKnowledgeBroker()->setIncumbentValue(objVal);
 	memcpy( z_incumbent_, z_rounded, n1*sizeof(double) );
-	BcpsSolution* ksol = new BcpsSolution(n1,z_incumbent_,objVal);
-        getKnowledgeBroker()->addKnowledge(AlpsKnowledgeTypeSolution,ksol,objVal);
+	//BcpsSolution* ksol = new BcpsSolution(n1,z_incumbent_,objVal);
+        //getKnowledgeBroker()->addKnowledge(AlpsKnowledgeTypeSolution,ksol,objVal);
 #if 0
                         new BcpsSolution(model->n1,
                                            model->getZ(),
@@ -2039,10 +1444,10 @@ if(mpiRank==0){
                                                        model->getIncumbentVal());
 #endif
 
-	getKnowledgeBroker()->setPhase(AlpsPhaseSearch);
+	//getKnowledgeBroker()->setPhase(AlpsPhaseSearch);
 //cout << zOptFile << endl;
-        if(mpiRank==0) getKnowledgeBroker()->printBestSolution(zOptFile);
-	if(mpiRank==0) cout << "Registering solution..." << endl;
+        //if(mpiRank==0) getKnowledgeBroker()->printBestSolution(zOptFile);
+	//if(mpiRank==0) cout << "Registering solution..." << endl;
 //cout << "End evaluateFeasibleZ()" << endl;
 	return true;
     }
@@ -2283,6 +1688,7 @@ cout << "...versus the Frobenius norm of c: " << sqrt(cFroNorm) << endl;
 }
 #endif
 
+#if 0
 void printNewNodeSPInfo(){
   if(mpiRank==0){
     cout << "Printing new node SP info: (index, LB, UB)" << endl;
@@ -2294,6 +1700,7 @@ void printNewNodeSPInfo(){
     }
   }
 }
+#endif
 
 		
 //********************** Penalty update **********************
@@ -2354,6 +1761,7 @@ void computePenaltyGapVec(){
 
 
 void displayParameters();
+#if 0
 double getBestNodeQuality(){
     double bestNodeQuality = -ALPS_DBL_MAX;
     if(getKnowledgeBroker()->getBestNode()){
@@ -2361,6 +1769,7 @@ double getBestNodeQuality(){
     }
     return bestNodeQuality;
 }
+#endif
 void printStatus(){
   if(mpiRank==0){
 cout << "________________________________________________________________________" << endl;
@@ -2373,6 +1782,7 @@ cout << "_______________________________________________________________________
 	//std::cout << "Number of integrality infeasibilities of z: " << nIntInfeas_ << std::endl;
   }
 }
+#if 0
 void printBestBounds(){
   if(mpiRank==0){
 cout << "________________________________________________________________________" << endl;
@@ -2395,6 +1805,7 @@ void printStatusAsErr(){
 	//std::cout << "Number of integrality infeasibilities of z: " << nIntInfeas_ << std::endl;
   }
 }
+#endif
 void printZ(double *z=NULL){
   if(mpiRank==0){
     if(z==NULL) z=z_current;
@@ -2407,11 +1818,13 @@ void printZ(double *z=NULL){
 	printf("]\n");
   }
 }
+#if 0
 void printIncumbentValue(){
   if(mpiRank==0){
 	printf("\nIncumbent value: %0.14g\n", getIncumbentVal());
   }
 }
+#endif
 void printZRounded(){
   if(mpiRank==0){
 	printf("\nRounded consensus values for first-stage decision variables:\n[");
@@ -2434,6 +1847,7 @@ void printIntegralityViolations(){
   }
 }
 
+#if 0
 void printNodeStats(){
   if(mpiRank==0){
     cout << "Number of nodes processed: " << getKnowledgeBroker()->getNumNodesProcessed() << endl;;
@@ -2453,6 +1867,7 @@ void finalPrintout(){
     cout << "************************************************************************" << endl;
   }
 }
+#endif
 
 
 //*** Helper functions.

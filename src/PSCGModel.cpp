@@ -8,7 +8,6 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 #include "ProblemDataBodur.h"
 #include "PSCGModelScen.h"
 #include "TssModel.h"
-#include "PSCGTreeNode.h"
 
 
 
@@ -120,7 +119,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
     	   try{
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->initialLPSolve(omega_current[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
-	    	    LagrLB_Local = ALPS_DBL_MAX;
+	    	    LagrLB_Local = COIN_DBL_MAX;
 cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
 cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() << endl;
 	    	    continue;
@@ -129,7 +128,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
-	    	    LagrLB_Local = ALPS_DBL_MAX;
+	    	    LagrLB_Local = COIN_DBL_MAX;
 //cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
 cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
 cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() << endl;
@@ -195,8 +194,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	currentLagrLB = LagrLB;
 
 	//recordKeeping[0]=LagrLB;
-	assert(ALPS_DBL_MAX > ALPS_INFINITY);
-	if(LagrLB > ALPS_INFINITY){ modelStatus_[SP_STATUS]=SP_INFEAS;} //for parallel
+	if(LagrLB > COIN_DBL_MAX/10.0){ modelStatus_[SP_STATUS]=SP_INFEAS;} //for parallel
 	else{
 	    //Update of z
 	    //currentLagrLB=-ALPS_DBL_MAX;
@@ -267,13 +265,13 @@ if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
                 if(solverStatus==PSCG_PRIMAL_INF || solverStatus==PSCG_DUAL_INF)
 		{
 	    	    //LagrLB = ALPS_DBL_MAX;	    
-		    objVal = ALPS_DBL_MAX;
+		    objVal = COIN_DBL_MAX;
 
 		    //if(mpiRank==0){cerr << "Recourse problem given fixed z is infeasible due to subproblem " << tS << endl;}
 		    //if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << objVal << endl;}
 
 		    isFeas=false;
-		    localObjVal = ALPS_DBL_MAX;
+		    localObjVal = COIN_DBL_MAX;
 		    //return isFeas;
 		    break;
 		}
@@ -310,8 +308,8 @@ int PSCGModel::performColGenStepBasic(){
     }
     spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
     if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
-       LagrLB_Local = ALPS_DBL_MAX;
-       ALVal_Local = ALPS_DBL_MAX;
+       LagrLB_Local = COIN_DBL_MAX;
+       ALVal_Local = COIN_DBL_MAX;
 cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
        break;
     }
@@ -332,7 +330,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
   if (mpiSize == 1) {
 	LagrLB = LagrLB_Local;
   }
-  if(LagrLB > ALPS_INFINITY) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
+  if(LagrLB > COIN_DBL_MAX/10.0) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
   else{modelStatus_[SP_STATUS]=SP_OPT;}
   return modelStatus_[SP_STATUS];
 }
@@ -393,8 +391,8 @@ int PSCGModel::performColGenStep(){
 
 		spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 		if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
-	    	    LagrLB_Local = ALPS_DBL_MAX;
-	    	    ALVal_Local = ALPS_DBL_MAX;
+	    	    LagrLB_Local = COIN_DBL_MAX;
+	    	    ALVal_Local = COIN_DBL_MAX;
 cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
 	    	    break;
 		}
@@ -538,22 +536,13 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	}
 	//updateModelStatusSP();
 //if(mpiRank==0) cerr << endl;
-	if(LagrLB > ALPS_INFINITY) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
+	if(LagrLB > COIN_DBL_MAX/10.0) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
 	else{modelStatus_[SP_STATUS]=SP_OPT;}
 //if(mpiRank==0){cerr << "End performColGenStep(): "  << endl;}
 	return modelStatus_[SP_STATUS];
 }
 
 
-AlpsTreeNode* PSCGModel::createRoot(){
-    PSCGTreeNode *root = new PSCGTreeNode;
-    PSCGNodeDesc *desc = new PSCGNodeDesc(this);
-    root->setDesc(desc);
-    root->setExplicit(1);
-    //root->setQuality(desc->getLB());
-    root->setQuality(-ALPS_DBL_MAX);
-    return root;
-}
 //******************Command line paramater handler functions**********************
 
 
@@ -621,7 +610,7 @@ void PSCGModel::displayParameters(){
 	std::cout << "Debug output: " << debug << std::endl;
 	std::cout << "Finding feasible point for first vertex: Yes" << std::endl;
 	std::cout << "Using Algorithm variant to branch using z: " << AlgorithmZ << std::endl;
-	printAlgorithm();
+	//printAlgorithm();
 
 	if (nVerticesUsed < 0) {
 		std::cout << "Number of vertexes used: 1"<< std::endl;

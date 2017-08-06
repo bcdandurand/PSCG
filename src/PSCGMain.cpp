@@ -9,8 +9,6 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 #include "PSCGModelScen.h"
 #include "Stopwatch.h"
 #include "TssModel.h"
-#include "PSCGNodeDesc.h"
-#include "AlpsKnowledgeBrokerSerial.h"
 
 #define OUTER_LOOP_TERMINATION 1e-10
 #define TIME_TYPES 2
@@ -63,6 +61,7 @@ int main(int argc, char **argv) {
 	
 
 	PSCGModel model(&par);
+	model.computeBound(100);
 	//double *z = new double[model.n1];
 	#if 0
 	vector<double*> omega;
@@ -71,29 +70,6 @@ int main(int argc, char **argv) {
 	    for(int ii=0;ii<model.n1; ii++) omega[tS][ii]=0.0;
 	}
 	#endif
-	//model.readZIntoModel(z);
-	//model.readOmegaIntoModel(omega);
-	//PSCGNodeDesc *desc = new PSCGNodeDesc(&model);
-	//desc->installSubproblemFromNodeDesc();
-	//model.installSubproblem(z,omega,NULL,NULL,NULL,0);
-	AlpsKnowledgeBrokerSerial broker(model);
-	//broker.setNodeSelection(new AlpsNodeSelectionBreadth());
-	broker.setNodeSelection(new AlpsNodeSelectionBest());
-	broker.setRampUpNodeSelection(new AlpsNodeSelectionDepth());
-        broker.setPhase(AlpsPhaseRampup);
-cout << "Begining search...." << endl;
-	broker.search(&model);
-	model.finalPrintout();
-cout << "...Ending search." << endl;
-	//model.upBranchAllSPsAt(9,1.0);
-#if 0
-	model.upBranchAllSPsAt(1,1.0);
-	model.upBranchAllSPsAt(3,1.0);
-	model.upBranchAllSPsAt(5,1.0);
-	model.upBranchAllSPsAt(7,1.0);
-	model.upBranchAllSPsAt(9,1.0);
-	model.downBranchAllSPsAt(11,0.0);
-#endif
 
 	
 	//******************Decision Variable and Data Storage Setup**********************

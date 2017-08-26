@@ -72,9 +72,9 @@ OTHERLIBS = -lstdc++ -lm -lpthread
 #OTHERLIBS = -lstdc++ -lgcc_s -lc -lgcc -lm -lpthread
 
 #PSCGModel.cpp  PSCGModel.h  PSCGModelScen.cpp  PSCGModelScen.h	PSCGParams.h
-ALG = PSCGModel
+ALG = PSCG
 #SOLVER = CPLEXsolverSCG
-SOLVER = PSCGModelScen
+SOLVER = PSCGScen
 
 SRCFILES = $(SRC)/PSCGMain.cpp $(SRC)/$(ALG).cpp $(SRC)/$(ALG).h $(SRC)/$(SOLVER).cpp $(SRC)/$(SOLVER).h $(SRC)/ProblemDataBodur.cpp $(SRC)/ProblemDataBodur.h 
 	

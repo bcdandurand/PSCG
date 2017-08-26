@@ -20,10 +20,10 @@
 #include "tclap/CmdLine.h"
 #include "StructureDefs.h"
 #include "TssModel.h"
-#include "PSCGModelScen.h"
+#include "PSCGScen.h"
 #include "PSCGParams.h"
 
-#define SSC_PARAM 0.05
+#define SSC_PARAM 0.50
 #define SSC_DEN_TOL 1e-10
 #define DEFAULT_THREADS 1
 #define KIWIEL_PENALTY 1 //set 1 to use Kiwiel (2006) penalty update rule
@@ -90,11 +90,13 @@ vector<double> pr;
 vector<double*> scaling_matrix; //glorified rho
 vector<double*> omega_tilde; //dual variable
 vector<double*> omega_current;
+vector<double*> omega_sp;
 vector<double*> omega_saved;
 bool omegaIsZero_;
 bool omegaUpdated_;
 bool shouldTerminate;
 
+double SSCVal;
 double *scaleVec_;
 
 vector<double*> x_current;
@@ -210,6 +212,7 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 		delete [] scaling_matrix[tS];
 		delete [] omega_tilde[tS];
 		delete [] omega_current[tS];
+		delete [] omega_sp[tS];
 		delete [] omega_saved[tS];
 		delete subproblemSolvers[tS];
 	}
@@ -503,22 +506,30 @@ void zeroOmega(){
 
 int initialIteration();
 
-int regularIteration(bool scalePenalty=false, bool adjustPenalty=false, bool SSC=true){
+void updatePenalty(){
+    //if((omegaUpdated_ || currentIter_ < 10)) computeKiwielPenaltyUpdate(SSCVal);
+    //if(omegaUpdated_) computeKiwielPenaltyUpdate();
+    //if(omegaUpdated_) computeScalingPenaltyUpdate( 2.0 );
+    if(omegaUpdated_) computePenaltyGapVec();
+}
+
+int regularIteration(bool adjustPenalty=false, bool SSC=true){
 //if(mpiRank==0) cout << "Begin regularIteration()" << endl;
 	solveContinuousMPs();
 
 	int SPStatus=performColGenStep();
 	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
-	double SSCVal = computeSSCVal(); //shouldTerminate is also updated here.
+	SSCVal = computeSSCVal(); //shouldTerminate is also updated here.
+	if(mpiRank==0) cout << "SSC value is: " << SSCVal << endl;
     //verifyOmegaDualFeas();
     //printStatus();
 	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
-	if(SSC){updateOmega(SSCVal);}
-	else{updateOmega(1.0);}
-	#if KIWIEL_PENALTY 
-	 if(adjustPenalty) computeKiwielPenaltyUpdate(SSCVal);
-	#endif
-	 if(omegaUpdated_ && scalePenalty) computePenaltyGapVec();
+	updateOmega(SSC);
+	//#if KIWIEL_PENALTY 
+	 //if(adjustPenalty) computeKiwielPenaltyUpdate();
+	 if(adjustPenalty) updatePenalty();
+	//#endif
+	 //if(omegaUpdated_ && scalePenalty) computePenaltyGapVec();
 	 //if(scalePenalty) computePenaltyGapVec();
 //printIntegralityViolations();
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
@@ -531,7 +542,7 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
     //fixInnerStep = 20;
     modelStatus_[Z_STATUS]=Z_UNKNOWN;
     clearSPVertexHistory();
-    int maxNoIts = 40;
+    int maxNoIts = 100;
     int SPStatus=initialIteration();
     if(mpiRank==0) cout << "After initial iteration: currentLB: " << LagrLB << " versus refLB: " << referenceLagrLB << endl;;
     
@@ -573,10 +584,10 @@ if(mpiRank==0) cerr << "Regular iteration " << ii << endl;
     	     regularIteration(false,false);
 	}
 #endif
-	//{regularIteration(false,false);}
+	{regularIteration(true,true);}
 	//{regularIteration(false,adjustPenalty);}
-	if(ii<10) {regularIteration(false,adjustPenalty);}
-	else{regularIteration(true,false);}
+	//if(ii<20) {regularIteration(false,adjustPenalty);}
+	//else{regularIteration(true,false);}
 
 	//regularIteration(true,false);
 	//if(omegaUpdated_) omegaUpdatedAtLeastOnce=true;
@@ -718,10 +729,12 @@ void solveForWeights(){
 void solveContinuousMPs(){
 	bool isLastGSIt;
 	double zDiff;
+        for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_current[tS],n1*sizeof(double));
 	//double integrDiscr;
 	//for(int itGS=0; itGS < fixInnerStep || (updateDisp && zDiff > 1e-6); itGS++) { //The inner loop has a fixed number of occurences
 	assert(currentIter_ >=0 && currentIter_ < 1000);
-	int maxNoGSIts = 20+currentIter_;
+	//int maxNoGSIts = 20+currentIter_;
+	int maxNoGSIts = 20;
 	//averageOfVertices(z_vertex_average);
 	for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	    memcpy(z_old,z_current, n1*sizeof(double));
@@ -733,23 +746,37 @@ void solveContinuousMPs(){
 
 					
 			//Solve the quadratic master problem for x and y
-			subproblemSolvers[tS]->updatePrimalVariablesHistory_OneScenario(omega_current[tS],z_current,currentVarLB_, currentVarUB_, scaling_matrix[tS],false);
+			subproblemSolvers[tS]->updatePrimalVariablesHistory_OneScenario(omega_tilde[tS],z_current,currentVarLB_, currentVarUB_, scaling_matrix[tS],false);
 			
 		    }
 		    else if(!useVertexHistory || subproblemSolvers[tS]->getNVertices()==2){ //might not work correctly, untested! Compute Next X, Y (Without History)
-			//subproblemSolvers[tS]->updatePrimalVariables_OneScenario(omega_current[tS],z_current,scaling_matrix[tS],z_vertex_average);
-			subproblemSolvers[tS]->updatePrimalVariables_OneScenario(omega_current[tS],z_current,scaling_matrix[tS],NULL);
+			//subproblemSolvers[tS]->updatePrimalVariables_OneScenario(omega_tilde[tS],z_current,scaling_matrix[tS],z_vertex_average);
+			subproblemSolvers[tS]->updatePrimalVariables_OneScenario(omega_tilde[tS],z_current,scaling_matrix[tS],NULL);
 		    }
 	    }
 	    					
 	    // Update z_previous.
 	    updateZ();
+#if 0
+    	    for (int tS = 0; tS < nNodeSPs; tS++) {
+		for (int i = 0; i < n1; i++) {
+		    omega_tilde[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		}
+	    }
+#endif
 	    totalNoGSSteps++;
 	    for(int ii=0; ii<n1; ii++){zDiff=max(zDiff,fabs(z_current[ii]-z_old[ii]));}
 	    //if(zDiff < SSC_DEN_TOL){ break; }
 	}
+#if 1
+    	    for (int tS = 0; tS < nNodeSPs; tS++) {
+		for (int i = 0; i < n1; i++) {
+		    omega_tilde[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		}
+	    }
+#endif
 
-//if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
+if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
 }
 #if 0
 void solveQMIPsGS(){
@@ -1583,11 +1610,13 @@ double computeSSCVal(){
     }
     shouldTerminate = (ALVal + 0.5*discrepNorm  - currentLagrLB < SSC_DEN_TOL) && (discrepNorm < 1e-20);
     if(shouldTerminate){return 0.0;}
-    else{return (LagrLB-currentLagrLB)/(ALVal + 0.5*discrepNorm - currentLagrLB);}
+    else{
+	return (LagrLB-currentLagrLB)/(ALVal + 0.5*discrepNorm - currentLagrLB);
+    }
 }
 		
-bool updateOmega(double SSCVal){
-	if(SSCVal >= SSC_PARAM) {
+bool updateOmega(bool useSSC){
+	if(SSCVal >= SSC_PARAM || !useSSC) {
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		memcpy(omega_current[tS],omega_tilde[tS],n1*sizeof(double));
 #if 0
@@ -1723,9 +1752,11 @@ void setPenalty(int tS, double p){
 }
 //This should normally be turned off, this is a rule for updating the 
 //penalty from Kiwiel 2006 and Lubin et al.
-void computeKiwielPenaltyUpdate(double SSCVal){	
-	penC = 1.0/min( max( (2.0/penC)*(1.0-SSCVal),  max(1.0/(10.0*penC),1e-4)    ), 10.0/penC);
-	setPenalty(penC);
+void computeKiwielPenaltyUpdate(){	
+	//penC = 1.0/min( max( (2.0/penC)*(1.0-SSCVal),  max(1.0/(10.0*penC),1e-4)    ), 10.0/penC);
+	//setPenalty(penC);
+    	//if( SSCVal >= 0.5 ){ computeScalingPenaltyUpdate(min( 0.5/(1-SSCVal),2.0));}
+    	computeScalingPenaltyUpdate( max( min( 0.5/(1.0-SSCVal),10.0), 0.1));
 }
 void computeScalingPenaltyUpdate(double scaling){	
     for (int tS = 0; tS < nNodeSPs; tS++) {

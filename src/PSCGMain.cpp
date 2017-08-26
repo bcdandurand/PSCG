@@ -3,10 +3,10 @@ Finds the optimal solution to the Lagrangian dual of a two-stage stochastic
 integer program using a Frank-Wolfe-based Method of Multipliers approach.
 */
 
-#include "PSCGModel.h"
+#include "PSCG.h"
 //#include "CPLEXsolverSCG.h"
 #include "ProblemDataBodur.h"
-#include "PSCGModelScen.h"
+#include "PSCGScen.h"
 #include "Stopwatch.h"
 #include "TssModel.h"
 

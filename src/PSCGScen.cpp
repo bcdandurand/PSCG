@@ -5,7 +5,7 @@
 *
 */
 
-#include "PSCGModelScen.h"
+#include "PSCGScen.h"
 
 #include <cmath>
 #include <sstream>

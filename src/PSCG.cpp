@@ -3,10 +3,10 @@ Finds the optimal solution to the Lagrangian dual of a two-stage stochastic
 integer program using a Frank-Wolfe-based Method of Multipliers approach.
 */
 
-#include "PSCGModel.h"
+#include "PSCG.h"
 //#include "CPLEXsolverSCG.h"
 #include "ProblemDataBodur.h"
-#include "PSCGModelScen.h"
+#include "PSCGScen.h"
 #include "TssModel.h"
 
 
@@ -95,6 +95,7 @@ void PSCGModel::setupSolvers(){
 	    scaling_matrix.push_back(new double[n1]);
 	    omega_tilde.push_back(new double[n1]);
 	    omega_current.push_back(new double[n1]);
+	    omega_sp.push_back(new double[n1]);
 	    omega_saved.push_back(new double[n1]);
 	    
 	    for (int i = 0; i < n1; i++) {
@@ -110,6 +111,7 @@ int PSCGModel::initialIteration(){
 if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	// This is part of the initialisation - initial Lagrangian subproblem computations
 	double LagrLB_Local = 0.0;
+        setPenalty(1.0);
 	modelStatus_[SP_STATUS]=SP_ITER_LIM;
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
@@ -167,7 +169,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    	omega_current[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 	    }
 #endif
-	}
+	}//for tS
 	
 //if(mpiRank==0){cout << "After z: " << endl;}
 //printZ();
@@ -175,14 +177,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
-			// Send decision variables to other processes.
-//if(mpiRank==0)cerr << "InitialIteration: before MPI_Allreduce "  << endl;
-//cerr << "#";
 		MPI_Allreduce(&LagrLB_Local, &LagrLB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-//if(mpiRank==0)cerr << "InitialIteration: after MPI_Allreduce "  << endl;
-
-			//commsTimer.stop();
-			//commsTimer.addTime(commsTimeThisStep);
 	}
 	#endif
 	if(mpiSize == 1){
@@ -200,6 +195,26 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    //currentLagrLB=-ALPS_DBL_MAX;
 	    modelStatus_[SP_STATUS]=SP_OPT;
 	    updateZ();
+#if 1
+	    double sqrDiscrNorm = 0.0;
+	    double sqrDiscrNormLocal = 0.0;
+	    for (int tS = 0; tS < nNodeSPs; tS++) {
+	         subproblemSolvers[tS]->updateALValues(omega_current[tS],z_current,scaling_matrix[tS]);
+		 sqrDiscrNormLocal += 0.5*pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
+	    }
+	    #ifdef USING_MPI
+	    if (mpiSize > 1) {
+		MPI_Allreduce(&sqrDiscrNormLocal, &sqrDiscrNorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	    }
+	    #endif
+	    if(mpiSize == 1){
+	        sqrDiscrNorm = sqrDiscrNormLocal;
+	    }
+	    if(sqrDiscrNorm >= 1e-20){
+		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(currentLagrLB)/sqrDiscrNorm) << endl;
+		setPenalty( min(1e10,0.01*fabs(currentLagrLB)/sqrDiscrNorm) );
+	    }
+#endif
 #if 0
 	    if(!omegaIsZero_){
 		for (int tS = 0; tS < nNodeSPs; tS++) {
@@ -353,6 +368,7 @@ int PSCGModel::performColGenStep(){
 	
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 		//ALVal_tS = subproblemSolvers[tS]->getALVal();
+		scaleVec_[tS] = 1.0;
 		lhsCritVal=0.0;
 	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_current[tS],z_current,scaling_matrix[tS]);
 		ALVal_Local += pr[tS]*ALVal_tS;
@@ -366,10 +382,11 @@ int PSCGModel::performColGenStep(){
 		recordKeeping[tS][3]=sqrDiscrNorm_tS;
 
 
-	
+#if 0	
 		for (int i = 0; i < n1; i++) {
 		    omega_tilde[tS][i] = omega_current[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
+#endif
 
 		//Solve Lagrangian MIP
 		//if(mpiRank==10) cout << "************************************************************" << endl;
@@ -389,6 +406,9 @@ int PSCGModel::performColGenStep(){
 		
 		dynamic_cast<PSCGModelScen_SMPS*>(subproblemSolvers[tS])->getOSI()->resolve();
 
+		double refVal = subproblemSolvers[tS]->evaluateSolution(omega_tilde[tS]);
+		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		//LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
 		spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 		if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = COIN_DBL_MAX;
@@ -396,11 +416,18 @@ int PSCGModel::performColGenStep(){
 cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
 	    	    break;
 		}
+cout << "Proc " << mpiRank << " scen " << tS << "  gap val: " << LagrLB_tS - refVal;
+if(LagrLB_tS <= subproblemSolvers[tS]->getLagrBd()+1e-10){
+    //scaleVec_[tS] *= 2.0;
+    cout << "  FLAGGING: Redundant vertex found" << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd());
+}
+cout << endl;
 #if 1
 		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
 		//ALVal_tS = subproblemSolvers[tS]->getALVal();
 
     //if(ALVal + 0.5*discrepNorm  - LagrLB < -SSC_DEN_TOL){
+    //else{return (LagrLB-currentLagrLB)/(ALVal + 0.5*discrepNorm - currentLagrLB);}
 		lhsCritVal = ALVal_tS+0.5*sqrDiscrNorm_tS;
 		for(int ii=0; ii<n1; ii++){
 		    lhsCritVal += scaling_matrix[tS][ii]*z_current[ii]*(x_current[tS][ii]-z_current[ii]);
@@ -414,7 +441,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		        //subproblemSolvers[tS]->setMIPPrintLevel(0, 0, false);
 		    }
 		    //subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
-		    //subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 		    //subproblemSolvers[tS]->refresh(omega_current[tS], z_current, scaling_matrix[tS]);
 		    //updateZ();
 		    //updateOmegaTilde();
@@ -447,7 +474,11 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		//updateTimer.addTime(updateTimeThisStep);
 		if(sqrDiscrNorm_tS < SSC_DEN_TOL*SSC_DEN_TOL) scaleVec_[tS] = 1.0;
 		else{
-		   scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 2.0:1.0;//2.0:0.5;
+		   //scaleVec_[tS] = 0.618+ 1.0/(exp(lhsCritVal - LagrLB_tS));
+		   //scaleVec_[tS] = 0.5+ 1.5/((1.0/sqrt(sqrDiscrNorm_tS))*exp(lhsCritVal - LagrLB_tS));
+		   //scaleVec_[tS] = pow(scaleVec_[tS], 1.0/(0.2*currentIter_+1.0));
+		   //scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 2.0:1.0;//2.0:0.5;
+		   if(gapVal <= 0.5*sqrDiscrNorm_tS){scaleVec_[tS] *=2.0;}//2.0:0.5;
 		   //scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 1.618:0.618;//2.0:0.5;
 		   //scaleVec_[tS] = min(max(0.5,sqrt(pow( gapVal/sqrDiscrNorm_tS , -1.0))),1.5) + 0.5; 
 		}

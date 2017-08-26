@@ -235,26 +235,31 @@ void evaluateVertexHistory(const double *omega){
 //virtual void setColSolution(const double *colsol) = 0;
 }
 
-void optimiseLagrOverVertexHistory(const double *omega){
-    double oldLagrBd = LagrBd;
-    double retVal; //LagrBd=COIN_DBL_MAX;
+double optimiseLagrOverVertexHistory(const double *omega){
+    //double oldLagrBd = LagrBd;
+    double vertexVal;
+    double retVal=COIN_DBL_MAX; //LagrBd=COIN_DBL_MAX;
     int optIndex = -1;
     for(int vv=0; vv<nVertices; vv++){
-    	retVal=0.0;
-    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[vv][ii];}
-    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
-    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
+    	vertexVal=0.0;
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) vertexVal+= (c[ii])*xVertices[vv][ii];}
+    	else{for(int ii=0; ii<n1; ii++) vertexVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
+    	for(int jj=0; jj<n2; jj++) vertexVal+= d[jj]*yVertices[vv][jj];
 	//cout << "\tVertex " << vv << " results in a value of " << retVal << endl;
-	if(retVal < LagrBd){
-	    LagrBd = retVal;
+	if(vertexVal < retVal){
+	    //LagrBd = retVal;
+	    retVal=vertexVal;
 	    optIndex = vv;
 	}
     }
+#if 0
     if(optIndex != -1){
         for(int ii=0; ii<n1; ii++){ x_vertex[ii]=xVertices[optIndex][ii];}
         for(int jj=0; jj<n2; jj++){ y_vertex[jj]=yVertices[optIndex][jj];}
         //polishSolution();
     }
+#endif
+    return retVal;
 //virtual void setColSolution(const double *colsol) = 0;
 }
 

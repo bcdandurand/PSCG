@@ -34,7 +34,7 @@ CXX = mpicxx
 #GCCOPENMPI = g++
 
 # C++ Compiler options
-CXXFLAGS = -O3 -g
+CXXFLAGS = -O3 -g -std=c++11
 #CXXFLAGS = -g -O3 -pipe -DNDEBUG -pedantic-errors -Wparentheses -Wreturn-type -Wcast-qual -Wall -Wpointer-arith -Wwrite-strings -Wconversion -Wno-unknown-pragmas -Wno-long-long   -DBCPS_BUILD 
 #CXXFLAGS = -O3 
 

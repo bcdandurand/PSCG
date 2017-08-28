@@ -8,6 +8,7 @@
 #include <math.h>
 #include <cmath>
 #include <string>
+#include <memory>
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -23,7 +24,7 @@
 #include "PSCGScen.h"
 #include "PSCGParams.h"
 
-#define SSC_PARAM 0.50
+#define SSC_PARAM 0.0
 #define SSC_DEN_TOL 1e-10
 #define DEFAULT_THREADS 1
 #define KIWIEL_PENALTY 1 //set 1 to use Kiwiel (2006) penalty update rule
@@ -38,6 +39,7 @@
 
 #define MAX_INNER_LOOP 200
 #define DEFAULT_PENALTY 100
+#define KEEP_LOG
 
 // Parameters for newConvergenceCriterion
 
@@ -80,6 +82,9 @@ TssModel smpsModel;
 int algorithm;
 vector<int> scenariosToThisModel;
 vector<PSCGModelScen*> subproblemSolvers;
+#ifdef KEEP_LOG
+  vector< shared_ptr<ofstream> > logFiles;
+#endif
 //vector< vector<var_branch> > newNodeSPInfo;
 int nS;
 int n1;
@@ -215,6 +220,9 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 		delete [] omega_sp[tS];
 		delete [] omega_saved[tS];
 		delete subproblemSolvers[tS];
+	    #ifdef KEEP_LOG
+	        if(logFiles.size() > tS) logFiles[tS]->close();
+	    #endif
 	}
 	//delete[] z_current;
 	delete [] z_current;
@@ -543,6 +551,9 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
     modelStatus_[Z_STATUS]=Z_UNKNOWN;
     clearSPVertexHistory();
     int maxNoIts = 100;
+#ifdef KEEP_LOG
+for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
+#endif
     int SPStatus=initialIteration();
     if(mpiRank==0) cout << "After initial iteration: currentLB: " << LagrLB << " versus refLB: " << referenceLagrLB << endl;;
     
@@ -576,6 +587,9 @@ if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
       for(int ii=0; shouldContinue; ii++){
 	currentIter_=ii;
 if(mpiRank==0) cerr << "Regular iteration " << ii << endl;
+#ifdef KEEP_LOG
+for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << "Regular iteration: " << currentIter_ << " mpi rank: " << mpiRank << " scen " << tS << endl;}
+#endif
 	//if(postprocessing || ii > 100){
 #if 0
 	if(postprocessing){
@@ -769,11 +783,18 @@ void solveContinuousMPs(){
 	    //if(zDiff < SSC_DEN_TOL){ break; }
 	}
 #if 1
-    	    for (int tS = 0; tS < nNodeSPs; tS++) {
+	double refVal, LagrLB_tS;
+    	for (int tS = 0; tS < nNodeSPs; tS++) {
 		for (int i = 0; i < n1; i++) {
 		    omega_tilde[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
-	    }
+		refVal = subproblemSolvers[tS]->evaluateSolution(omega_tilde[tS]);
+		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+#ifdef KEEP_LOG
+	*(logFiles[tS]) << "Proc " << mpiRank << " scen " << tS << "  gap val: " << LagrLB_tS - refVal;
+*(logFiles[tS]) << endl;
+#endif
+	}
 #endif
 
 if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}

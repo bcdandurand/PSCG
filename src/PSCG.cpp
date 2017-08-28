@@ -4,6 +4,7 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 */
 
 #include "PSCG.h"
+#include <utility>
 //#include "CPLEXsolverSCG.h"
 #include "ProblemDataBodur.h"
 #include "PSCGScen.h"
@@ -68,7 +69,15 @@ void PSCGModel::setupSolvers(){
 	nNodeSPs = scenariosToThisModel.size();
 	recordKeeping = new double[nNodeSPs][4];
 	scaleVec_ = new double[nNodeSPs];
+	char logFileName[128];
 	for (int tS = 0; tS < nNodeSPs; tS++) {
+	  #ifdef KEEP_LOG
+	    shared_ptr<ofstream> logfile(new ofstream);
+	    sprintf(logFileName,"Logs/logProc%dScen%d.txt",mpiRank,tS);
+	    logfile->open(logFileName);
+	    logFiles.push_back(logfile);
+	    //logFiles.emplace_back(ofstream(logFileName));
+	  #endif
 	    //CPLEXsolverSCG &currentSPSolver = subproblemSolvers[tS];
 #if 1
 	    switch( ftype ){
@@ -389,7 +398,6 @@ int PSCGModel::performColGenStep(){
 #endif
 
 		//Solve Lagrangian MIP
-		//if(mpiRank==10) cout << "************************************************************" << endl;
 
 #if 0
 
@@ -406,8 +414,6 @@ int PSCGModel::performColGenStep(){
 		
 		dynamic_cast<PSCGModelScen_SMPS*>(subproblemSolvers[tS])->getOSI()->resolve();
 
-		double refVal = subproblemSolvers[tS]->evaluateSolution(omega_tilde[tS]);
-		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 		//LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
 		spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 		if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
@@ -416,12 +422,12 @@ int PSCGModel::performColGenStep(){
 cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
 	    	    break;
 		}
-cout << "Proc " << mpiRank << " scen " << tS << "  gap val: " << LagrLB_tS - refVal;
-if(LagrLB_tS <= subproblemSolvers[tS]->getLagrBd()+1e-10){
+
+	double LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+	if(LagrLB_tS <= subproblemSolvers[tS]->getLagrBd()+1e-10){
     //scaleVec_[tS] *= 2.0;
-    cout << "  FLAGGING: Redundant vertex found" << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd());
-}
-cout << endl;
+    	    *(logFiles[tS]) << "  FLAGGING: Redundant vertex found" << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd());
+	}
 #if 1
 		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
 		//ALVal_tS = subproblemSolvers[tS]->getALVal();
@@ -433,13 +439,15 @@ cout << endl;
 		    lhsCritVal += scaling_matrix[tS][ii]*z_current[ii]*(x_current[tS][ii]-z_current[ii]);
 		}
 		if(lhsCritVal  < LagrLB_tS){
-		    if(lhsCritVal + 1e-6 < LagrLB_tS){cout << "performColGenStep(): scenario " << tS << " of node " << mpiRank << ": lhsCritVal condition not met: " 
+		  #ifdef KEEP_LOG
+		    if(lhsCritVal + 1e-6 < LagrLB_tS){*(logFiles[tS]) << "performColGenStep(): scenario " << tS << " of node " << mpiRank << " iteration: " << currentIter_  << ": lhsCritVal condition not met: " 
 			<< setprecision(10) << lhsCritVal << " should be >= " << setprecision(10) << LagrLB_tS << endl;
 		        subproblemSolvers[tS]->setMIPPrintLevel(1, 5, false);
 			//spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 			//dynamic_cast<PSCGModelScen_SMPS*>(subproblemSolvers[tS])->getOSI()->resolve();
 		        //subproblemSolvers[tS]->setMIPPrintLevel(0, 0, false);
 		    }
+		  #endif
 		    //subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 		    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 		    //subproblemSolvers[tS]->refresh(omega_current[tS], z_current, scaling_matrix[tS]);

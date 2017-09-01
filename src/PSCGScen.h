@@ -4,6 +4,7 @@
 #include "StructureDefs.h"
 #include <list>
 #include <iostream>
+#include <memory>
 #include <ilcplex/ilocplex.h>
 #include "TssModel.h"
 #include "OsiCpxSolverInterface.hpp"
@@ -83,6 +84,7 @@ double* y_vertex;
 vector< vector<double> > xVertices; //row ordered
 vector< vector<double> > yVertices;
 vector<double> vecWeights;
+int bestVertexIndex;
 
 IloCplex cplexMP;
 IloModel mpModel;
@@ -106,7 +108,7 @@ int solverStatus_;
 public:
 PSCGModelScen():
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),
+x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
@@ -114,7 +116,7 @@ mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 //copy constructor
 PSCGModelScen(const PSCGModelScen &other):
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),
+x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
@@ -259,6 +261,7 @@ double optimiseLagrOverVertexHistory(const double *omega){
         //polishSolution();
     }
 #endif
+    bestVertexIndex=optIndex;
     return retVal;
 //virtual void setColSolution(const double *colsol) = 0;
 }
@@ -336,6 +339,29 @@ catch(IloException& e){
 }
 
 }
+void printWeights(shared_ptr<ofstream> outStream){
+  *(outStream) << "Printing weight solutions in continuous MP: " << endl;
+try{
+#if 0
+  *(outStream) << weight0 << " ";
+  for(int ii=0; ii<nVertices; ii++){
+    *(outStream) << "  " << weightSoln[ii];
+  }
+  *(outStream) << endl;
+#endif
+  for(int ii=0; ii<nVertices; ii++){
+    *(outStream) << "  " << vecWeights[ii];
+  }
+  *(outStream) << endl;
+}
+catch(IloException& e){
+  *(outStream) << "printWeights() error: " << e.getMessage() << endl;
+  //*(outStream) << "Exception caught...Refreshing solution..." << endl;
+  //refresh();
+  e.end();
+}
+
+}
 
 //x,y,x_vertex, and y_vertex should all be set to something meaningful
 double updateGapVal(const double *omega){
@@ -387,6 +413,7 @@ void addVertex(){
 	   //yVertices[i].push_back(y_vertex[i]);
 	   yVertices[nVertices-1][i] = y_vertex[i];
 	}
+	bestVertexIndex=nVertices-1;
 
 	//upvhWeightVariables.add(IloNumVar(env, 0.0, 1.0));
 	//upvhWeightConstraints[0].setLinearCoef(upvhWeightVariables[nVertices], 1.0);	
@@ -447,7 +474,8 @@ void replaceVertexAtIndex(int iii){
 		baseWeightObj[iii] += y_vertex[j] * d[j];
 	}
 	mpWeightVariables[iii].setBounds(0.0,1.0);
-
+	bestVertexIndex=iii;
+	vecWeights[iii]=0.0;
 }
 
 void replaceOldestVertex(){
@@ -599,9 +627,10 @@ void setQuadraticTerm(const double *scaling_vector) {
 	}
 }
 
-void updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, double *z_average=NULL, int vertIndex=-1); 
-void updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+void solveMPLineSearch(const double *omega, const double *z, const double *scaling_vector, int vertIndex=-1, double *z_average=NULL); 
+void solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double *scaling_vector, bool updateDisp=false);
+void solveMPVertices(const double *omega, const double *z, const double *scaling_vector);
 void computeWeightsForCurrentSoln(const double *z); 
 void printDispersions(){
   cout << "Printing dispersions for scenario " << tS << endl;
@@ -642,7 +671,7 @@ void refresh(const double *omega, const double *z, const double *scaling_vector)
     
     //setXToOptVertex();
     //setYToOptVertex();
-    updatePrimalVariables_OneScenario(omega, z, scaling_vector);
+    solveMPLineSearch(omega, z, scaling_vector);
 
     //clearVertexHistory();
     //memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));

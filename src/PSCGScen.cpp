@@ -457,16 +457,17 @@ cout << endl;
 
 
 //Not tested!
-void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const double *z, const double *scaling_vector, double *z_average, int vertexIndex) {
+void PSCGModelScen::solveMPLineSearch(const double *omega, const double *z, const double *scaling_vector, int vertexIndex, double *z_average) {
 	
 	double numerator = 0.0;
 	double denominator = 0.0;
 	double dir = 0.0;
 	double *vertX, *vertY;
 	if(vertexIndex==-1){
-	    vertX = x_vertex;
-	    vertY = y_vertex;
+	    vertexIndex=bestVertexIndex;
 	}
+	vertX = &(xVertices[vertexIndex][0]);
+	vertY = &(yVertices[vertexIndex][0]);
 	
 	for (int i = 0; i < n1; i++) {
 		if(omega==NULL){numerator -= (c[i] + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
@@ -494,12 +495,28 @@ void PSCGModelScen::updatePrimalVariables_OneScenario(const double *omega, const
 		oldX=x[i];
 		x[i] = x[i] + a * (vertX[i] - x[i]);
 		if(z_average!=NULL){dispersions2[i] = (1.0-a)*dispersions2[i] + a*fabs(z_average[i]-vertX[i]) ;}
-		//if(updateDisp){dispersions[i] = max( (1.0-a)*(dispersions[i]+fabs(x[i]-oldX)) , a*fabs(x[i]-x_vertex[i]) );}
+		//if(updateDisp){dispersions[i] = max( (1.0-a)*(dispersions[i]+fabs(x[i]-oldX)) , a*fabs(x[i]-vertX[i]) );}
 	}
 
 	for (int j = 0; j < n2; j++) {
 		y[j] = y[j] + a * (vertY[j] - y[j]);
 	}
+
+	for(int wI=0; wI<nVertices; wI++) {
+	    vecWeights[wI] = (1.0-a)*vecWeights[wI];
+	}
+	vecWeights[vertexIndex]+=a;
+}
+
+void PSCGModelScen::solveMPVertices(const double *omega, const double *z, const double *scaling_vector)
+{
+    solveMPLineSearch(omega,z,scaling_vector);
+    for(int nn=0; nn<10; nn++){
+    for(int vv=0; vv<nVertices; vv++){
+	solveMPLineSearch(omega,z,scaling_vector,vv);
+    }
+    }
+
 }
 
 void PSCGModelScen::computeWeightsForCurrentSoln(const double *z) {
@@ -549,7 +566,7 @@ void PSCGModelScen::computeWeightsForCurrentSoln(const double *z) {
 //delete [] oldDispersions;
 }
 
-void PSCGModelScen::updatePrimalVariablesHistory_OneScenario(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+void PSCGModelScen::solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double *scaling_vector, bool updateDisp) {
    double direction=1.0;
    try{

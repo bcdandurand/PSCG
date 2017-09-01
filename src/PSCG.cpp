@@ -104,12 +104,14 @@ void PSCGModel::setupSolvers(){
 	    scaling_matrix.push_back(new double[n1]);
 	    omega_tilde.push_back(new double[n1]);
 	    omega_current.push_back(new double[n1]);
+	    omega_centre.push_back(new double[n1]);
 	    omega_sp.push_back(new double[n1]);
 	    omega_saved.push_back(new double[n1]);
 	    
 	    for (int i = 0; i < n1; i++) {
 		scaling_matrix[tS][i] = penC ;
-		omega_saved[tS][i] = 0.0; //omega will be initialised from the node.
+		//omega_saved[tS][i] = 0.0; //omega will be initialised from the node.
+		omega_centre[tS][i] = 0.0; 
 	    }
 	    subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
 	}
@@ -128,7 +130,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 
 	   subproblemSolvers[tS]->resetDispersionsToZero();
     	   try{
-	    spSolverStatuses_[tS] = subproblemSolvers[tS]->initialLPSolve(omega_current[tS]);
+	    spSolverStatuses_[tS] = subproblemSolvers[tS]->initialLPSolve(omega_centre[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = COIN_DBL_MAX;
 cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
@@ -137,7 +139,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 
 	    }
 
-	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_current[tS]);
+	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_centre[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = COIN_DBL_MAX;
 //cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
@@ -165,14 +167,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    //updateTimer.addTime(updateTimeThisStep);
 	    LagrLB_Local += pr[tS]*( subproblemSolvers[tS]->getLagrBd() );//obj;
 
-	    if(useVertexHistory){
-	      if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
-	      else if (nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
-		//subproblemSolvers[tS]->removeBackVertex();
-		subproblemSolvers[tS]->replaceOldestVertex();
-	        //subproblemSolvers[tS]->fixWeightToZero( subproblemSolvers[tS]->getNumVertices() - nVerticesUsed-1);
-	      }
-	    }
+	    updateVertexHistory(tS);
 #if 0
 	    for (int i = 0; i < n1; i++) {
 	    	omega_current[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
@@ -186,19 +181,20 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
-		MPI_Allreduce(&LagrLB_Local, &LagrLB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(&LagrLB_Local, &trialLagrLB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 	}
 	#endif
 	if(mpiSize == 1){
-	    LagrLB = LagrLB_Local;
+	    trialLagrLB = LagrLB_Local;
 	}
 	
 
 	//currentLagrLB =-ALPS_DBL_MAX;
-	currentLagrLB = LagrLB;
+	currentLagrLB = trialLagrLB;
+	centreLagrLB = trialLagrLB;
 
-	//recordKeeping[0]=LagrLB;
-	if(LagrLB > COIN_DBL_MAX/10.0){ modelStatus_[SP_STATUS]=SP_INFEAS;} //for parallel
+	//recordKeeping[0]=trialLagrLB;
+	if(trialLagrLB > COIN_DBL_MAX/10.0){ modelStatus_[SP_STATUS]=SP_INFEAS;} //for parallel
 	else{
 	    //Update of z
 	    //currentLagrLB=-ALPS_DBL_MAX;
@@ -208,7 +204,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    double sqrDiscrNorm = 0.0;
 	    double sqrDiscrNormLocal = 0.0;
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
-	         subproblemSolvers[tS]->updateALValues(omega_current[tS],z_current,scaling_matrix[tS]);
+	         subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,scaling_matrix[tS]);
 		 sqrDiscrNormLocal += 0.5*pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
 	    }
 	    #ifdef USING_MPI
@@ -220,8 +216,8 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	        sqrDiscrNorm = sqrDiscrNormLocal;
 	    }
 	    if(sqrDiscrNorm >= 1e-20){
-		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(currentLagrLB)/sqrDiscrNorm) << endl;
-		setPenalty( min(1e10,0.01*fabs(currentLagrLB)/sqrDiscrNorm) );
+		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm) << endl;
+		setPenalty( min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm) );
 	    }
 #endif
 #if 0
@@ -324,6 +320,7 @@ if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << o
 	return isFeas;
 }
 
+#if 0
 int PSCGModel::performColGenStepBasic(){	
   LagrLB_Local = 0.0;
   for (int tS = 0; tS < nNodeSPs; tS++) {
@@ -339,12 +336,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
     }
     subproblemSolvers[tS]->updateSolnInfo();
     LagrLB_Local += pr[tS]*subproblemSolvers[tS]->getLagrBd();//FWSPoptvalk;}
-    if(useVertexHistory){
-        if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
-        else if(nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
-	    subproblemSolvers[tS]->replaceOldestVertex();
-	}
-    }
+    updateVertexHistory(tS);
   }//tS loop
   #ifdef USING_MPI
   if (mpiSize > 1) {
@@ -358,7 +350,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
   else{modelStatus_[SP_STATUS]=SP_OPT;}
   return modelStatus_[SP_STATUS];
 }
-
+#endif
 
 int PSCGModel::performColGenStep(){	
 //if(true){cerr << "Proc: " << mpiRank << " Begin performColGenStep(): "  << endl;}
@@ -379,7 +371,7 @@ int PSCGModel::performColGenStep(){
 		//ALVal_tS = subproblemSolvers[tS]->getALVal();
 		scaleVec_[tS] = 1.0;
 		lhsCritVal=0.0;
-	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_current[tS],z_current,scaling_matrix[tS]);
+	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,scaling_matrix[tS]);
 		ALVal_Local += pr[tS]*ALVal_tS;
 		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
 		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
@@ -424,9 +416,13 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		}
 
 	double LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+    	    *(logFiles[tS]) << "Testing whether vertex is redundant: " << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd());
 	if(LagrLB_tS <= subproblemSolvers[tS]->getLagrBd()+1e-10){
-    //scaleVec_[tS] *= 2.0;
+    	    //scaleVec_[tS] *= 2.0;
     	    *(logFiles[tS]) << "  FLAGGING: Redundant vertex found" << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd());
+	}
+	else{
+	    updateVertexHistory(tS);
 	}
 #if 1
 		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
@@ -480,8 +476,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		//subproblemSolvers[tS]->compareLagrBds(omega_tilde[tS]);
 		gapVal=subproblemSolvers[tS]->updateGapVal(omega_tilde[tS]);
 		//updateTimer.addTime(updateTimeThisStep);
-		if(sqrDiscrNorm_tS < SSC_DEN_TOL*SSC_DEN_TOL) scaleVec_[tS] = 1.0;
-		else{
+		if(sqrDiscrNorm_tS >= SSC_DEN_TOL*SSC_DEN_TOL){ 
 		   //scaleVec_[tS] = 0.618+ 1.0/(exp(lhsCritVal - LagrLB_tS));
 		   //scaleVec_[tS] = 0.5+ 1.5/((1.0/sqrt(sqrDiscrNorm_tS))*exp(lhsCritVal - LagrLB_tS));
 		   //scaleVec_[tS] = pow(scaleVec_[tS], 1.0/(0.2*currentIter_+1.0));
@@ -515,12 +510,6 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	        recordKeeping[tS][0]=subproblemSolvers[tS]->getLagrBd();
 	    	//cout << recordKeeping[tS][0] << " versus " << subproblemSolvers[tS]->evaluateVertexSolution(omega_tilde[tS]) << endl;
 		LagrLB_Local += pr[tS]*subproblemSolvers[tS]->getLagrBd();//FWSPoptvalk;}
-	 	if(useVertexHistory){
-		    if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
-		    else if(nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
-			subproblemSolvers[tS]->replaceOldestVertex();
-		    }
-		}
 //cerr << "Proc: " << mpiRank << ": Subproblem " << tS << " solve finished." << endl;
 	}
 	#ifdef USING_MPI
@@ -541,7 +530,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		//MPI::Comm::Allreduce(localReduceBuffer, reduceBuffer, 3, MPI::DOUBLE, MPI::SUM);
 //if(mpiRank==0) cerr << "PerformColGenStep(): MPI after MPI_Allreduce" << endl;;
 
-		LagrLB = reduceBuffer[0];
+		trialLagrLB = reduceBuffer[0];
 		ALVal = reduceBuffer[1];
 		discrepNorm = reduceBuffer[2];
 		//if(mpiRank==0){ cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;}
@@ -552,7 +541,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	#endif
 
 	if (mpiSize == 1) {
-		LagrLB = LagrLB_Local;
+		trialLagrLB = LagrLB_Local;
 		ALVal = ALVal_Local;
 		discrepNorm = localDiscrepNorm;
 		//cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
@@ -565,7 +554,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	    if(recordKeeping[tS][1] >  1e-2 + recordKeeping[tS][2] + 0.5*recordKeeping[tS][3]){
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2]+0.5*recordKeeping[tS][3] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
-		cout << "Current solution value: " << subproblemSolvers[tS]->evaluateSolution(omega_current[tS]) << endl;;
+		cout << "Current solution value: " << subproblemSolvers[tS]->evaluateSolution(omega_centre[tS]) << endl;;
 
 		//subproblemSolvers[tS]->evaluateVertexHistory(omega_current[tS]);
 	        //subproblemSolvers[tS]->printWeights();	
@@ -575,7 +564,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	}
 	//updateModelStatusSP();
 //if(mpiRank==0) cerr << endl;
-	if(LagrLB > COIN_DBL_MAX/10.0) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
+	if(trialLagrLB > COIN_DBL_MAX/10.0) modelStatus_[SP_STATUS]=SP_INFEAS; //for parallel
 	else{modelStatus_[SP_STATUS]=SP_OPT;}
 //if(mpiRank==0){cerr << "End performColGenStep(): "  << endl;}
 	return modelStatus_[SP_STATUS];

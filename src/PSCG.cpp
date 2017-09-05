@@ -217,7 +217,9 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    }
 	    if(sqrDiscrNorm >= 1e-20){
 		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm) << endl;
-		setPenalty( min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm) );
+		baselinePenalty_ = min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm);
+		//setPenalty( baselinePenalty_ );
+		updateParams(1);
 	    }
 #endif
 #if 0

@@ -24,7 +24,6 @@
 #include "PSCGScen.h"
 #include "PSCGParams.h"
 
-#define SSC_PARAM 0.50
 #define SSC_DEN_TOL 1e-10
 #define DEFAULT_THREADS 1
 #define KIWIEL_PENALTY 1 //set 1 to use Kiwiel (2006) penalty update rule
@@ -103,6 +102,7 @@ bool omegaUpdated_;
 bool shouldTerminate;
 
 double SSCVal;
+double SSCParam;
 double *scaleVec_;
 
 vector<double*> x_current;
@@ -189,7 +189,7 @@ ProblemDataBodur pdBodur;
 PSCGModel(PSCGParams *p):par(p),nNodeSPs(0),algorithm(ALGDD),referenceLagrLB(-COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
 	mpiRank(0),mpiSize(1),mpiHead(true),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(20),
-	nIntInfeas_(-1),omegaUpdated_(false),scaleVec_(NULL){
+	nIntInfeas_(-1),omegaUpdated_(false),scaleVec_(NULL),SSCParam(0.0){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -537,6 +537,13 @@ void updatePenalty(){
     }
 #endif
 }
+
+//Update penalty and SSC parameter as motivated by convergence analysis
+void updateParams(int k){
+    setPenalty(baselinePenalty_*k);
+    SSCParam = baselinePenalty_*k / ((9+k)*baselinePenalty_  );
+    if(mpiRank==0) cout << "Penalty: " << baselinePenalty_*k << " and SSCParam: " << SSCParam << endl;
+}
 void updateVertexHistory(int tS){
     //if(useVertexHistory){
 	if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
@@ -558,7 +565,6 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
     //printStatus();
 	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
 	updateOmega(SSC);
-	 if(adjustPenalty) updatePenalty();
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
 	return SPStatus;
 }
@@ -628,12 +634,13 @@ for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << "Regular iteration: " << cur
 	//if(omegaUpdated_) omegaUpdatedAtLeastOnce=true;
 	if(omegaUpdated_){ 
             noConseqTimesOmegaNotUpdated=0;
-	    if(exceedingReferenceBd){
+	    //if(exceedingReferenceBd){
     	        //objVal=findPrimalFeasSolnWith(z_current);
 		noTimesOmegaUpdated++;
-	    }
+	    //}
 	}
 	else{noConseqTimesOmegaNotUpdated++;}
+	if(omegaUpdated_) updateParams(noTimesOmegaUpdated+1);
 	//omegaUpdatedAtLeastOnce=true;
       	//printStatusAsErr();
 	printStatus();
@@ -1664,7 +1671,7 @@ double computeSSCVal(){
 }
 		
 bool updateOmega(bool useSSC){
-	if(SSCVal >= SSC_PARAM || !useSSC) {
+	if(SSCVal >= SSCParam || !useSSC) {
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		memcpy(omega_centre[tS],omega_tilde[tS],n1*sizeof(double));
 		memcpy(omega_current[tS],omega_tilde[tS],n1*sizeof(double));

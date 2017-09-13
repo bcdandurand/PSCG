@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
 	
 
 	PSCGModel model(&par);
-	model.computeBound(100);
+	model.computeBound(10000);
 	//double *z = new double[model.n1];
 	#if 0
 	vector<double*> omega;

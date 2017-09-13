@@ -332,6 +332,7 @@ if(omega==NULL){
 			<<  getMIPBestNodeVal() << endl;
 		    cout << "Solver status: " << getCPLEXErrorStatus() << endl;
 	    }
+	    updateSolnInfo();
 	}
 #if 0
 	if(nVertices>0 && solverStatus_!=PSCG_PRIMAL_INF){
@@ -510,11 +511,12 @@ void PSCGModelScen::solveMPLineSearch(const double *omega, const double *z, cons
 
 void PSCGModelScen::solveMPVertices(const double *omega, const double *z, const double *scaling_vector)
 {
-    solveMPLineSearch(omega,z,scaling_vector);
     for(int nn=0; nn<10; nn++){
-    for(int vv=0; vv<nVertices; vv++){
+      solveMPLineSearch(omega,z,scaling_vector);
+      for(int vv=0; vv<nVertices; vv++){
 	solveMPLineSearch(omega,z,scaling_vector,vv);
-    }
+      }
+      optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
     }
 
 }

@@ -60,9 +60,6 @@ void PSCGModel::initialiseParameters(){
 	disableHeuristic = par->disableHeuristic;
 	ftype = par->filetype;
 
-	if (nVerticesUsed < 0) { useVertexHistory = false; }
-	if (nVerticesUsed == 0) { useVertexHistory = true; }
-	if (nVerticesUsed > 0) { useVertexHistory = true; }
 }
 
 void PSCGModel::setupSolvers(){
@@ -217,45 +214,12 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    }
 	    if(sqrDiscrNorm >= 1e-20){
 		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm) << endl;
-		baselinePenalty_ = min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm);
+		baselinePenalty_ = min(1e10,fabs(centreLagrLB)/sqrDiscrNorm);
 		//setPenalty( baselinePenalty_ );
 		updateParams(1);
 	    }
 #endif
-#if 0
-	    if(!omegaIsZero_){
-		for (int tS = 0; tS < nNodeSPs; tS++) {
-	    	    subproblemSolvers[tS]->solveLagrangianProblem();
-	    	    subproblemSolvers[tS]->updateSolnInfo();
-	    	    if(useVertexHistory){
-	      		if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
-	      		else if (nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
-		//subproblemSolvers[tS]->removeBackVertex();
-			subproblemSolvers[tS]->replaceOldestVertex();
-	        //subproblemSolvers[tS]->fixWeightToZero( subproblemSolvers[tS]->getNumVertices() - nVerticesUsed-1);
-	      		}
-	    	    }
-		}
-	    }
-	    averageOfVertices(z_average0, false);
-#endif
-#if 0
-	    for(int iii=0; iii<8; iii++){
-	        int SPStatus=performColGenStepBasic();
-	        assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
-	        updateOmega(1.0);
-    		if(currentLagrLB >= getIncumbentVal()){break;}
-	        solveContinuousMPs();
-	    }
-#endif
 	}
-#if 0
-	for (int tS = 0; tS < nNodeSPs; tS++) {
-	    for (int i = 0; i < n1; i++) {
-	    	omega_current[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
-	    }
-	}
-#endif
 if(mpiRank==0){cerr << "End initialIteration()" << endl;}
 	return modelStatus_[SP_STATUS];
 }
@@ -418,27 +382,44 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		}
 
 	double LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
-    	    *(logFiles[tS]) << "Testing whether vertex is redundant: " << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd());
+#ifdef KEEP_LOG
+    	    *(logFiles[tS]) << "old LagrLB_ts: " << LagrLB_tS << "\tnew LagrLB_ts" << subproblemSolvers[tS]->getLagrBd() << "\tALVal_ts: " << ALVal_tS << "\tsqrDiscrNorm: " << sqrDiscrNorm_tS << endl;
+    	    *(logFiles[tS]) << "Testing whether vertex is redundant: " << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd()) << endl;;
+#endif
 	if(LagrLB_tS <= subproblemSolvers[tS]->getLagrBd()+1e-10){
     	    //scaleVec_[tS] *= 2.0;
-    	    *(logFiles[tS]) << "  FLAGGING: Redundant vertex found" << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd());
+#ifdef KEEP_LOG
+    	    *(logFiles[tS]) << "  FLAGGING: Redundant vertex found" << endl;;
+	    *(logFiles[tS]) << " Is vertex really redundant? " << subproblemSolvers[tS]->checkWhetherVertexIsRedundant() << endl;
+#endif
 	}
 	else{
+	    //subproblemSolvers[tS]->updateSolnInfo();
 	    updateVertexHistory(tS);
 	}
 #if 1
 		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
 		//ALVal_tS = subproblemSolvers[tS]->getALVal();
-
     //if(ALVal + 0.5*discrepNorm  - LagrLB < -SSC_DEN_TOL){
     //else{return (LagrLB-currentLagrLB)/(ALVal + 0.5*discrepNorm - currentLagrLB);}
 		lhsCritVal = ALVal_tS+0.5*sqrDiscrNorm_tS;
+#ifdef KEEP_LOG
+		*(logFiles[tS]) << "Printing penalities: ";
+#endif
 		for(int ii=0; ii<n1; ii++){
 		    lhsCritVal += scaling_matrix[tS][ii]*z_current[ii]*(x_current[tS][ii]-z_current[ii]);
+#ifdef KEEP_LOG
+		    *(logFiles[tS]) << " " << scaling_matrix[tS][ii];
+#endif
 		}
+#ifdef KEEP_LOG
+		*(logFiles[tS]) << endl;
+		*(logFiles[tS]) << setprecision(10) << lhsCritVal << " should be >= " << setprecision(10) << LagrLB_tS << 
+			", a difference of: " << lhsCritVal-LagrLB_tS << ", compared with sqrDiscrNorm: " << sqrDiscrNorm_tS << endl;
+#endif
 		if(lhsCritVal  < LagrLB_tS){
 		  #ifdef KEEP_LOG
-		    if(lhsCritVal + 1e-6 < LagrLB_tS){*(logFiles[tS]) << "performColGenStep(): scenario " << tS << " of node " << mpiRank << " iteration: " << currentIter_  << ": lhsCritVal condition not met: " 
+		    if(lhsCritVal + 1e-6 < LagrLB_tS){*(logFiles[tS]) << "performColGenStep():  iteration: " << currentIter_  << ": lhsCritVal condition not met: " 
 			<< setprecision(10) << lhsCritVal << " should be >= " << setprecision(10) << LagrLB_tS << endl;
 		        subproblemSolvers[tS]->setMIPPrintLevel(1, 5, false);
 			//spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
@@ -467,7 +448,6 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		}
 
 		//else{
-		    subproblemSolvers[tS]->updateSolnInfo();
 		//}
 
 #endif
@@ -477,13 +457,18 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 
 		//subproblemSolvers[tS]->compareLagrBds(omega_tilde[tS]);
 		gapVal=subproblemSolvers[tS]->updateGapVal(omega_tilde[tS]);
+		#ifdef KEEP_LOG
+		*(logFiles[tS]) << "Condition for scaling penalty: " << gapVal << "  versus  " << sqrDiscrNorm_tS << endl;
+		subproblemSolvers[tS]->evaluateVertexHistory(omega_tilde[tS], logFiles[tS]);
+		#endif
 		//updateTimer.addTime(updateTimeThisStep);
 		if(sqrDiscrNorm_tS >= SSC_DEN_TOL*SSC_DEN_TOL){ 
 		   //scaleVec_[tS] = 0.618+ 1.0/(exp(lhsCritVal - LagrLB_tS));
 		   //scaleVec_[tS] = 0.5+ 1.5/((1.0/sqrt(sqrDiscrNorm_tS))*exp(lhsCritVal - LagrLB_tS));
 		   //scaleVec_[tS] = pow(scaleVec_[tS], 1.0/(0.2*currentIter_+1.0));
 		   //scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 2.0:1.0;//2.0:0.5;
-		   if(gapVal <= 0.5*sqrDiscrNorm_tS){scaleVec_[tS] *=2.0;}//2.0:0.5;
+		   if(gapVal <= 0.1*sqrDiscrNorm_tS){scaleVec_[tS] *=2.0;}//2.0:0.5;
+		   if(gapVal >= 10.0*sqrDiscrNorm_tS){scaleVec_[tS] *=0.5;}//2.0:0.5;
 		   //scaleVec_[tS] = (gapVal <= 0.5*sqrDiscrNorm_tS) ? 1.618:0.618;//2.0:0.5;
 		   //scaleVec_[tS] = min(max(0.5,sqrt(pow( gapVal/sqrDiscrNorm_tS , -1.0))),1.5) + 0.5; 
 		}

@@ -234,7 +234,16 @@ void evaluateVertexHistory(const double *omega){
     	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
 	cout << "\tVertex " << vv << " results in a value of " << retVal << endl;
     }
-//virtual void setColSolution(const double *colsol) = 0;
+}
+void evaluateVertexHistory(const double *omega, shared_ptr<ofstream> outStream){
+    double retVal;
+    for(int vv=0; vv<nVertices; vv++){
+    	retVal=0.0;
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[vv][ii];}
+    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
+    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
+	*(outStream) << "\tVertex " << vv << " results in a value of " << retVal << endl;
+    }
 }
 
 double optimiseLagrOverVertexHistory(const double *omega){
@@ -264,6 +273,29 @@ double optimiseLagrOverVertexHistory(const double *omega){
     bestVertexIndex=optIndex;
     return retVal;
 //virtual void setColSolution(const double *colsol) = 0;
+}
+
+bool checkWhetherVertexIsRedundant(){
+    for(int vv=0; vv<nVertices; vv++){
+	if(checkPairOfVerticesForEquality(vv)){
+	    return true;
+	}	
+    }
+    return false;
+}
+
+bool checkPairOfVerticesForEquality(int vv){
+      for(int ii=0; ii<n1; ii++){
+	if(fabs(xVertices[vv][ii]-x_vertex[ii]) > 1e-10){
+	    return false;
+	}
+      }
+      for(int jj=0; jj<n2; jj++){
+	if(fabs(yVertices[vv][jj]-y_vertex[jj]) > 1e-10){
+	    return false;
+	}
+      }
+      return true;
 }
 
 double getXVertexEntry(int entry, int vertex){
@@ -397,7 +429,12 @@ double computeXDispersion(const double *z){
 #endif
 
 void addVertex(){
-    if(nVertices==maxNVertices){
+    int idxToReplace = findVVIndexNonProductive();
+    if(idxToReplace!=-1){
+	replaceVertexAtIndex(idxToReplace);
+	bestVertexIndex=idxToReplace;
+    }
+    else if(nVertices==maxNVertices){
 	if(vecWeights.size()==0){vecWeights.push_back(1.0);}
 	else{vecWeights.push_back(0.0);}
 //vector<double> vecWeights;
@@ -443,6 +480,17 @@ void addVertex(){
 	nVertices++;
     }
     if(oldestVertexIndex==-1) oldestVertexIndex=0;
+}
+
+int findVVIndexNonProductive(){
+  int idx = -1;
+  for(int ii=0; ii<nVertices; ii++){
+    if(vecWeights[ii] < 1e-20){
+	idx=ii;
+	break;
+    }
+  }
+  return idx;
 }
 
 void replaceVertexAtIndex(int iii){
@@ -523,6 +571,16 @@ cout << "Printing Vertices: " << endl;
 	cout << " " << xVertices[vv][ii];
       }
       cout << endl;
+  }
+}
+void printVertices(shared_ptr<ofstream> outStream){
+  assert(nVertices>0);
+*(outStream) << "Printing Vertices: " << endl;
+  for(int ii=0; ii<n1; ii++){
+      for(int vv=0; vv<nVertices; vv++){
+	*(outStream) << " " << xVertices[vv][ii];
+      }
+      *(outStream) << endl;
   }
 }
 

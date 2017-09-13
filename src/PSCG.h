@@ -159,7 +159,6 @@ bool dataPathOverride;
 bool LBcalc;
 bool AlgorithmZ;
 bool disableHeuristic;
-bool useVertexHistory;
 int ftype;
 int mpiRank;
 int mpiSize;
@@ -523,12 +522,53 @@ void zeroOmega(){
 
 int initialIteration();
 
-void updatePenalty(){
+
+void updatePenalty(int k){
     //if((omegaUpdated_ || currentIter_ < 10)) computeKiwielPenaltyUpdate(SSCVal);
     //if(omegaUpdated_) computeKiwielPenaltyUpdate();
     //computeKiwielPenaltyUpdate();
     //if(omegaUpdated_) computeScalingPenaltyUpdate( 2.0 );
+    int phase = 0;
+    double penalty;
+    double penaltyScale;
 #if 1
+    if(currentIter_ > 20 && !omegaUpdated_) phase=3; //no update
+    else if(currentIter_ > 20) phase=2;
+    //else if(currentIter_ > 100) phase=1;
+#endif
+    switch(phase){
+	case 0:
+	  SSCParam = 0.10;
+	  computeKiwielPenaltyUpdate();
+	  break;
+	case 1:
+#if 0
+	  SSCParam = 0.10;
+	  for (int tS = 0; tS < nNodeSPs; tS++) {
+	    computeScalingPenaltyUpdate(tS,scaleVec_[tS]);
+	  }
+#endif
+	  break;
+	case 2:
+	  //penaltyScale = (double)k;
+	  //penaltyScale /= (penaltyScale-1.0);
+	  penaltyScale = 1.05;
+	  //penalty = (double)k;
+	  penalty = pow(1.05,k);
+    	  //setPenalty(penalty);
+	  computeScalingPenaltyUpdate(penaltyScale);
+	  //penalty = pow(1.618, (currentIter_-100.0));
+	  //SSCParam = penalty / (10.0*baselinePenalty_ + penalty);
+	  SSCParam = max(0.1, penalty/(1000.0+penalty));
+    	  if(mpiRank==0) cout << "Penalty: " << penalty << " and SSCParam: " << SSCParam << endl;
+	case 3:
+	  break; //do nothing
+	default:
+	  cerr << "Invalid phase: " << phase << endl;
+	  break;
+
+    }
+#if 0
     if(currentIter_ < 10) {computeKiwielPenaltyUpdate();}
     else if(omegaUpdated_){ 
 	for (int tS = 0; tS < nNodeSPs; tS++) {
@@ -545,12 +585,10 @@ void updateParams(int k){
     if(mpiRank==0) cout << "Penalty: " << baselinePenalty_*k << " and SSCParam: " << SSCParam << endl;
 }
 void updateVertexHistory(int tS){
-    //if(useVertexHistory){
 	if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
 	    else{// if(nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
 		subproblemSolvers[tS]->replaceOldestVertex();
 	}
-    //}
 }
 
 int regularIteration(bool adjustPenalty=false, bool SSC=true){
@@ -577,7 +615,8 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
     //fixInnerStep = 20;
     modelStatus_[Z_STATUS]=Z_UNKNOWN;
     clearSPVertexHistory();
-    int maxNoIts = 1000;
+    int maxNoIts = 10000;
+    SSCParam = 0.10;
 #ifdef KEEP_LOG
 for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
 #endif
@@ -615,7 +654,7 @@ if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
 	currentIter_=ii;
 if(mpiRank==0) cerr << "Regular iteration " << ii << endl;
 #ifdef KEEP_LOG
-for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << "Regular iteration: " << currentIter_ << " mpi rank: " << mpiRank << " scen " << tS << endl;}
+for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
 #endif
 	//if(postprocessing || ii > 100){
 #if 0
@@ -626,12 +665,7 @@ for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << "Regular iteration: " << cur
 	}
 #endif
 	{regularIteration(true,true);}
-	//{regularIteration(false,adjustPenalty);}
-	//if(ii<20) {regularIteration(false,adjustPenalty);}
-	//else{regularIteration(true,false);}
 
-	//regularIteration(true,false);
-	//if(omegaUpdated_) omegaUpdatedAtLeastOnce=true;
 	if(omegaUpdated_){ 
             noConseqTimesOmegaNotUpdated=0;
 	    //if(exceedingReferenceBd){
@@ -640,7 +674,8 @@ for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << "Regular iteration: " << cur
 	    //}
 	}
 	else{noConseqTimesOmegaNotUpdated++;}
-	if(omegaUpdated_) updateParams(noTimesOmegaUpdated+1);
+	//if(omegaUpdated_) updateParams(noTimesOmegaUpdated+1);
+	updatePenalty(noTimesOmegaUpdated);
 	//omegaUpdatedAtLeastOnce=true;
       	//printStatusAsErr();
 	printStatus();
@@ -760,7 +795,7 @@ void setBound(double bd){currentLagrLB=bd;}
 
 void solveForWeights(){
    for (int tS = 0; tS < nNodeSPs; tS++) {
-        if (useVertexHistory && subproblemSolvers[tS]->getNVertices()>2) { //Compute Next X, Y (With History)
+        if (subproblemSolvers[tS]->getNVertices()>2) { //Compute Next X, Y (With History)
 	     //subproblemSolvers[tS]->solveMPHistory(omega_current[tS],z_current,scaling_matrix[tS],true);
 	     subproblemSolvers[tS]->computeWeightsForCurrentSoln(NULL);
 	}
@@ -774,9 +809,9 @@ void solveContinuousMPs(){
         for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
 	//double integrDiscr;
 	//for(int itGS=0; itGS < fixInnerStep || (updateDisp && zDiff > 1e-6); itGS++) { //The inner loop has a fixed number of occurences
-	assert(currentIter_ >=0 && currentIter_ < 10000);
+	assert(currentIter_ >= 0 && currentIter_ < 10000);
 	//int maxNoGSIts = 20+currentIter_;
-	int maxNoGSIts = 50;
+	int maxNoGSIts = 40;//max(20,currentIter_/2);
 	//averageOfVertices(z_vertex_average);
 	for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	    memcpy(z_old,z_current, n1*sizeof(double));
@@ -785,20 +820,8 @@ void solveContinuousMPs(){
 		//*************************** Quadratic subproblem ***********************************
 			    
 		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,scaling_matrix[tS]);}
+#ifdef KEEP_LOG
 if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
-#if 0
-		    if (useVertexHistory && subproblemSolvers[tS]->getNVertices()>2) { //Compute Next X, Y (With History)
-
-					
-			//Solve the quadratic master problem for x and y
-			//subproblemSolvers[tS]->solveMPHistory(omega_tilde[tS],z_current,currentVarLB_, currentVarUB_, scaling_matrix[tS],false);
-			subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,scaling_matrix[tS]);
-			
-		    }
-		    else if(!useVertexHistory || subproblemSolvers[tS]->getNVertices()==2){ //might not work correctly, untested! Compute Next X, Y (Without History)
-			//subproblemSolvers[tS]->solveMPLineSearch(omega_tilde[tS],z_current,scaling_matrix[tS],z_vertex_average);
-			subproblemSolvers[tS]->solveMPLineSearch(omega_tilde[tS],z_current,scaling_matrix[tS]);
-		    }
 #endif
 	    }
 	    					
@@ -818,14 +841,16 @@ if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 #if 1
 	double refVal, LagrLB_tS;
     	for (int tS = 0; tS < nNodeSPs; tS++) {
+#ifdef KEEP_LOG
 		subproblemSolvers[tS]->printWeights(logFiles[tS]);
+#endif
 		for (int i = 0; i < n1; i++) {
 		    omega_tilde[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
 		refVal = subproblemSolvers[tS]->evaluateSolution(omega_tilde[tS]);
 		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 #ifdef KEEP_LOG
-	*(logFiles[tS]) << "Proc " << mpiRank << " scen " << tS << "  gap val: " << LagrLB_tS - refVal;
+	*(logFiles[tS]) << "  gap val (master problem): " << LagrLB_tS - refVal;
 *(logFiles[tS]) << endl;
 #endif
 	}
@@ -1795,14 +1820,14 @@ void printNewNodeSPInfo(){
 double getPenalty(){return penC;}
 double getBaselinePenalty(){return baselinePenalty_;}
 void setPenalty(double p){
-    penC=max(p,MIN_PEN);
+    penC=max(p,baselinePenalty_);
     for (int tS = 0; tS < nNodeSPs; tS++) {
 	setPenalty(tS,penC);
     }
 //if(mpiRank==0) cout << "Penalty is now: " << penC << endl;
 }
 void setPenalty(int tS, double p){
-    double penalty = max(p,MIN_PEN);
+    double penalty = max(p,baselinePenalty_);
     subproblemSolvers[tS]->setQuadraticTerm(penalty);
     for (int i = 0; i < n1; i++) {
         scaling_matrix[tS][i] = penalty;
@@ -1815,7 +1840,7 @@ void computeKiwielPenaltyUpdate(){
 	//penC = 1.0/min( max( (2.0/penC)*(1.0-SSCVal),  max(1.0/(10.0*penC),1e-4)    ), 10.0/penC);
 	//setPenalty(penC);
     	//if( SSCVal >= 0.5 ){ computeScalingPenaltyUpdate(min( 0.5/(1-SSCVal),2.0));}
-	double limit = 4.0;
+	double limit = 100.0;
     	if(fabs(1.0-SSCVal) > 1e-10){
 	     computeScalingPenaltyUpdate( max( min( 0.5/(1.0-SSCVal),limit), 1.0/limit));
 	}
@@ -1838,7 +1863,7 @@ void computeScalingPenaltyUpdate(double scaling){
 void computeScalingPenaltyUpdate(int tS, double scaling){	
     for (int i = 0; i < n1; i++) {
 	scaling_matrix[tS][i] *= scaling;
-	scaling_matrix[tS][i] = max( scaling_matrix[tS][i], MIN_PEN);
+	scaling_matrix[tS][i] = max( scaling_matrix[tS][i], baselinePenalty_);
     }
     subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
 }

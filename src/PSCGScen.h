@@ -708,9 +708,11 @@ double * getYVertex(){return y_vertex;}
 
 void setXToVertex(){
     resetDispersionsToZero();
-    for(int i=0;i<n1;i++) x[i]=x_vertex[i];
+    //for(int i=0;i<n1;i++) x[i]=x_vertex[i];
+    for(int i=0;i<n1;i++) x[i]=xVertices[bestVertexIndex][i];
 }
-void setYToVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex[i];}
+//void setYToVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex[i];}
+void setYToVertex(){for(int i=0;i<n2;i++) y[i]=yVertices[bestVertexIndex][i];}
 
 #if 0
 void refresh(){
@@ -995,6 +997,7 @@ void setCPXMIPParameters(){
 
 	//osi->setDblParam(OsiDualTolerance, 1e-9);
 
+//#define MIP_TOL 1e-9
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_AbsMIPGap, MIP_TOL);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_MIPGap, MIP_TOL*1e-3);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_Integrality, MIP_TOL);

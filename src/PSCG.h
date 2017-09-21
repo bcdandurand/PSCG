@@ -538,7 +538,7 @@ void updatePenalty(int k){
 #endif
     switch(phase){
 	case 0:
-	  SSCParam = 0.10;
+	  SSCParam = 0.5;
 	  computeKiwielPenaltyUpdate();
 	  break;
 	case 1:
@@ -550,16 +550,16 @@ void updatePenalty(int k){
 #endif
 	  break;
 	case 2:
-	  //penaltyScale = (double)k;
-	  //penaltyScale /= (penaltyScale-1.0);
-	  penaltyScale = 1.05;
-	  //penalty = (double)k;
-	  penalty = pow(1.05,k);
+	  penaltyScale = (double)k;
+	  penaltyScale /= (penaltyScale-1.0);
+	  //penaltyScale = 1.05;
+	  penalty = (double)k;
+	  //penalty = pow(1.05,k);
     	  //setPenalty(penalty);
 	  computeScalingPenaltyUpdate(penaltyScale);
 	  //penalty = pow(1.618, (currentIter_-100.0));
 	  //SSCParam = penalty / (10.0*baselinePenalty_ + penalty);
-	  SSCParam = max(0.1, penalty/(1000.0+penalty));
+	  SSCParam = max(0.5, penalty/(1000.0+penalty));
     	  if(mpiRank==0) cout << "Penalty: " << penalty << " and SSCParam: " << SSCParam << endl;
 	case 3:
 	  break; //do nothing
@@ -664,12 +664,20 @@ for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: 
     	     regularIteration(false,false);
 	}
 #endif
-	{regularIteration(true,true);}
+	//if(currentIter_ < 50) regularIteration(true,false);
+	//else regularIteration(true,true);
+	regularIteration(true,true);
 
 	if(omegaUpdated_){ 
             noConseqTimesOmegaNotUpdated=0;
 	    //if(exceedingReferenceBd){
     	        //objVal=findPrimalFeasSolnWith(z_current);
+#if 0
+		for(int tS=0; tS<nNodeSPs; tS++){
+	    	    subproblemSolvers[tS]->setXToVertex();
+	    	    subproblemSolvers[tS]->setYToVertex();
+		}
+#endif
 		noTimesOmegaUpdated++;
 	    //}
 	}
@@ -806,20 +814,23 @@ void solveForWeights(){
 void solveContinuousMPs(){
 	bool isLastGSIt;
 	double zDiff;
-        for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
+        //for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
 	//double integrDiscr;
 	//for(int itGS=0; itGS < fixInnerStep || (updateDisp && zDiff > 1e-6); itGS++) { //The inner loop has a fixed number of occurences
 	assert(currentIter_ >= 0 && currentIter_ < 10000);
 	//int maxNoGSIts = 20+currentIter_;
-	int maxNoGSIts = 40;//max(20,currentIter_/2);
+	int maxNoGSIts = 1000;//max(20,currentIter_/2);
 	//averageOfVertices(z_vertex_average);
+   //for(int kk=0; kk <= noTimesOmegaUpdated; kk++){
+	//setPenalty(baselinePenalty_*max(1.0,noTimesOmegaUpdated));
+	//if(omegaUpdated_) computeScalingPenaltyUpdate((1.0)/((double)maxNoGSIts));
 	for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	    memcpy(z_old,z_current, n1*sizeof(double));
 	    zDiff=0.0;
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		//*************************** Quadratic subproblem ***********************************
 			    
-		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,scaling_matrix[tS]);}
+		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,scaling_matrix[tS]);}
 #ifdef KEEP_LOG
 if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 #endif
@@ -827,17 +838,20 @@ if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 	    					
 	    // Update z_previous.
 	    updateZ();
-#if 0
+	    //if(omegaUpdated_) computeScalingPenaltyUpdate(((double)(itGS)+2.0)/((double)itGS+1.0));
+#if 1
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		for (int i = 0; i < n1; i++) {
-		    omega_tilde[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		    omega_tilde[tS][i] = omega_centre[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
+      	        subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
 	    }
 #endif
 	    totalNoGSSteps++;
 	    for(int ii=0; ii<n1; ii++){zDiff=max(zDiff,fabs(z_current[ii]-z_old[ii]));}
 	    //if(zDiff < SSC_DEN_TOL){ break; }
 	}
+    //}
 #if 1
 	double refVal, LagrLB_tS;
     	for (int tS = 0; tS < nNodeSPs; tS++) {
@@ -845,7 +859,7 @@ if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 		subproblemSolvers[tS]->printWeights(logFiles[tS]);
 #endif
 		for (int i = 0; i < n1; i++) {
-		    omega_tilde[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		    omega_tilde[tS][i] = omega_centre[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
 		refVal = subproblemSolvers[tS]->evaluateSolution(omega_tilde[tS]);
 		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);

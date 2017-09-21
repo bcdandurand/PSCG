@@ -153,6 +153,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	   }
 
 	    subproblemSolvers[tS]->updateSolnInfo();
+	    subproblemSolvers[tS]->addVertex();
 	    subproblemSolvers[tS]->setXToVertex();
 	    subproblemSolvers[tS]->setYToVertex();
 	    //subproblemSolvers[tS]->updateOptSoln();

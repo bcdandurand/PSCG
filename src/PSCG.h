@@ -124,9 +124,11 @@ int modelStatus_[2];
 char filepath[64];
 char probname[64];
 double LagrLB_Local;
+double innerLagrLB_Local;
 // Bounds
 double trialLagrLB;
 double currentLagrLB;
+double innerLagrLB;
 double centreLagrLB;
 double referenceLagrLB;
 double ALVal;
@@ -522,6 +524,10 @@ void zeroOmega(){
 
 int initialIteration();
 
+void updateSSC(int k){
+    SSCParam = k/(100.0+k);
+    if(SSCParam > 0.5) SSCParam=0.5;
+}
 
 void updatePenalty(int k){
     //if((omegaUpdated_ || currentIter_ < 10)) computeKiwielPenaltyUpdate(SSCVal);
@@ -531,6 +537,8 @@ void updatePenalty(int k){
     int phase = 0;
     double penalty;
     double penaltyScale;
+    updateSSC(k);
+    //if(currentIter_ % 50 == 0 && omegaUpdated_) computeScalingPenaltyUpdate(2.0);
 #if 1
     if(currentIter_ > 20 && !omegaUpdated_) phase=3; //no update
     else if(currentIter_ > 20) phase=2;
@@ -538,7 +546,6 @@ void updatePenalty(int k){
 #endif
     switch(phase){
 	case 0:
-	  SSCParam = 0.5;
 	  computeKiwielPenaltyUpdate();
 	  break;
 	case 1:
@@ -559,7 +566,6 @@ void updatePenalty(int k){
 	  computeScalingPenaltyUpdate(penaltyScale);
 	  //penalty = pow(1.618, (currentIter_-100.0));
 	  //SSCParam = penalty / (10.0*baselinePenalty_ + penalty);
-	  SSCParam = max(0.5, penalty/(1000.0+penalty));
     	  if(mpiRank==0) cout << "Penalty: " << penalty << " and SSCParam: " << SSCParam << endl;
 	case 3:
 	  break; //do nothing
@@ -593,7 +599,14 @@ void updateVertexHistory(int tS){
 
 int regularIteration(bool adjustPenalty=false, bool SSC=true){
 //if(mpiRank==0) cout << "Begin regularIteration()" << endl;
-	solveContinuousMPs();
+	//if(currentIter_>20) preSolveMP();
+	//else{solveContinuousMPs();}
+        int numInnerSolves=1;	
+	while(solveContinuousMPs()){
+	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
+	    numInnerSolves++;
+	}
+	if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
 
 	int SPStatus=performColGenStep();
 	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
@@ -684,6 +697,7 @@ for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: 
 	else{noConseqTimesOmegaNotUpdated++;}
 	//if(omegaUpdated_) updateParams(noTimesOmegaUpdated+1);
 	updatePenalty(noTimesOmegaUpdated);
+	//updateSSC(noTimesOmegaUpdated);
 	//omegaUpdatedAtLeastOnce=true;
       	//printStatusAsErr();
 	printStatus();
@@ -811,15 +825,35 @@ void solveForWeights(){
    }
 
 }
-void solveContinuousMPs(){
+
+void preSolveMP(){
+    for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
+    int maxNoGSIts = 100;//max(20,currentIter_/2);
+    for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
+	for (int tS = 0; tS < nNodeSPs; tS++) {
+		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,scaling_matrix[tS]);}
+	}
+	updateZ();
+    	for (int tS = 0; tS < nNodeSPs; tS++) {
+	    for (int i = 0; i < n1; i++) {
+		omega_tilde[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    }
+      	    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
+	}
+    }
+
+}
+bool solveContinuousMPs(){
 	bool isLastGSIt;
+	bool needToContinue = false;
 	double zDiff;
         //for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
 	//double integrDiscr;
 	//for(int itGS=0; itGS < fixInnerStep || (updateDisp && zDiff > 1e-6); itGS++) { //The inner loop has a fixed number of occurences
 	assert(currentIter_ >= 0 && currentIter_ < 10000);
 	//int maxNoGSIts = 20+currentIter_;
-	int maxNoGSIts = 1000;//max(20,currentIter_/2);
+	//int maxNoGSIts = 100 + 10*currentIter_;//max(20,currentIter_/2);
+	int maxNoGSIts = 20;//max(20,currentIter_/2);
 	//averageOfVertices(z_vertex_average);
    //for(int kk=0; kk <= noTimesOmegaUpdated; kk++){
 	//setPenalty(baselinePenalty_*max(1.0,noTimesOmegaUpdated));
@@ -832,7 +866,7 @@ void solveContinuousMPs(){
 			    
 		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,scaling_matrix[tS]);}
 #ifdef KEEP_LOG
-if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
+//if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 #endif
 	    }
 	    					
@@ -853,24 +887,61 @@ if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 	}
     //}
 #if 1
-	double refVal, LagrLB_tS;
+	innerLagrLB_Local = 0.0;
+	ALVal_Local = 0.0;
+	localDiscrepNorm = 0.0;
+	reduceBuffer[0]=0.0;
+	reduceBuffer[1]=0.0;
+	reduceBuffer[2]=0.0;
+	double refVal, LagrLB_tS, ALVal_tS,sqrDiscrNorm_tS;
     	for (int tS = 0; tS < nNodeSPs; tS++) {
 #ifdef KEEP_LOG
-		subproblemSolvers[tS]->printWeights(logFiles[tS]);
+		//subproblemSolvers[tS]->printWeights(logFiles[tS]);
 #endif
 		for (int i = 0; i < n1; i++) {
 		    omega_tilde[tS][i] = omega_centre[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
 		refVal = subproblemSolvers[tS]->evaluateSolution(omega_tilde[tS]);
 		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		innerLagrLB_Local += pr[tS]*LagrLB_tS;
+	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,scaling_matrix[tS]);
+		ALVal_Local += pr[tS]*ALVal_tS;
+		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
+		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
 #ifdef KEEP_LOG
-	*(logFiles[tS]) << "  gap val (master problem): " << LagrLB_tS - refVal;
-*(logFiles[tS]) << endl;
+//	*(logFiles[tS]) << "  gap val (master problem): " << LagrLB_tS - refVal;
+//*(logFiles[tS]) << endl;
 #endif
+	}
+	#ifdef USING_MPI
+	if (mpiSize > 1) {
+		localReduceBuffer[0]=innerLagrLB_Local;
+		localReduceBuffer[1]=ALVal_Local;
+		localReduceBuffer[2]=localDiscrepNorm;
+		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		innerLagrLB = reduceBuffer[0];
+		ALVal = reduceBuffer[1];
+		discrepNorm = reduceBuffer[2];
+	}
+	#endif
+	if (mpiSize == 1) {
+		innerLagrLB = LagrLB_Local;
+		ALVal = ALVal_Local;
+		discrepNorm = localDiscrepNorm;
+	}
+	double innerSSCVal;
+    	//if(mpiRank==0) cout << "**************  " << innerLagrLB - centreLagrLB << endl;
+    	//if(mpiRank==0) cout << "**************  " << ALVal + 0.5*discrepNorm  - centreLagrLB << endl;
+    	if( (ALVal + 0.5*discrepNorm  - centreLagrLB > SSC_DEN_TOL) ){
+	    innerSSCVal = (innerLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB);
+	    //if(mpiRank==0) cout << "innerSSCVal: " << innerSSCVal << "  vs.  " << SSCParam << endl;
+	    needToContinue = (innerLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB) < SSCParam;
 	}
 #endif
 
-if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
+//if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
+
+    return needToContinue;
 }
 #if 0
 void solveQMIPsGS(){

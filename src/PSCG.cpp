@@ -422,7 +422,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		  #ifdef KEEP_LOG
 		    if(lhsCritVal + 1e-6 < LagrLB_tS){*(logFiles[tS]) << "performColGenStep():  iteration: " << currentIter_  << ": lhsCritVal condition not met: " 
 			<< setprecision(10) << lhsCritVal << " should be >= " << setprecision(10) << LagrLB_tS << endl;
-		        subproblemSolvers[tS]->setMIPPrintLevel(1, 5, false);
+		        //subproblemSolvers[tS]->setMIPPrintLevel(1, 5, false);
 			//spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_tilde[tS]);
 			//dynamic_cast<PSCGModelScen_SMPS*>(subproblemSolvers[tS])->getOSI()->resolve();
 		        //subproblemSolvers[tS]->setMIPPrintLevel(0, 0, false);
@@ -505,26 +505,14 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 //cerr << "*";
 //MPI_Barrier(MPI_COMM_WORLD);
 	if (mpiSize > 1) {
-		//commsTimer.start();
-		// Send decision variables to other processes.
-
 		localReduceBuffer[0]=LagrLB_Local;
 		localReduceBuffer[1]=ALVal_Local;
 		localReduceBuffer[2]=localDiscrepNorm;
-
-//if(mpiRank==0) cerr << "PerformColGenStep(): MPI before MPI_Allreduce" << endl;;
-//cerr << "#";
 		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-		//MPI::Comm::Allreduce(localReduceBuffer, reduceBuffer, 3, MPI::DOUBLE, MPI::SUM);
-//if(mpiRank==0) cerr << "PerformColGenStep(): MPI after MPI_Allreduce" << endl;;
 
 		trialLagrLB = reduceBuffer[0];
 		ALVal = reduceBuffer[1];
 		discrepNorm = reduceBuffer[2];
-		//if(mpiRank==0){ cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;}
-
-		//commsTimer.stop();
-		//commsTimer.addTime(commsTimeThisStep);
 		}
 	#endif
 
@@ -532,7 +520,6 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		trialLagrLB = LagrLB_Local;
 		ALVal = ALVal_Local;
 		discrepNorm = localDiscrepNorm;
-		//cout << "Testing: " << ALVal+ discrepNorm  << " >= " << currentLagrLB << endl;
 	}
 	for(int tS = 0; tS<nNodeSPs; tS++){
 	    //cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;

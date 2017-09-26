@@ -525,8 +525,9 @@ void zeroOmega(){
 int initialIteration();
 
 void updateSSC(int k){
-    SSCParam = k/(100.0+k);
-    if(SSCParam > 0.5) SSCParam=0.5;
+    SSCParam = 0.5;
+    //SSCParam = k/(100.0+k);
+    //if(SSCParam > 0.5) SSCParam=0.5;
 }
 
 void updatePenalty(int k){
@@ -538,11 +539,12 @@ void updatePenalty(int k){
     double penalty;
     double penaltyScale;
     updateSSC(k);
-    //if(currentIter_ % 50 == 0 && omegaUpdated_) computeScalingPenaltyUpdate(2.0);
+    //if(k % 50 == 0 && omegaUpdated_) computeScalingPenaltyUpdate(2.0);
 #if 1
     if(currentIter_ > 20 && !omegaUpdated_) phase=3; //no update
     else if(currentIter_ > 20) phase=2;
     //else if(currentIter_ > 100) phase=1;
+    phase=3;
 #endif
     switch(phase){
 	case 0:
@@ -607,6 +609,12 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	    numInnerSolves++;
 	}
 	if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
+#if 0
+        if(numInnerSolves > 100){ 
+	    computeScalingPenaltyUpdate(0.5);
+	    if(mpiRank==0) cout << "Reducing penalty by half." << endl;
+	}
+#endif
 
 	int SPStatus=performColGenStep();
 	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
@@ -679,7 +687,7 @@ for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: 
 #endif
 	//if(currentIter_ < 50) regularIteration(true,false);
 	//else regularIteration(true,true);
-	regularIteration(true,true);
+	regularIteration(true,false);
 
 	if(omegaUpdated_){ 
             noConseqTimesOmegaNotUpdated=0;
@@ -865,6 +873,7 @@ bool solveContinuousMPs(){
 		//*************************** Quadratic subproblem ***********************************
 			    
 		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,scaling_matrix[tS]);}
+		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,scaling_matrix[tS],false);}
 #ifdef KEEP_LOG
 //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 #endif

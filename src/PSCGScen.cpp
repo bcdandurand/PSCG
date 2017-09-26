@@ -516,7 +516,7 @@ void PSCGModelScen::solveMPVertices(const double *omega, const double *z, const 
       for(int vv=0; vv<nVertices; vv++){
 	solveMPLineSearch(omega,z,scaling_vector,vv);
       }
-      //optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
+      optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
     //}
 
 }

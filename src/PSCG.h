@@ -601,7 +601,9 @@ void updateVertexHistory(int tS){
 
 int regularIteration(bool adjustPenalty=false, bool SSC=true){
 //if(mpiRank==0) cout << "Begin regularIteration()" << endl;
-	//if(currentIter_>20) preSolveMP();
+	//if(currentIter_ > 10 && currentIter_<200) preSolveMP();
+	if(currentIter_ > 10) preSolveMP();
+	else{
 	//else{solveContinuousMPs();}
         int numInnerSolves=1;	
 	while(solveContinuousMPs()){
@@ -609,6 +611,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	    numInnerSolves++;
 	}
 	if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
+	}
 #if 0
         if(numInnerSolves > 100){ 
 	    computeScalingPenaltyUpdate(0.5);
@@ -636,7 +639,7 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
     //fixInnerStep = 20;
     modelStatus_[Z_STATUS]=Z_UNKNOWN;
     clearSPVertexHistory();
-    int maxNoIts = 10000;
+    int maxNoIts = 1e6;
     SSCParam = 0.10;
 #ifdef KEEP_LOG
 for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
@@ -836,10 +839,11 @@ void solveForWeights(){
 
 void preSolveMP(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
-    int maxNoGSIts = 100;//max(20,currentIter_/2);
+    int maxNoGSIts = 100+currentIter_;//max(20,currentIter_/2);
     for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	for (int tS = 0; tS < nNodeSPs; tS++) {
-		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,scaling_matrix[tS]);}
+		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,scaling_matrix[tS]);}
+		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_tilde[tS],z_current,NULL,NULL,scaling_matrix[tS],false);}
 	}
 	updateZ();
     	for (int tS = 0; tS < nNodeSPs; tS++) {
@@ -858,10 +862,10 @@ bool solveContinuousMPs(){
         //for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
 	//double integrDiscr;
 	//for(int itGS=0; itGS < fixInnerStep || (updateDisp && zDiff > 1e-6); itGS++) { //The inner loop has a fixed number of occurences
-	assert(currentIter_ >= 0 && currentIter_ < 10000);
+	assert(currentIter_ >= 0);
 	//int maxNoGSIts = 20+currentIter_;
 	//int maxNoGSIts = 100 + 10*currentIter_;//max(20,currentIter_/2);
-	int maxNoGSIts = 20;//max(20,currentIter_/2);
+	int maxNoGSIts = 1;//max(20,currentIter_/2);
 	//averageOfVertices(z_vertex_average);
    //for(int kk=0; kk <= noTimesOmegaUpdated; kk++){
 	//setPenalty(baselinePenalty_*max(1.0,noTimesOmegaUpdated));
@@ -1798,22 +1802,23 @@ bool updateOmega(bool useSSC){
 	        //subproblemSolvers[tS]->updateOptSoln();
 	    }
 	    centreLagrLB = trialLagrLB;
-	    currentLagrLB = centreLagrLB;
+	    //currentLagrLB = centreLagrLB;
 	    //recordKeeping[0]=LagrLB;
     	    omegaUpdated_ = true;
     	    omegaIsZero_=false;
 //if(mpiRank==0){cout << "Updating omega..." << endl;}
 	}
-	else if(trialLagrLB > currentLagrLB){
+	else {
+    	    omegaUpdated_ = false;
+	    //if(mpiRank==0) cout << "Null step taken..." << endl;
+	}
+
+	if(trialLagrLB > currentLagrLB){
 	    currentLagrLB = trialLagrLB;
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		memcpy(omega_current[tS],omega_tilde[tS],n1*sizeof(double));
 	    }
     	    omegaUpdated_ = false;
-	}
-	else {
-    	    omegaUpdated_ = false;
-	    //if(mpiRank==0) cout << "Null step taken..." << endl;
 	}
 	return omegaUpdated_;
 }

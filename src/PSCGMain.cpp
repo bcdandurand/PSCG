@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 	par.setMPIParams(mpiSize,mpiRank);
 	
 
-	PSCGModel model(&par);
+	PSCG model(&par);
 	model.computeBound(10000);
 	//double *z = new double[model.n1];
 	#if 0

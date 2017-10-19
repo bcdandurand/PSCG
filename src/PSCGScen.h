@@ -48,7 +48,7 @@ enum SolverReturnStatus {
 #endif
 
 
-class PSCGModelScen{
+class PSCGScen{
 
 protected:
 
@@ -106,7 +106,7 @@ int solverStatus_;
 
 
 public:
-PSCGModelScen():
+PSCGScen():
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
@@ -114,7 +114,7 @@ mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
 //copy constructor
-PSCGModelScen(const PSCGModelScen &other):
+PSCGScen(const PSCGScen &other):
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
@@ -126,7 +126,7 @@ mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 //int initialiseSMPS(SMIP_fileRequest* probSpecs, TssModel &smpsModel, int scenario);
 void finishInitialisation();
 
-~PSCGModelScen(){
+~PSCGScen(){
   delete [] x;
   delete [] dispersions;
   delete [] dispersions2;
@@ -824,12 +824,12 @@ printColTypesFirstStage();
 
 
 
-class PSCGModelScen_SMPS : public PSCGModelScen{
+class PSCGScen_SMPS : public PSCGScen{
 public:
-PSCGModelScen_SMPS():PSCGModelScen(),LagrMIPInterface_(NULL){;}
+PSCGScen_SMPS():PSCGScen(),LagrMIPInterface_(NULL){;}
 
 //copy constructor
-PSCGModelScen_SMPS(const PSCGModelScen_SMPS &other):PSCGModelScen(other),LagrMIPInterface_(NULL){;}
+PSCGScen_SMPS(const PSCGScen_SMPS &other):PSCGScen(other),LagrMIPInterface_(NULL){;}
 
 int initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scenario);
 
@@ -1238,11 +1238,11 @@ OsiCpxSolverInterface *LagrMIPInterface_;
 
 };
 
-class PSCGModelScen_Bodur : public PSCGModelScen{
+class PSCGScen_Bodur : public PSCGScen{
 public:
-PSCGModelScen_Bodur():PSCGModelScen(),
+PSCGScen_Bodur():PSCGScen(),
 cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}
-PSCGModelScen_Bodur(const PSCGModelScen_Bodur &other):PSCGModelScen(other), 
+PSCGScen_Bodur(const PSCGScen_Bodur &other):PSCGScen(other), 
 cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}
 
 void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
@@ -1322,7 +1322,8 @@ virtual void updateSolnInfo(){
 	//for(int ii=0; ii<n1; ii++) cout << " (" << cplexMIP.getValue(xVariables[ii]) << ","<<x_vertex[ii] << ")";
 	//cout << endl;
 	for(int jj=0; jj<n2; jj++) y_vertex[jj] = cplexMIP.getValue(yVariables[jj]);
-	LagrBd = cplexMIP.getObjValue();
+	LagrBd = getMIPBestNodeVal();
+	//LagrBd = cplexMIP.getObjValue();
     }
     else{
 	cerr << "In updateSolnInfo(): Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;

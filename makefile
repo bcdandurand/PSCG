@@ -4,7 +4,7 @@
 #LOCALDIRROOT = /short/ka3/comp_infrastructure
 LOCALDIRROOT = /homes/bcdandurand/comp_infrastructure
 SMIDIR = $(LOCALDIRROOT)/CoinSMI
-ALPSDIR = $(LOCALDIRROOT)/Blis-0.94
+#ALPSDIR = $(LOCALDIRROOT)/Blis-0.94
 SYSTEM     = x86-64_linux
 LIBFORMAT  = static_pic
 CPLEXDIR      = $(LOCALDIRROOT)/CPLEX/cplex
@@ -50,7 +50,7 @@ CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(ALPSDIR)/lib
 INCLPSCG = -I ./include
 INCLDSP = -I$(DSPDIR)/src/Model -I$(DSPDIR)/src
 INCLSMI = -I$(SMIDIR)/include/coin 
-INCLALPS = -I$(ALPSDIR)/include/coin
+#INCLALPS = -I$(ALPSDIR)/include/coin
 INCLCPLEX = -I$(CPLEXDIR)/include -I$(CONCERTDIR)/include 
 INCLMPI = -I$(OPENMPIDIR)/include
 
@@ -63,7 +63,7 @@ DSPLIBS = -L$(DSPDIR)/build/lib -lDsp
 #DSPLIBS =  
 
 COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi -lOsiClp -lOsiCommonTests  
-ALPSLIBS = -L$(ALPSDIR)/lib -lAlps -lBcps 
+#ALPSLIBS = -L$(ALPSDIR)/lib -lAlps -lBcps 
 #ALPSLIBS = -L$(ALPSDIR)/lib -lBcps 
 
 CPLEXLIBR = -DIL_STD -DILOSTRICTPOD $(CPPFLAGS) $(LDFLAGS) -L$(CPLEXDIR)/lib/$(SYSTEM)/$(LIBFORMAT) \
@@ -87,26 +87,26 @@ all_serial: $(ALG)_Serial
 
 
 $(ALG): $(SRCFILES) 
-	$(CXX) -c -o $(OBJDIR)/PSCGMain.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+	$(CXX) -c -o $(OBJDIR)/PSCGMain.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
 	
-	$(CXX) -c -o $(OBJDIR)/$(ALG).o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+	$(CXX) -c -o $(OBJDIR)/$(ALG).o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
 	
 	$(CXX) -c -o $(OBJDIR)/$(SOLVER).o $(SRC)/$(SOLVER).cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
 	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL) 
 	
-	mpicxx -o $(BIN)/$(ALG) $(OBJS) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
+	mpicxx -o $(BIN)/$(ALG) $(OBJS) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
 	
 $(ALG)_Serial: $(SRCFILES)
-	$(CXX) -c -o $(OBJDIR)/PSCGMain_serial.o $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS)  $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+	$(CXX) -c -o $(OBJDIR)/PSCGMain_serial.o $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
-	$(CXX) -c -o $(OBJDIR)/$(ALG)_serial.o $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+	$(CXX) -c -o $(OBJDIR)/$(ALG)_serial.o $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
 	$(CXX) -c -o $(OBJDIR)/$(SOLVER)_serial.o $(SRC)/$(SOLVER).cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
 	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur_serial.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
-	$(CXX) -o $(BIN)/$(ALG)_serial $(OBJS_serial) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(ALPSLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) 
+	$(CXX) -o $(BIN)/$(ALG)_serial $(OBJS_serial) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) 
 
 clean:
 	rm -f $(BIN)/$(ALG) $(BIN)/$(ALG)_serial $(OBJDIR)/*.o

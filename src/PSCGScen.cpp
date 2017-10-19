@@ -25,7 +25,7 @@
 #include "OsiCpxSolverInterface.hpp"
 
 // Initialises the problem data, reading it in from a file.
-void PSCGModelScen_Bodur::initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario){
+void PSCGScen_Bodur::initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario){
 	n1 = pdBodur.get_n1();
 	n2 = pdBodur.get_n2();
 	nS = pdBodur.get_nS();
@@ -76,7 +76,7 @@ void PSCGModelScen_Bodur::initialiseBodur(PSCGParams *par, ProblemDataBodur &pdB
 
 //Initialise SIPLIB
 //int CPLEXsolverSCG::initialiseSMPS(SMIP_fileRequest *request, int scenario) {
-int PSCGModelScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scenario) {
+int PSCGScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scenario) {
 	tS = scenario;
 	
 	disableHeuristic = par->disableHeuristic;
@@ -136,9 +136,9 @@ int PSCGModelScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int
 }
 
 //n1 and n2 need to be set
-void PSCGModelScen::finishInitialisation() {
+void PSCGScen::finishInitialisation() {
 	if (n1==0 && n2==0){
-	     cerr << "PSCGModelScen::finishInitialisation(): n1==0 and n2==0, returning...." << endl;
+	     cerr << "PSCGScen::finishInitialisation(): n1==0 and n2==0, returning...." << endl;
 	     return;
 	}
 	x_vertex = new double[n1];
@@ -192,7 +192,7 @@ void PSCGModelScen::finishInitialisation() {
 
 #if 1
 
-int PSCGModelScen_Bodur::solveLagrangianProblem(const double *omega, bool doInitialSolve) {
+int PSCGScen_Bodur::solveLagrangianProblem(const double *omega, bool doInitialSolve) {
 
 	if(omega!=NULL){
 	  for (int i = 0; i < n1; i++) {
@@ -214,11 +214,11 @@ int PSCGModelScen_Bodur::solveLagrangianProblem(const double *omega, bool doInit
 	return 0;
 }
 #endif
-int PSCGModelScen_Bodur::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
+int PSCGScen_Bodur::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
 //TODO
     return solveLagrangianProblem(omega);
 }
-int PSCGModelScen_Bodur::solveFeasibilityProblem(){
+int PSCGScen_Bodur::solveFeasibilityProblem(){
 	
 	for (int i = 0; i < n1; i++) {
 		//omega[i] = omega[i];
@@ -246,7 +246,7 @@ int PSCGModelScen_Bodur::solveFeasibilityProblem(){
 	return 0;
 }
 
-int PSCGModelScen_SMPS::initialLPSolve(const double* omega) {
+int PSCGScen_SMPS::initialLPSolve(const double* omega) {
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
         //changeFromMIQPToMILP(); //This only does anything if the problem has not already been changed back
@@ -266,7 +266,7 @@ int PSCGModelScen_SMPS::initialLPSolve(const double* omega) {
 }
 	//setSolverStatus();
 // Given a scenario index and a dual variable, find the anticipative solution for first and second stage variables.
-int PSCGModelScen_SMPS::solveLagrangianProblem(const double* omega, bool doInitialSolve) {
+int PSCGScen_SMPS::solveLagrangianProblem(const double* omega, bool doInitialSolve) {
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
 	double bestUB;
@@ -349,7 +349,7 @@ if(omega==NULL){
 	
 	return solverStatus_;
 }
-int PSCGModelScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
+int PSCGScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
         changeFromMILPToMIQP(); //This only does anything if the problem has not already been changed back
 	double *diag = new double[n1+n2];
@@ -407,7 +407,7 @@ int PSCGModelScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const d
    	delete [] diag; 
 }
 
-int PSCGModelScen_SMPS::solveFeasibilityProblem(){
+int PSCGScen_SMPS::solveFeasibilityProblem(){
 
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
 	
@@ -458,7 +458,7 @@ cout << endl;
 
 
 //Not tested!
-void PSCGModelScen::solveMPLineSearch(const double *omega, const double *z, const double *scaling_vector, int vertexIndex, double *z_average) {
+void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const double *scaling_vector, int vertexIndex, double *z_average) {
 	
 	double numerator = 0.0;
 	double denominator = 0.0;
@@ -509,7 +509,7 @@ void PSCGModelScen::solveMPLineSearch(const double *omega, const double *z, cons
 	vecWeights[vertexIndex]+=a;
 }
 
-void PSCGModelScen::solveMPVertices(const double *omega, const double *z, const double *scaling_vector)
+void PSCGScen::solveMPVertices(const double *omega, const double *z, const double *scaling_vector)
 {
     for(int nn=0; nn<40; nn++){
       solveMPLineSearch(omega,z,scaling_vector);
@@ -521,7 +521,7 @@ void PSCGModelScen::solveMPVertices(const double *omega, const double *z, const 
 
 }
 
-void PSCGModelScen::computeWeightsForCurrentSoln(const double *z) {
+void PSCGScen::computeWeightsForCurrentSoln(const double *z) {
 //double *oldDispersions = new double[n1];
 //double absDiffSum=0.0;
 //for(int ii=0; ii<n1; ii++) {oldDispersions[ii]=dispersions[ii];}
@@ -568,7 +568,7 @@ void PSCGModelScen::computeWeightsForCurrentSoln(const double *z) {
 //delete [] oldDispersions;
 }
 
-void PSCGModelScen::solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+void PSCGScen::solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double *scaling_vector, bool updateDisp) {
    double direction=1.0;
    try{
@@ -690,7 +690,7 @@ void PSCGModelScen::solveMPHistory(const double *omega, const double *z, const d
 }
 
 
-double PSCGModelScen::getDefaultPenaltyParameter() {
+double PSCGScen::getDefaultPenaltyParameter() {
 
 	double maxC = abs(c[0]);
 	double meanC = abs(c[0]) / n1;

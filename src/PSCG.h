@@ -90,7 +90,10 @@ int n1;
 int n2;
 int nNodeSPs;
 int currentIter_;
+int noConseqNullSteps;
+int noSeriousSteps;
 int phase;
+bool shouldContinue;
 vector<double> pr;
 vector<double*> scaling_matrix; //This should not change after the initial iteration
 vector<double*> omega_tilde; //dual variable
@@ -136,6 +139,7 @@ double currentLagrLB;
 double innerLagrLB;
 double centreLagrLB;
 double referenceLagrLB;
+double cutoffLagrLB;
 double ALVal;
 //double incumbentVal_;
 double objVal;
@@ -191,9 +195,9 @@ char zOptFile[128];
 
 ProblemDataBodur pdBodur;
 
-PSCG(PSCGParams *p):par(p),nNodeSPs(0),algorithm(ALGDD),referenceLagrLB(-COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
+PSCG(PSCGParams *p):par(p),nNodeSPs(0),algorithm(ALGDD),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(20),
+	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),
 	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),phase(0){
 
    	//******************Read Command Line Parameters**********************
@@ -598,6 +602,7 @@ void updateVertexHistory(int tS){
 int regularIteration(bool adjustPenalty=false, bool SSC=true){
 //if(mpiRank==0) cout << "Begin regularIteration()" << endl;
 	//if(currentIter_ > 10 && currentIter_<200) preSolveMP();
+        double integralityDisc = 100.0;
 	if(phase==2) preSolveMP();
 	else{
 	//else{solveContinuousMPs();}
@@ -623,7 +628,28 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
     //printStatus();
 	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
 	updateOmega(SSC);
+	if(adjustPenalty) updatePenalty(noSeriousSteps);
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
+	printStatus();
+
+        if(currentLagrLB >= cutoffLagrLB){
+      	    modelStatus_[Z_STATUS]=Z_BOUNDED;
+	    if(mpiRank==0){cout << "computeBound(): Terminating due to exceeding cutoff..." << endl;}
+            shouldContinue=false;
+	}
+
+	integralityDisc=evaluateIntegralityDiscrepancies();
+	if((shouldTerminate) || (currentIter_ >= maxNoSteps) ){
+	    if(mpiRank==0 && (currentIter_ >= maxNoSteps) ){
+		cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << currentIter_ << endl;
+	    }
+	    else{
+   		if(mpiRank==0){cout << "computeBound(): Terminating due to reaching maximum number of iterations: " << currentIter_ << endl;}
+	    }
+            shouldContinue=false;
+	}
+	if(mpiRank==0) cerr << "Omega updated " << noSeriousSteps << " times, " 
+		<< " integrality disc: " << integralityDisc << endl;
 	return SPStatus;
 }
 
@@ -632,149 +658,57 @@ void setMaxNoSteps(int noSteps){maxNoSteps=noSteps;}
 
 double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
 //if(mpiRank==0) cout << "Begin computeBound()" << endl;
-    //fixInnerStep = 20;
 
     modelStatus_[Z_STATUS]=Z_UNKNOWN;
     clearSPVertexHistory();
-    int maxNoIts = 1e6;
+    noSeriousSteps=0;
+    noConseqNullSteps=0;
     //SSCParam = 0.10;
-#ifdef KEEP_LOG
-for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
-#endif
+    #ifdef KEEP_LOG
+	for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
+    #endif
     int SPStatus=initialIteration();
     if(mpiRank==0) cout << "After initial iteration: currentLB: " << trialLagrLB << " versus refLB: " << referenceLagrLB << endl;;
     
-    //bool exceedingReferenceBd = currentLagrLB + SSC_DEN_TOL >= referenceLagrLB;
-    bool exceedingReferenceBd = false;
     bool omegaUpdatedAtLeastOnce=false;
     //shouldFathomByOpt = false;
-    double integralityDisc = 100.0;
     discrepNorm = 100.0;
-    shouldTerminate=false;
+    //shouldTerminate=false;
     if(SPStatus==SP_INFEAS){
 	modelStatus_[Z_STATUS]=Z_INFEAS;
-if(mpiRank==0){cout << "Terminating due to subproblem infeasibility..." << endl;}
+        shouldContinue=false;
+	if(mpiRank==0){cout << "Terminating due to subproblem infeasibility..." << endl;}
     }
-    //else if(currentLagrLB >= getIncumbentVal()){
-    else if(false){
+    else if(currentLagrLB >= cutoffLagrLB){
 	modelStatus_[Z_STATUS]=Z_BOUNDED;
-if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
+        shouldContinue=false;
+	if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
       	//printStatus();
     }
     else{
-      //objVal=findPrimalFeasSolnWith(z_current);
-      //currentLagrLB=-ALPS_DBL_MAX;
-      //zeroOmega();
-      int noTimesOmegaUpdated=0;
-      int noConseqTimesOmegaNotUpdated=0;
-      bool shouldContinue=true;
-      bool postprocessing=false;
-      bool reachedMaxNoIts = false;
-      //for(int ii=0; ii<nIters || !exceedingReferenceBd || !omegaUpdatedAtLeastOnce || (discrepNorm >= 1e-20 && integralityDisc < 1e-10) ; ii++){
-      for(int ii=0; shouldContinue; ii++){
-	currentIter_=ii;
+        shouldContinue=true;
+    }//else
+    for(currentIter_=0; shouldContinue; currentIter_++){
+	if(mpiRank==0) cout << "Regular iteration " << currentIter_ << endl;
+	#ifdef KEEP_LOG
+	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
+	#endif
+
         if(currentIter_ < 10) phase=0;
         else if(currentIter_ < 20) phase=1;
         else phase=2;
-if(mpiRank==0) cout << "Regular iteration " << ii << endl;
-#ifdef KEEP_LOG
-for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
-#endif
-	//if(postprocessing || ii > 100){
-#if 0
-	if(postprocessing){
-    	     //if(mpiRank==0)cout << "computeBound(): Integrality satisfied: Commence with postprocessing..." << endl;
-    	     computeScalingPenaltyUpdate(1.05);	
-    	     regularIteration(false,false);
-	}
-#endif
-	//if(currentIter_ < 50) regularIteration(true,false);
-	//else regularIteration(true,true);
-	if(phase<2) regularIteration(false,true);
+
+	if(phase==0) regularIteration(true,true);
+	else if(phase==1) regularIteration(false,true);
 	else regularIteration(false,false);
 
-	if(omegaUpdated_){ 
-            noConseqTimesOmegaNotUpdated=0;
-	    //if(exceedingReferenceBd){
-    	        //objVal=findPrimalFeasSolnWith(z_current);
-#if 0
-		for(int tS=0; tS<nNodeSPs; tS++){
-	    	    subproblemSolvers[tS]->setXToVertex();
-	    	    subproblemSolvers[tS]->setYToVertex();
-		}
-#endif
-		noTimesOmegaUpdated++;
-	    //}
-	}
-	else{noConseqTimesOmegaNotUpdated++;}
-	//if(omegaUpdated_) updateParams(noTimesOmegaUpdated+1);
-	if(phase==0) updatePenalty(noTimesOmegaUpdated);
-	//updateSSC(noTimesOmegaUpdated);
-	//omegaUpdatedAtLeastOnce=true;
-      	//printStatusAsErr();
-	printStatus();
-#if 0
-        if(currentLagrLB >= getIncumbentVal()){
-      	    modelStatus_[Z_STATUS]=Z_BOUNDED;
-if(mpiRank==0){cout << "computeBound(): Terminating due to exceeding cutoff..." << endl;}
-      	    //printStatus();
-	    break;
-	}
-#endif
-        exceedingReferenceBd = currentLagrLB + SSC_DEN_TOL >= referenceLagrLB;
-	integralityDisc=evaluateIntegralityDiscrepancies();
-	//postprocessing = ((integralityDisc < 1e-10) && (ii>20)) || postprocessing;
-	//postprocessing = ((integralityDisc < 1e-10) && (ii>20)) && (noConseqTimesOmegaNotUpdated < 2*maxNoConseqNullSteps);
-        //exceedingReferenceBd = true;
-#if 1
-	//if(shouldTerminate()){
-        reachedMaxNoIts = (ii>=maxNoIts);
-	if((shouldTerminate) || reachedMaxNoIts){// || noTimesOmegaUpdated > 50){
-if(mpiRank==0 && reachedMaxNoIts){cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << ii << endl;}
-else{
-   if(mpiRank==0){cout << "computeBound(): Terminating due to reaching maximum number of iterations: " << ii << endl;}
-}
-      	    //updateModelStatusZ();
-      	    //printStatus();
-	    //return currentLagrLB;
-	    break;
-	}
-#endif
-	shouldContinue = (noConseqTimesOmegaNotUpdated < maxNoConseqNullSteps || noTimesOmegaUpdated < 10); 
-if(mpiRank==0) cerr << "Omega updated " << noTimesOmegaUpdated << " times, max no. consec null steps: " << maxNoConseqNullSteps << " integrality disc: " << integralityDisc << endl;
 
-    }
+    }// main loop over currentIter_
 
     solveContinuousMPs();
     printStatus();
     //integralityDisc=evaluateIntegralityDiscrepancies();
     objVal=findPrimalFeasSolnWith(z_current);
-#if 0
-    if(objVal - currentLagrLB >= 1e-6 && integralityDisc < 1e-10 && modelStatus_[Z_STATUS]!=Z_BOUNDED && (shouldTerminate) ){
-    //if(false){
-    //if(true){
-	//setPenalty(1.0);
-	int remoteNNodeSPs;
-	double *zBuffer = new double[n1];
-	for(int proc=0; proc<mpiSize; proc++){
-	     if(proc==mpiRank){ remoteNNodeSPs = nNodeSPs; }
-             MPI_Bcast(&remoteNNodeSPs, 1, MPI_INT, proc, MPI_COMM_WORLD);
-             for(int tS=0; tS<remoteNNodeSPs; tS++){
-		if(proc==mpiRank){memcpy(zBuffer,subproblemSolvers[tS]->getX(),n1*sizeof(double));}
-                MPI_Bcast(zBuffer, n1, MPI_DOUBLE, proc, MPI_COMM_WORLD);
-		objVal=findPrimalFeasSolnWith(zBuffer);
-	     }
-	//cerr << "My rank " << mpiRank << " remoteNNodeSPs " << remoteNNodeSPs << endl;     
-	}
-	delete [] zBuffer;
-    }
-#endif
-    //printStatus();
-    }//else
-    //for (int tS = 0; tS < nNodeSPs; tS++){subproblemSolvers[tS]->computeWeightsForCurrentSoln();}
-    //loadSavedZ();
-    //printOmegaProperties();
-    //averageOfOptVertices();
     return currentLagrLB;
 }
 
@@ -829,7 +763,9 @@ void solveForWeights(){
 void preSolveMP(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
     //int maxNoGSIts = 100+currentIter_;//max(20,currentIter_/2);
-    int maxNoGSIts = 1;//max(20,currentIter_/2);
+    //int maxNoGSIts = 1;//max(20,currentIter_/2);
+    //int maxNoGSIts = min(100*currentIter_,10000000);//max(20,currentIter_/2);
+    int maxNoGSIts = 100;//max(20,currentIter_/2);
     for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,scaling_matrix[tS]);}
@@ -854,7 +790,8 @@ bool solveContinuousMPs(){
 	assert(currentIter_ >= 0);
 	//int maxNoGSIts = 20+currentIter_;
 	//int maxNoGSIts = 100 + 10*currentIter_;//max(20,currentIter_/2);
-	int maxNoGSIts = 1;//max(20,currentIter_/2);
+	//int maxNoGSIts = min(100*currentIter_,10000000);//max(20,currentIter_/2);
+	int maxNoGSIts = 100;//max(20,currentIter_/2);
 	for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	    memcpy(z_old,z_current, n1*sizeof(double));
 	    zDiff=0.0;
@@ -863,26 +800,16 @@ bool solveContinuousMPs(){
 			    
 		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,scaling_matrix[tS]);}
 		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,scaling_matrix[tS],false);}
-#ifdef KEEP_LOG
-//if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
-#endif
+		#ifdef KEEP_LOG
+		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
+		#endif
 	    }
 	    					
 	    // Update z_previous.
 	    updateZ();
-#if 0
-    	    for (int tS = 0; tS < nNodeSPs; tS++) {
-		for (int i = 0; i < n1; i++) {
-		    omega_tilde[tS][i] = omega_centre[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
-		}
-      	        subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
-	    }
-#endif
 	    totalNoGSSteps++;
 	    for(int ii=0; ii<n1; ii++){zDiff=max(zDiff,fabs(z_current[ii]-z_old[ii]));}
-	    //if(zDiff < SSC_DEN_TOL){ break; }
 	}
-    //}
 #if 1
 	innerLagrLB_Local = 0.0;
 	ALVal_Local = 0.0;
@@ -892,9 +819,9 @@ bool solveContinuousMPs(){
 	reduceBuffer[2]=0.0;
 	double refVal, LagrLB_tS, ALVal_tS,sqrDiscrNorm_tS;
     	for (int tS = 0; tS < nNodeSPs; tS++) {
-#ifdef KEEP_LOG
-		//subproblemSolvers[tS]->printWeights(logFiles[tS]);
-#endif
+		#ifdef KEEP_LOG
+		    //subproblemSolvers[tS]->printWeights(logFiles[tS]);
+		#endif
 		for (int i = 0; i < n1; i++) {
 		    omega_tilde[tS][i] = omega_centre[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
@@ -905,10 +832,10 @@ bool solveContinuousMPs(){
 		ALVal_Local += pr[tS]*ALVal_tS;
 		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
 		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
-#ifdef KEEP_LOG
-//	*(logFiles[tS]) << "  gap val (master problem): " << LagrLB_tS - refVal;
-//*(logFiles[tS]) << endl;
-#endif
+		#ifdef KEEP_LOG
+		//	*(logFiles[tS]) << "  gap val (master problem): " << LagrLB_tS - refVal;
+		//*(logFiles[tS]) << endl;
+		#endif
 	}
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
@@ -964,53 +891,6 @@ void updateZ(double *z=NULL,double *dispZ=NULL){
 	}
         averageOfX(z, n1, weights_);
 }
-#if 0
-
-
-
-	for (int i = 0; i < n1; i++)
-	{
-	    z_local[i] = 0.0;
-	    z[i] = 0.0;
-	    penSumLocal[i]=0.0;
-            penSum[i]=0.0;
-	    for (int tS = 0; tS < nNodeSPs; tS++)
-	    {
-		z_local[i] += x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		penSumLocal[i]+= scaling_matrix[tS][i]*pr[tS];
-	    }
-	}
-	#ifdef USING_MPI
-	    MPI_Allreduce(z_local, z, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	    MPI_Allreduce(penSumLocal, penSum, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	    for(int i=0; i<n1; i++) z[i] /= penSum[i];
-	#else
-	    for (int i=0; i<n1; i++) z[i] = z_local[i]/penSumLocal[i]; //Only one node, trivially set z_local = z_current
-	#endif
-
-	if(dispZ!=NULL){
-    	    double *dispZLocal = new double[n1];
-    	    for(int ii=0; ii<n1; ii++){
-		dispZLocal[ii]=0.0;
-		dispZ[ii]=0.0;
-        	for(int tS=0; tS<nNodeSPs; tS++){
-	    	     dispZLocal[ii] += scaling_matrix[tS][ii]*pr[tS]*fabs(z[ii] - x_current[tS][ii]);
-		}
-    	    }
-	#ifdef USING_MPI
-    	    if(mpiSize>1){
-		MPI_Allreduce(dispZLocal, dispZ, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    	    }
-	#endif
-    	    if(mpiSize==1){
-		memcpy(dispZ,dispZLocal,n1*sizeof(double));
-    	    }
-    	    for(int ii=0; ii<n1; ii++){dispZ[ii]/=penSum[ii];}
-	
-	    delete [] dispZLocal;
-	}
-}
-#endif
 
 #if 0
 void averageOfVertices(double *z=NULL, bool roundZ=false){
@@ -1586,6 +1466,11 @@ bool updateOmega(bool useSSC){
     	    omegaUpdated_ = false;
 	    //if(mpiRank==0) cout << "Null step taken..." << endl;
 	}
+	if(omegaUpdated_){ 
+            noConseqNullSteps=0;
+ 	    noSeriousSteps++;
+	}
+	else{noConseqNullSteps++;}
 
 	if(trialLagrLB > currentLagrLB){
 	    currentLagrLB = trialLagrLB;

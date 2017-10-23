@@ -121,9 +121,16 @@ void PSCG::setupSolvers(){
 int PSCG::initialIteration(){
 if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	// This is part of the initialisation - initial Lagrangian subproblem computations
+        modelStatus_[Z_STATUS]=Z_UNKNOWN;
+	modelStatus_[SP_STATUS]=SP_ITER_LIM;
+    	clearSPVertexHistory();
+    	noSeriousSteps=0;
+    	noConseqNullSteps=0;
 	double LagrLB_Local = 0.0;
         setPenalty(1.0);
-	modelStatus_[SP_STATUS]=SP_ITER_LIM;
+    	#ifdef KEEP_LOG
+	    for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
+    	#endif
 	for (int tS = 0; tS < nNodeSPs; tS++) {
  	    //updateTimer.start();
     	    //subproblemSolvers[tS]->setInitialSolution(NULL);
@@ -133,8 +140,8 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->initialLPSolve(omega_centre[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = COIN_DBL_MAX;
-cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
-cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() << endl;
+		    cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
+		    cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() << endl;
 	    	    continue;
 
 	    }
@@ -142,12 +149,9 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_centre[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = COIN_DBL_MAX;
-//cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank << endl;
-cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
-cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() << endl;
-//subproblemSolvers[tS]->printColBds();
+		    cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
+		    cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() << endl;
 	    	    continue;
-
 	    }
 
 	   }
@@ -175,6 +179,7 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	    }
 #endif
 	}//for tS
+
 	
 //if(mpiRank==0){cout << "After z: " << endl;}
 //printZ();
@@ -195,35 +200,66 @@ cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() <
 	centreLagrLB = trialLagrLB;
 
 	//recordKeeping[0]=trialLagrLB;
-	if(trialLagrLB > COIN_DBL_MAX/10.0){ modelStatus_[SP_STATUS]=SP_INFEAS;} //for parallel
+	if(trialLagrLB > COIN_DBL_MAX/10.0){ 
+	    modelStatus_[SP_STATUS]=SP_INFEAS;
+	    modelStatus_[Z_STATUS]=Z_INFEAS;
+            shouldContinue=false;
+	    if(mpiRank==0){cout << "Terminating due to subproblem infeasibility..." << endl;}
+	} //for parallel
 	else{
 	    //Update of z
 	    //currentLagrLB=-ALPS_DBL_MAX;
 	    modelStatus_[SP_STATUS]=SP_OPT;
 	    updateZ();
 #if 1
-	    double sqrDiscrNorm = 0.0;
-	    double sqrDiscrNormLocal = 0.0;
+	    ALVal_Local = 0.0;
+	    localDiscrepNorm = 0.0;
+	    reduceBuffer[0]=0.0;
+	    reduceBuffer[1]=0.0;
+	    double ALVal_tS,sqrDiscrNorm_tS;
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
-	         subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,scaling_matrix[tS]);
-		 sqrDiscrNormLocal += 0.5*pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
+	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,scaling_matrix[tS]);
+		ALVal_Local += pr[tS]*ALVal_tS;
+		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
+		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
+		localDiscrepNorm += 0.5*pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
+		for (int i = 0; i < n1; i++) {
+		    omega_tilde[tS][i] = omega_centre[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		}
 	    }
 	    #ifdef USING_MPI
 	    if (mpiSize > 1) {
-		MPI_Allreduce(&sqrDiscrNormLocal, &sqrDiscrNorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		localReduceBuffer[0]=ALVal_Local;
+		localReduceBuffer[1]=localDiscrepNorm;
+		MPI_Allreduce(localReduceBuffer, reduceBuffer, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		ALVal = reduceBuffer[0];
+		discrepNorm = reduceBuffer[1];
 	    }
 	    #endif
 	    if(mpiSize == 1){
-	        sqrDiscrNorm = sqrDiscrNormLocal;
+		ALVal = ALVal_Local;
+		discrepNorm = localDiscrepNorm;
 	    }
-	    if(sqrDiscrNorm >= 1e-20){
-		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(centreLagrLB)/sqrDiscrNorm) << endl;
-		baselineRho = min(1e10,fabs(centreLagrLB)/sqrDiscrNorm);
+#if 0
+	    if(discrepNorm >= 1e-20){
+		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(centreLagrLB)/discrepNorm) << endl;
+		baselineRho = min(1e10,fabs(centreLagrLB)/discrepNorm);
 		setPenalty( baselineRho );
 	    }
+    	    if(currentLagrLB >= cutoffLagrLB){
+		modelStatus_[Z_STATUS]=Z_BOUNDED;
+        	shouldContinue=false;
+		if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
+      		//printStatus();
+    	    }
+    	    else{
+        	shouldContinue=true;
+    	    }//else
+#endif
+            shouldContinue=true;
 #endif
 	}
-if(mpiRank==0){cerr << "End initialIteration()" << endl;}
+	if(mpiRank==0){cerr << "End initialIteration()" << endl;}
 	return modelStatus_[SP_STATUS];
 }
 

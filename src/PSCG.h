@@ -574,24 +574,9 @@ void updatePenalty(int k){
 
     }
 #endif
-#if 0
-    if(currentIter_ < 10) {computeKiwielPenaltyUpdate();}
-    else if(omegaUpdated_){ 
-	for (int tS = 0; tS < nNodeSPs; tS++) {
-	    computeScalingPenaltyUpdate(tS,scaleVec_[tS]);
-	}
-    }
-#endif
 }
 
 //Update penalty and SSC parameter as motivated by convergence analysis
-#if 0
-void updateParams(int k){
-    setPenalty(baselineRho*k);
-    SSCParam = baselineRho*k / ((9+k)*baselineRho  );
-    if(mpiRank==0) cout << "Penalty: " << baselineRho*k << " and SSCParam: " << SSCParam << endl;
-}
-#endif
 void updateVertexHistory(int tS){
 	if(subproblemSolvers[tS]->getNumVertices() < nVerticesUsed || nVerticesUsed==0){subproblemSolvers[tS]->addVertex();}
 	else{// if(nVerticesUsed > 0){// && subproblemSolvers[tS]->getNumVertices() >= nVerticesUsed) {
@@ -599,166 +584,9 @@ void updateVertexHistory(int tS){
 	}
 }
 
-int regularIteration(bool adjustPenalty=false, bool SSC=true){
-//if(mpiRank==0) cout << "Begin regularIteration()" << endl;
-	//if(currentIter_ > 10 && currentIter_<200) preSolveMP();
-        double integralityDisc = 100.0;
-	if(phase==2) preSolveMP();
-	else{
-	//else{solveContinuousMPs();}
-        int numInnerSolves=1;	
-	while(solveContinuousMPs()){
-	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
-	    numInnerSolves++;
-	}
-	if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
-	}
-#if 0
-        if(numInnerSolves > 100){ 
-	    computeScalingPenaltyUpdate(0.5);
-	    if(mpiRank==0) cout << "Reducing penalty by half." << endl;
-	}
-#endif
-
-	int SPStatus=performColGenStep();
-	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
-	SSCVal = computeSSCVal(); //shouldTerminate is also updated here.
-	if(mpiRank==0) cout << "SSC value is: " << SSCVal << endl;
-    //verifyOmegaDualFeas();
-    //printStatus();
-	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
-	updateOmega(SSC);
-	if(adjustPenalty) updatePenalty(noSeriousSteps);
-//if(mpiRank==0) cout << "End regularIteration()" << endl;
-	printStatus();
-
-        if(currentLagrLB >= cutoffLagrLB){
-      	    modelStatus_[Z_STATUS]=Z_BOUNDED;
-	    if(mpiRank==0){cout << "computeBound(): Terminating due to exceeding cutoff..." << endl;}
-            shouldContinue=false;
-	}
-
-	integralityDisc=evaluateIntegralityDiscrepancies();
-	if((shouldTerminate) || (currentIter_ >= maxNoSteps) ){
-	    if(mpiRank==0 && (currentIter_ >= maxNoSteps) ){
-		cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << currentIter_ << endl;
-	    }
-	    else{
-   		if(mpiRank==0){cout << "computeBound(): Terminating due to reaching maximum number of iterations: " << currentIter_ << endl;}
-	    }
-            shouldContinue=false;
-	}
-	if(mpiRank==0) cerr << "Omega updated " << noSeriousSteps << " times, " 
-		<< " integrality disc: " << integralityDisc << endl;
-	return SPStatus;
-}
 
 
 void setMaxNoSteps(int noSteps){maxNoSteps=noSteps;}
-
-double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
-//if(mpiRank==0) cout << "Begin computeBound()" << endl;
-
-    modelStatus_[Z_STATUS]=Z_UNKNOWN;
-    clearSPVertexHistory();
-    noSeriousSteps=0;
-    noConseqNullSteps=0;
-    //SSCParam = 0.10;
-    #ifdef KEEP_LOG
-	for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
-    #endif
-    int SPStatus=initialIteration();
-    if(mpiRank==0) cout << "After initial iteration: currentLB: " << trialLagrLB << " versus refLB: " << referenceLagrLB << endl;;
-    
-    bool omegaUpdatedAtLeastOnce=false;
-    //shouldFathomByOpt = false;
-    discrepNorm = 100.0;
-    //shouldTerminate=false;
-    if(SPStatus==SP_INFEAS){
-	modelStatus_[Z_STATUS]=Z_INFEAS;
-        shouldContinue=false;
-	if(mpiRank==0){cout << "Terminating due to subproblem infeasibility..." << endl;}
-    }
-    else if(currentLagrLB >= cutoffLagrLB){
-	modelStatus_[Z_STATUS]=Z_BOUNDED;
-        shouldContinue=false;
-	if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
-      	//printStatus();
-    }
-    else{
-        shouldContinue=true;
-    }//else
-    for(currentIter_=0; shouldContinue; currentIter_++){
-	if(mpiRank==0) cout << "Regular iteration " << currentIter_ << endl;
-	#ifdef KEEP_LOG
-	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
-	#endif
-
-        if(currentIter_ < 10) phase=0;
-        else if(currentIter_ < 20) phase=1;
-        else phase=2;
-
-	if(phase==0) regularIteration(true,true);
-	else if(phase==1) regularIteration(false,true);
-	else regularIteration(false,false);
-
-
-    }// main loop over currentIter_
-
-    solveContinuousMPs();
-    printStatus();
-    //integralityDisc=evaluateIntegralityDiscrepancies();
-    objVal=findPrimalFeasSolnWith(z_current);
-    return currentLagrLB;
-}
-
-double evaluateIntegralityDiscrepancies(){
-    double integrDiscrSum=0.0;
-    for(int tS=0; tS<nNodeSPs; tS++){
-	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
-	integrDiscrSum += integrDiscr_[tS];  
-	//if(integrDiscr > 1e-10) cout << "Node " << mpiRank << " scenario " << tS << " integrality discrepancy: " << integrDiscr << endl;  
-    }
-    return integrDiscrSum;
-}
-#if 0
-void resetOmega(){
-     currentLagrLB=-ALPS_DBL_MAX;
-     decimateOmega(0.8);
-     setPenalty(baselineRho);
-     for (int tS = 0; tS < nNodeSPs; tS++) {
-	 recordKeeping[tS][0]=-ALPS_DBL_MAX;//subproblemSolvers[tS]->getLagrBd();
-	 recordKeeping[tS][1]=recordKeeping[tS][0];
-     }
-}
-#endif
-
-//Perform more iterations, e.g., to obtain recourse when integrality met.
-double findPrimalFeasSolnWith(double *z){
-     roundCurrentZ(z);
-     if(solveRecourseProblemGivenFixedZ()){
-	evaluateFeasibleZ();
-     }
-     else{
- 	if(mpiRank==0) cerr << "findPrimalFeasSoln(): Terminating: Primal feas soln not found." << endl;
-     }
-     return objVal;
-}
-
-
-double getBound(){return currentLagrLB;}
-void setBound(double bd){currentLagrLB=bd;}
-
-void solveForWeights(){
-   for (int tS = 0; tS < nNodeSPs; tS++) {
-        if (subproblemSolvers[tS]->getNVertices()>2) { //Compute Next X, Y (With History)
-	     //subproblemSolvers[tS]->solveMPHistory(omega_current[tS],z_current,scaling_matrix[tS],true);
-	     subproblemSolvers[tS]->computeWeightsForCurrentSoln(NULL);
-	}
-	//if(mpiRank==0){subproblemSolvers[tS]->printWeights();}
-   }
-
-}
 
 void preSolveMP(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
@@ -781,6 +609,7 @@ void preSolveMP(){
     }
 
 }
+
 bool solveContinuousMPs(){
 	bool isLastGSIt;
 	bool needToContinue = false;
@@ -854,19 +683,143 @@ bool solveContinuousMPs(){
 		discrepNorm = localDiscrepNorm;
 	}
 	double innerSSCVal;
-    	//if(mpiRank==0) cout << "**************  " << innerLagrLB - centreLagrLB << endl;
-    	//if(mpiRank==0) cout << "**************  " << ALVal + 0.5*discrepNorm  - centreLagrLB << endl;
     	if( (ALVal + 0.5*discrepNorm  - centreLagrLB > SSC_DEN_TOL) ){
 	    innerSSCVal = (innerLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB);
-	    //if(mpiRank==0) cout << "innerSSCVal: " << innerSSCVal << "  vs.  " << SSCParam << endl;
 	    needToContinue = (innerLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB) < SSCParam;
 	}
 #endif
-
 //if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
 
     return needToContinue;
 }
+
+int regularIteration(bool adjustPenalty=false, bool SSC=true){
+//if(mpiRank==0) cout << "Begin regularIteration()" << endl;
+
+	int SPStatus=performColGenStep();
+	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
+	SSCVal = computeSSCVal(); //shouldTerminate is also updated here.
+	if(mpiRank==0) cout << "SSC value is: " << SSCVal << endl;
+    //verifyOmegaDualFeas();
+    //printStatus();
+	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
+	updateOmega(SSC);
+	if(adjustPenalty) updatePenalty(noSeriousSteps);
+
+	if(phase==2) preSolveMP();
+	else{
+          int numInnerSolves=1;	
+	  while(solveContinuousMPs()){
+	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
+	    numInnerSolves++;
+	  }
+	  if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
+	}
+//if(mpiRank==0) cout << "End regularIteration()" << endl;
+	printStatus();
+
+        if(currentLagrLB >= cutoffLagrLB){
+      	    modelStatus_[Z_STATUS]=Z_BOUNDED;
+	    if(mpiRank==0){cout << "computeBound(): Terminating due to exceeding cutoff..." << endl;}
+            shouldContinue=false;
+	}
+
+	double integralityDisc=evaluateIntegralityDiscrepancies();
+	if((shouldTerminate) || (currentIter_ >= maxNoSteps) ){
+	    if(mpiRank==0 && (currentIter_ >= maxNoSteps) ){
+		cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << currentIter_ << endl;
+	    }
+	    else{
+   		if(mpiRank==0){cout << "computeBound(): Terminating due to reaching maximum number of iterations: " << currentIter_ << endl;}
+	    }
+            shouldContinue=false;
+	}
+	if(mpiRank==0) cerr << "Omega updated " << noSeriousSteps << " times, " 
+		<< " integrality disc: " << integralityDisc << endl;
+	return SPStatus;
+}
+
+double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
+//if(mpiRank==0) cout << "Begin computeBound()" << endl;
+
+    //SSCParam = 0.10;
+    int SPStatus=initialIteration();
+    //if(mpiRank==0) cout << "After initial iteration: currentLB: " << trialLagrLB << " versus refLB: " << referenceLagrLB << endl;;
+    
+    //shouldFathomByOpt = false;
+    //shouldTerminate=false;
+    for(currentIter_=0; shouldContinue; currentIter_++){
+	if(mpiRank==0) cout << "Regular iteration " << currentIter_ << endl;
+	#ifdef KEEP_LOG
+	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
+	#endif
+        if(currentIter_ < 10) phase=0;
+        else if(currentIter_ < 20) phase=1;
+        else phase=2;
+
+	if(phase==0) regularIteration(true,true);
+	else if(phase==1) regularIteration(false,true);
+	else regularIteration(false,false);
+    }// main loop over currentIter_
+
+    solveContinuousMPs();
+    printStatus();
+    //integralityDisc=evaluateIntegralityDiscrepancies();
+    objVal=findPrimalFeasSolnWith(z_current);
+    return currentLagrLB;
+}
+
+double evaluateIntegralityDiscrepancies(){
+    double integrDiscrSum=0.0;
+    for(int tS=0; tS<nNodeSPs; tS++){
+	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
+	integrDiscrSum += integrDiscr_[tS];  
+	//if(integrDiscr > 1e-10) cout << "Node " << mpiRank << " scenario " << tS << " integrality discrepancy: " << integrDiscr << endl;  
+    }
+    return integrDiscrSum;
+}
+#if 0
+void resetOmega(){
+     currentLagrLB=-ALPS_DBL_MAX;
+     decimateOmega(0.8);
+     setPenalty(baselineRho);
+     for (int tS = 0; tS < nNodeSPs; tS++) {
+	 recordKeeping[tS][0]=-ALPS_DBL_MAX;//subproblemSolvers[tS]->getLagrBd();
+	 recordKeeping[tS][1]=recordKeeping[tS][0];
+     }
+}
+#endif
+
+//Perform more iterations, e.g., to obtain recourse when integrality met.
+double findPrimalFeasSolnWith(double *z){
+     roundCurrentZ(z);
+     if(solveRecourseProblemGivenFixedZ()){
+	evaluateFeasibleZ();
+     }
+     else{
+ 	if(mpiRank==0) cerr << "findPrimalFeasSoln(): Terminating: Primal feas soln not found." << endl;
+     }
+     return objVal;
+}
+
+
+double getBound(){return currentLagrLB;}
+void setBound(double bd){currentLagrLB=bd;}
+
+void solveForWeights(){
+   for (int tS = 0; tS < nNodeSPs; tS++) {
+        if (subproblemSolvers[tS]->getNVertices()>2) { //Compute Next X, Y (With History)
+	     //subproblemSolvers[tS]->solveMPHistory(omega_current[tS],z_current,scaling_matrix[tS],true);
+	     subproblemSolvers[tS]->computeWeightsForCurrentSoln(NULL);
+	}
+	//if(mpiRank==0){subproblemSolvers[tS]->printWeights();}
+   }
+
+}
+
+
+
+
 #if 0
 void solveQMIPsGS(){
   for(int ii=0; ii<10; ii++){
@@ -1577,14 +1530,16 @@ void printNewNodeSPInfo(){
 double getPenalty(){return rho;}
 double getBaselinePenalty(){return baselineRho;}
 void setPenalty(double p){
-    rho=max(p,baselineRho);
+    //rho=max(p,baselineRho);
+    rho=max(p,1e-6);
     for (int tS = 0; tS < nNodeSPs; tS++) {
 	setPenalty(tS,rho);
     }
 //if(mpiRank==0) cout << "Penalty is now: " << rho << endl;
 }
 void setPenalty(int tS, double p){
-    double penalty = max(p,baselineRho);
+    //double penalty = max(p,baselineRho);
+    double penalty = max(p,1e-6);
     subproblemSolvers[tS]->setQuadraticTerm(penalty);
     for (int i = 0; i < n1; i++) {
         scaling_matrix[tS][i] = penalty;
@@ -1597,12 +1552,13 @@ void computeKiwielPenaltyUpdate(){
 	//rho = 1.0/min( max( (2.0/rho)*(1.0-SSCVal),  max(1.0/(10.0*rho),1e-4)    ), 10.0/rho);
 	//setPenalty(rho);
     	//if( SSCVal >= 0.5 ){ computeScalingPenaltyUpdate(min( 0.5/(1-SSCVal),2.0));}
-	double limit = 100.0;
+	double limit = 1000.0;
+	double k=(double)(currentIter_);
+	double scalingFactor;
     	if(fabs(1.0-SSCVal) > 1e-10){
-	     computeScalingPenaltyUpdate( max( min( 0.5/(1.0-SSCVal),limit), 1.0/limit));
-	}
-	else{
-    	    computeScalingPenaltyUpdate( limit );
+	     scalingFactor =  (1.0-pow(0.618,k)) + pow(0.618,k)*max( min( 0.5/(1.0-SSCVal),limit), 1.0/limit);
+	     //computeScalingPenaltyUpdate( max( min( 0.5/(1.0-SSCVal),limit), 1.0/limit));
+	     computeScalingPenaltyUpdate( scalingFactor );
 	}
 }
 void computeScalingPenaltyUpdate(double scaling){	
@@ -1620,7 +1576,7 @@ void computeScalingPenaltyUpdate(double scaling){
 void computeScalingPenaltyUpdate(int tS, double scaling){	
     for (int i = 0; i < n1; i++) {
 	scaling_matrix[tS][i] *= scaling;
-	scaling_matrix[tS][i] = max( scaling_matrix[tS][i], baselineRho);
+	//scaling_matrix[tS][i] = max( scaling_matrix[tS][i], baselineRho);
     }
     subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
 }

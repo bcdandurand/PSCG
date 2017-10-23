@@ -20,6 +20,8 @@ SRC = ./src
 OBJDIR = ./obj
 OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
 OBJS_serial = $(OBJDIR)/PSCGMain_serial.o $(OBJDIR)/$(ALG)_serial.o $(OBJDIR)/$(SOLVER)_serial.o $(OBJDIR)/ProblemDataBodur_serial.o 
+LIBDIR = ./lib
+LIB = libpscg.so
 BIN = ./bin
 #CPLEXDIR      = /usr/local/ibm/ILOG/CPLEX_Studio125/cplex
 #CONCERTDIR    = /usr/local/ibm/ILOG/CPLEX_Studio125/concert
@@ -34,7 +36,7 @@ CXX = mpicxx
 #GCCOPENMPI = g++
 
 # C++ Compiler options
-CXXFLAGS = -O3 -g -std=c++11
+CXXFLAGS = -O3 -g -std=c++11 -fpic
 #CXXFLAGS = -g -O3 -pipe -DNDEBUG -pedantic-errors -Wparentheses -Wreturn-type -Wcast-qual -Wall -Wpointer-arith -Wwrite-strings -Wconversion -Wno-unknown-pragmas -Wno-long-long   -DBCPS_BUILD 
 #CXXFLAGS = -O3 
 

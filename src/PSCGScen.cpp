@@ -76,15 +76,14 @@ void PSCGScen_Bodur::initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur,
 
 //Initialise SIPLIB
 //int CPLEXsolverSCG::initialiseSMPS(SMIP_fileRequest *request, int scenario) {
-int PSCGScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scenario) {
+int PSCGScen_SMPS::initialiseSMPS(TssModel &smpsModel, int scenario) {
 	tS = scenario;
 	
-	disableHeuristic = par->disableHeuristic;
-	nThreads = par->threads;
 	//ProblemDataSMPS *problemSMPS = ProblemDataSMPS::getSingleton();
 	n1 = smpsModel.getNumCols(0);
 	n2 = smpsModel.getNumCols(1);
 	nS = smpsModel.getNumScenarios();
+	//nThreads = par->threads;
 
 	c = new double[n1];
 	d = new double[n2];
@@ -121,7 +120,6 @@ int PSCGScen_SMPS::initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scen
 	LagrMIPInterface_->setIntParam(OsiOutputControl,0);
 	LagrMIPInterface_->setIntParam(OsiMIPOutputControl,0);
 	if (nThreads >= 0) { LagrMIPInterface_->setIntParam(OsiParallelThreads, nThreads); }
-	if (disableHeuristic) { LagrMIPInterface_->setIntParam(OsiHeurFreq, -1); }
 	LagrMIPInterface_->setDblParam(OsiDualTolerance, 1e-9);
 	setGapTolerances(1e-9,1e-9);
 	LagrMIPInterface_->setHintParam(OsiDoPresolveInInitial,true);
@@ -157,6 +155,8 @@ void PSCGScen::finishInitialisation() {
 		
 		
 	//add objective
+	try{
+
 	mpObjective.setSense( IloObjective::Minimize );
 		
 	mpModel.add(mpObjective);
@@ -184,7 +184,14 @@ void PSCGScen::finishInitialisation() {
 	if (nThreads >= 0) { cplexMP.setParam(IloCplex::Threads, nThreads); }
 	cplexMP.setOut(env.getNullStream());
 	cplexMP.setWarning(env.getNullStream());
-	cplexMP.extract(mpModel);
+	  cplexMP.extract(mpModel);
+	}
+   	catch(IloException& e){
+		cout << "cplexMP.extract error: " << e.getMessage() << endl;
+		cout << "Exception caught!" << endl;
+	//refresh();
+		e.end();
+   	}
 		
 	//cout << "Finish Initialisation: Total memory use for " << tS << ": " << env.getTotalMemoryUsage() << endl;
 	initialised = true;
@@ -681,7 +688,7 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	if(updateDisp) mpWeight0.setBounds(0.0,1.0);
    }
    catch(IloException& e){
-	//cout << "MPSolve error: " << e.getMessage() << endl;
+	cout << "MPSolve error: " << e.getMessage() << endl;
 	cout << "Exception caught...Refreshing solution..." << endl;
 	//refresh();
 	refresh(omega,z,scaling_vector);

@@ -4,7 +4,6 @@
 #LOCALDIRROOT = /short/ka3/comp_infrastructure
 LOCALDIRROOT = /homes/bcdandurand/comp_infrastructure
 SMIDIR = $(LOCALDIRROOT)/CoinSMI
-#ALPSDIR = $(LOCALDIRROOT)/Blis-0.94
 SYSTEM     = x86-64_linux
 LIBFORMAT  = static_pic
 CPLEXDIR      = $(LOCALDIRROOT)/CPLEX/cplex
@@ -13,15 +12,15 @@ CONCERTDIR    = $(LOCALDIRROOT)/CPLEX/concert
 #OPENMPIDIR = /apps/openmpi/1.8.8
 #OPENMPIDIR = /soft/openmpi/1.8.8
 OPENMPIDIR = /usr/lib/openmpi/lib
-LIBNUMADIR = /usr/lib/x86_64-linux-gnu
-MPIDIRDSP = /nfs2/b216449/mpich-install/lib
+#LIBNUMADIR = /usr/lib/x86_64-linux-gnu
+#MPIDIRDSP = /nfs2/b216449/mpich-install/lib
 DSPDIR = /homes/bcdandurand/DSP
 SRC = ./src
 OBJDIR = ./obj
 OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
-OBJS_serial = $(OBJDIR)/PSCGMain_serial.o $(OBJDIR)/$(ALG)_serial.o $(OBJDIR)/$(SOLVER)_serial.o $(OBJDIR)/ProblemDataBodur_serial.o 
+OBJSLIB = $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
+#OBJS_serial = $(OBJDIR)/PSCGMain_serial.o $(OBJDIR)/$(ALG)_serial.o $(OBJDIR)/$(SOLVER)_serial.o $(OBJDIR)/ProblemDataBodur_serial.o 
 LIBDIR = ./lib
-LIB = libpscg.so
 BIN = ./bin
 #CPLEXDIR      = /usr/local/ibm/ILOG/CPLEX_Studio125/cplex
 #CONCERTDIR    = /usr/local/ibm/ILOG/CPLEX_Studio125/concert
@@ -43,20 +42,17 @@ CXXFLAGS = -O3 -g -std=c++11 -fpic
 # Stochastic data directory
 
 # additional C++ Compiler options for linking
-CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(ALPSDIR)/lib
-#CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(DSPDIR)/src -Wl,--rpath -Wl,$(OPENMPIDIR)
-#CXXLINKFLAGS = -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(DSPDIR)/src -Wl,--rpath -Wl,$(OPENMPIDIR) -Wl,--rpath -Wl,$(MPIDIRDSP) -Wl,--rpath -Wl,$(LIBNUMADIR)
+CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
 #CCOPT = -m64 -O -fPIC -fno-strict-aliasing -fexceptions -DNDEBUG -DIL_STD -std=c++0x
 
 # Include directories (we use the CYGPATH_W variables to allow compilation with Windows compilers)
-INCLPSCG = -I ./include
+INCLTCLAP = -I $(LOCALDIRROOT) 
 INCLDSP = -I$(DSPDIR)/src/Model -I$(DSPDIR)/src
 INCLSMI = -I$(SMIDIR)/include/coin 
-#INCLALPS = -I$(ALPSDIR)/include/coin
 INCLCPLEX = -I$(CPLEXDIR)/include -I$(CONCERTDIR)/include 
 INCLMPI = -I$(OPENMPIDIR)/include
 
-INCL = $(INCLPSCG) $(INCLDSP) $(INCLSMI) $(INCLALPS) $(INCLCPLEX)
+INCL = $(INCLTCLAP) $(INCLDSP) $(INCLSMI) $(INCLCPLEX)
 #INCL = -I$(SMIDIR)/include/coin -I$(CPLEXDIR)/include -I$(CONCERTDIR)/include $(INCLDSP)
 #INCL += $(ADDINCFLAGS)
 
@@ -68,27 +64,30 @@ COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi 
 #ALPSLIBS = -L$(ALPSDIR)/lib -lAlps -lBcps 
 #ALPSLIBS = -L$(ALPSDIR)/lib -lBcps 
 
-CPLEXLIBR = -DIL_STD -DILOSTRICTPOD $(CPPFLAGS) $(LDFLAGS) -L$(CPLEXDIR)/lib/$(SYSTEM)/$(LIBFORMAT) \
-	-lilocplex -lcplex -L$(CONCERTDIR)/lib/$(SYSTEM)/$(LIBFORMAT) -lconcert 
-OTHERLIBS = -lstdc++ -lm -lpthread
-#OTHERLIBS = -lstdc++ -lgcc_s -lc -lgcc -lm -lpthread
+#CPLEXLIBR = -DIL_STD -DILOSTRICTPOD $(CPPFLAGS) $(LDFLAGS) -L$(CPLEXDIR)/lib/$(SYSTEM)/$(LIBFORMAT) \
 
-#PSCGModel.cpp  PSCGModel.h  PSCGModelScen.cpp  PSCGModelScen.h	PSCGParams.h
+CPLEXLIBR = -DIL_STD $(CPPFLAGS) $(LDFLAGS) -L$(CPLEXDIR)/lib/$(SYSTEM)/$(LIBFORMAT) \
+	-lilocplex -lcplex -L$(CONCERTDIR)/lib/$(SYSTEM)/$(LIBFORMAT) -lconcert 
+PSCGLIBR = -L$(LIBDIR) -lPSCG
+OTHERLIBS = -lstdc++ -lm -lpthread -lz -lbz2
+
 ALG = PSCG
-#SOLVER = CPLEXsolverSCG
+#mpicxx -o $(BIN)/$(ALG) $(OBJS) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
 SOLVER = PSCGScen
 
 SRCFILES = $(SRC)/PSCGMain.cpp $(SRC)/$(ALG).cpp $(SRC)/$(ALG).h $(SRC)/$(SOLVER).cpp $(SRC)/$(SOLVER).h $(SRC)/ProblemDataBodur.cpp $(SRC)/ProblemDataBodur.h 
 	
 	
-all: all_parallel all_serial	
+all: all_parallel 
+#all_serial	
 
 all_parallel: $(ALG)
 
-all_serial: $(ALG)_Serial
+#all_serial: $(ALG)_Serial
 
 
 $(ALG): $(SRCFILES) 
+
 	$(CXX) -c -o $(OBJDIR)/PSCGMain.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
 	
 	$(CXX) -c -o $(OBJDIR)/$(ALG).o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
@@ -97,18 +96,20 @@ $(ALG): $(SRCFILES)
 	
 	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL) 
 	
-	mpicxx -o $(BIN)/$(ALG) $(OBJS) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
+	mpicxx -shared -o $(LIBDIR)/lib$(ALG).so $(OBJSLIB) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
 	
-$(ALG)_Serial: $(SRCFILES)
-	$(CXX) -c -o $(OBJDIR)/PSCGMain_serial.o $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+	mpicxx -o $(BIN)/$(ALG) $(OBJDIR)/PSCGMain.o $(PSCGLIBR) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
 	
-	$(CXX) -c -o $(OBJDIR)/$(ALG)_serial.o $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-	
-	$(CXX) -c -o $(OBJDIR)/$(SOLVER)_serial.o $(SRC)/$(SOLVER).cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-	
-	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur_serial.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
-	
-	$(CXX) -o $(BIN)/$(ALG)_serial $(OBJS_serial) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) 
+#$(ALG)_Serial: $(SRCFILES)
+#	$(CXX) -c -o $(OBJDIR)/PSCGMain_serial.o $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+#	
+#	$(CXX) -c -o $(OBJDIR)/$(ALG)_serial.o $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+#	
+#	$(CXX) -c -o $(OBJDIR)/$(SOLVER)_serial.o $(SRC)/$(SOLVER).cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+#	
+#	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur_serial.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
+#	
+#	$(CXX) -o $(BIN)/$(ALG)_serial $(OBJS_serial) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) 
 
 clean:
-	rm -f $(BIN)/$(ALG) $(BIN)/$(ALG)_serial $(OBJDIR)/*.o
+	rm -f $(BIN)/$(ALG) $(BIN)/$(ALG)_serial $(OBJDIR)/*.o $(LIBDIR)/*

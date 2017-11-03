@@ -4,15 +4,13 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 */
 
 #include "PSCG.h"
-//#include "CPLEXsolverSCG.h"
-#include "ProblemDataBodur.h"
-#include "PSCGScen.h"
-#include "Stopwatch.h"
-#include "TssModel.h"
+//#include "ProblemDataBodur.h"
+//#include "Stopwatch.h"
+//#include "TssModel.h"
 
-#define OUTER_LOOP_TERMINATION 1e-10
-#define TIME_TYPES 2
-#define DEFAULT_MAX_OUTER_LOOP 20 
+//#define OUTER_LOOP_TERMINATION 1e-10
+//#define TIME_TYPES 2
+//#define DEFAULT_MAX_OUTER_LOOP 20 
 
 
 using namespace std;

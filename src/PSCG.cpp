@@ -4,15 +4,83 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 */
 
 #include "PSCG.h"
-#include <utility>
-//#include "CPLEXsolverSCG.h"
 #include "ProblemDataBodur.h"
-#include "PSCGScen.h"
-#include "TssModel.h"
+#include "tclap/CmdLine.h"
+#include "StructureDefs.h"
 
 
 
 using namespace std;
+
+PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
+LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
+	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),
+	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),phase(0){
+
+   	//******************Read Command Line Parameters**********************
+	//Params par;
+	initialiseParameters();
+
+	//******************Display Command Line Parameters**********************
+	if (mpiRank==0) {
+		displayParameters();
+	}
+
+	//******************Reading Problem Data**********************
+
+	initialiseModel();
+	
+
+
+	//******************Assign Scenarios**********************
+	assignSubproblems();
+	setupSolvers();
+	//sprintf(zOptFile,"zOpt-%s-noP%dalg%d",probname,mpiSize,algorithm);
+	
+}
+
+PSCG::~PSCG(){
+	//Clean up structures
+	for (int tS = 0; tS < nNodeSPs; tS++) {
+		delete [] scaling_matrix[tS];
+		delete [] omega_tilde[tS];
+		delete [] omega_current[tS];
+		delete [] omega_centre[tS];
+		delete [] omega_sp[tS];
+		delete [] omega_saved[tS];
+		delete subproblemSolvers[tS];
+	    #ifdef KEEP_LOG
+	        if(logFiles.size() > tS) logFiles[tS]->close();
+	    #endif
+	}
+
+	delete [] z_current;
+	delete [] z_average;
+	delete [] z_old;
+#if 0
+	delete [] z_intdisp;
+	delete [] z_vertex_average;
+	delete [] z_average1;
+	delete [] z_average2;
+#endif
+	delete [] z_saved;
+	delete [] z_local;
+	delete [] z_incumbent_;
+	delete [] z_rounded;
+	delete [] penSumLocal;
+	delete [] penSum;
+	delete [] origVarLB_;
+	delete [] origVarUB_;
+	delete [] currentVarLB_;
+	delete [] currentVarUB_;
+	delete [] totalSoln_;
+	delete [] recordKeeping;
+	delete [] colType_;
+	delete [] intVar_;
+	delete [] weights_;
+	delete [] integrDiscr_;
+	env.end();
+}
 
 void PSCG::initialiseParameters(){
 	//par->readParameters(argc, argv);
@@ -24,7 +92,6 @@ void PSCG::initialiseParameters(){
 	initialiseFileName();
 	nS = par->noScenarios;
 	rho = par->penalty;
-	algorithm = par->Algorithm;
 	baselineRho=rho;
 	//penMult = par->penaltyMult;
 	if (rho <= 0) {
@@ -44,7 +111,7 @@ void PSCG::initialiseParameters(){
 #endif
     	}
 
-	maxStep = par->maxStep;
+	maxNoSteps = par->maxStep;
 	maxSeconds = par->maxSeconds;
 	fixInnerStep = par->fixInnerStep;
 	nVerticesUsed = par->UseVertexHistory;
@@ -63,13 +130,26 @@ void PSCG::initialiseParameters(){
 
 }
 
+void PSCG::assignSubproblems(){
+	if(mpiRank==0) { cout << "Assigning " << nS << " subproblems with " << mpiSize << " processors. " << endl;}
+	for (int tS = 0; tS < nS; tS++) {
+		//scenarioAssign[tS] = tS % mpiSize;
+		if( (tS % mpiSize)==mpiRank ){
+		    scenariosToThisModel.push_back(tS);
+		    spSolverStatuses_.push_back(SP_UNKNOWN);
+		}
+	}
+	if(mpiRank==0) { cout << "Done assigning " << nS << " subproblems. " << endl;}
+}
+
 void PSCG::setupSolvers(){
 	nNodeSPs = scenariosToThisModel.size();
+cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << endl;
 	recordKeeping = new double[nNodeSPs][4];
 	integrDiscr_ = new double[nNodeSPs];
 	weights_ = new double[nNodeSPs];
 	//scaleVec_ = new double[nNodeSPs];
-	char logFileName[128];
+	char logFileName[256];
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 	  #ifdef KEEP_LOG
 	    shared_ptr<ofstream> logfile(new ofstream);
@@ -82,14 +162,15 @@ void PSCG::setupSolvers(){
 #if 1
 	    switch( ftype ){
 		    case 1: //CAP Problem
-#if 1
+#if 0
 			subproblemSolvers.push_back( new PSCGScen_Bodur() );
 		     	dynamic_cast<PSCGScen_Bodur*>(subproblemSolvers[tS])->initialiseBodur(par,pdBodur,scenariosToThisModel[tS]);
 #endif
 		      	break;
 		    case 2: //SIPLIB problems
-			subproblemSolvers.push_back( new PSCGScen_SMPS() );
-		      	dynamic_cast<PSCGScen_SMPS*>(subproblemSolvers[tS])->initialiseSMPS(par,smpsModel,scenariosToThisModel[tS]); 
+			subproblemSolvers.push_back( new PSCGScen_SMPS(env) );
+		      	dynamic_cast<PSCGScen_SMPS*>(subproblemSolvers[tS])->initialiseSMPS(smpsModel,scenariosToThisModel[tS]); 
+			subproblemSolvers[tS]->setNThreads(par->threads);
 		      	break;
 		    default:
 			throw(-1);
@@ -116,6 +197,123 @@ void PSCG::setupSolvers(){
 	    subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
 	}
 	zeroOmega();
+cout << "End setting up solvers at process " << mpiRank << endl;
+}
+
+void PSCG::initialiseModel(){
+	int j=0;
+	switch( ftype ){
+	  case 1:
+	    pdBodur.initialise(par);
+	    n1 = pdBodur.get_n1();
+	    n2 = pdBodur.get_n2();
+	    nS = pdBodur.get_nS();
+	    totalSoln_=new double[n1+n2];
+	    colType_ = new char[n1];
+	    intVar_ = new int[n1];
+	    numIntVars_=0;
+	    break;
+	  case 2:
+	    smpsModel.readSmps(par->filename.c_str());
+	    n1 = smpsModel.getNumCols(0);
+	    n2 = smpsModel.getNumCols(1);
+	    totalSoln_=new double[n1+n2];
+	    nS = smpsModel.getNumScenarios();
+		//Is there something wrong with StoModel::getNumIntegers(0) ???
+	    //numIntVars_=smpsModel.getNumIntegers(0); //first-stage only
+	    colType_ = new char[n1];
+	    intVar_ = new int[n1];
+	    numIntVars_=0;
+	    memcpy(colType_,smpsModel.getCtypeCore(0),n1*sizeof(char));
+	    for(int i=0; i<n1; i++){
+//cout << " " << colType_[i];
+		if(colType_[i]=='I' || colType_[i]=='B'){
+		    intVar_[numIntVars_++]=i;
+		}
+	    }
+	    //assert(j==numIntVars_);
+	    break;
+	  default:
+	    throw(-1);
+	    break;
+	}
+
+	z_current = new double[n1];
+	z_old = new double[n1];
+	z_saved = new double[n1];
+	z_local = new double[n1];
+	z_incumbent_ = new double[n1];
+	z_rounded = new double[n1];
+	z_average = new double[n1];
+	penSumLocal = new double[n1];
+	penSum = new double[n1];
+	origVarLB_ = new double[n1];
+	origVarUB_ = new double[n1];
+	currentVarLB_ = new double[n1];
+	currentVarUB_ = new double[n1];
+	switch( ftype ){
+	  case 1:
+	    //TODO: initialise origVarBds.
+	    break;
+	  case 2:
+	    smpsModel.copyCoreColLower(origVarLB_,0);
+	    smpsModel.copyCoreColUpper(origVarUB_,0);
+	    memcpy(currentVarLB_,origVarLB_,n1*sizeof(double));
+	    memcpy(currentVarUB_,origVarUB_,n1*sizeof(double));
+	    break;
+	  default:
+	    throw(-1);
+	    break;
+	}
+	if (mpiRank==0) {
+		std::cout << std::endl;
+		std::cout << "Problem data: " << std::endl;
+		std::cout << "Number of first stage variables: " << n1 << std::endl;
+		std::cout << "Number of second stage variables: " << n2 << std::endl;
+		std::cout << "Number of scenarios: " << nS << std::endl;
+    	}
+}
+
+void PSCG::installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs, double pen){
+//if(mpiRank==0){cerr << "Begin installSubproblem ";}
+    for(int ii=0; ii<n1; ii++){
+	assert(zLBs[ii] <= zUBs[ii]);
+    }
+    setLBsAllSPs(zLBs);
+    setUBsAllSPs(zUBs);
+//if(mpiRank==0){cout << "Branching at (indices,bounds,type): ";}
+    readOmegaIntoModel(omega);
+    //loadOmega();
+    //zeroOmega();
+    currentLagrLB=-COIN_DBL_MAX;
+    centreLagrLB=-COIN_DBL_MAX;
+    referenceLagrLB=lb;
+    setPenalty(pen);
+    printOriginalVarBds();
+    printCurrentVarBds();
+    //subproblemSolvers[0]->printXBounds();
+//if(mpiRank==0){cerr << "End installSubproblem ";}
+}
+
+void PSCG::installSubproblem(double lb, const double *zLBs, const double *zUBs, double pen){
+//if(mpiRank==0){cerr << "Begin installSubproblem ";}
+    for(int ii=0; ii<n1; ii++){
+	assert(zLBs[ii] <= zUBs[ii]);
+    }
+    setLBsAllSPs(zLBs);
+    setUBsAllSPs(zUBs);
+//if(mpiRank==0){cout << "Branching at (indices,bounds,type): ";}
+    //readOmegaIntoModel(omega);
+    //loadOmega();
+    //zeroOmega();
+    currentLagrLB=-COIN_DBL_MAX;
+    centreLagrLB=-COIN_DBL_MAX;
+    referenceLagrLB=lb;
+    setPenalty(pen);
+    printOriginalVarBds();
+    printCurrentVarBds();
+    //subproblemSolvers[0]->printXBounds();
+//if(mpiRank==0){cerr << "End installSubproblem ";}
 }
 
 int PSCG::initialIteration(){
@@ -499,9 +697,11 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	    //cout << " and " << recordKeeping[tS][2] << " versus " << subproblemSolvers[tS]->evaluateSolution(omega_current[tS])+0.5*recordKeeping[tS][3] << endl;
 	    //if(recordKeeping[tS][1] > recordKeeping[tS][2]){
 	    if(recordKeeping[tS][1] >  1e-2 + recordKeeping[tS][2] + 0.5*recordKeeping[tS][3]){
+#if 0
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
 	        cout << recordKeeping[tS][1] << " <=??? " << recordKeeping[tS][2]+0.5*recordKeeping[tS][3] << "  (discr: " << recordKeeping[tS][3] << ")" << endl;
 		cout << "Current solution value: " << subproblemSolvers[tS]->evaluateSolution(omega_centre[tS]) << endl;;
+#endif
 
 		//subproblemSolvers[tS]->evaluateVertexHistory(omega_current[tS]);
 	        //subproblemSolvers[tS]->printWeights();	
@@ -524,13 +724,14 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 
 void PSCG::displayParameters(){
   if(mpiRank==0){
+	std::cout << "Parameters for PSCG:" << endl;
 	#ifdef USING_MPI
 	std::cout << "USINGMPI:TRUE" << endl;
 	#else
 	std::cout << "USINGMPI:FALSE" << endl;
 	#endif
 
-	std::cout << "ALGORITHM:PSCG with branch and bound" << std::endl;
+	std::cout << "ALGORITHM: PSCG" << std::endl;
 	std::cout << "Number of processors: " << mpiSize << std::endl;
 	std::cout << "Data file path: " << filepath << std::endl;
 	//std::cout << "Problem filename: " << str_filename << std::endl;
@@ -557,7 +758,7 @@ void PSCG::displayParameters(){
 		std::cout << "Manually chosen number of scenarios: " << "Maximum available in file" << std::endl;
 	}
 
-	std::cout << "Maximum outer step: " << maxStep << std::endl;
+	std::cout << "Maximum outer step: " << maxNoSteps << std::endl;
 	std::cout << "Maximum seconds spent on main updates: " << maxSeconds << std::endl;
 
 	if (fixInnerStep > 0) {

@@ -1,28 +1,29 @@
 
 /*Header for the main procedure ParallelSCG. */
 
-#ifndef PSCGMODEL_H
-#define PSCGMODEL_H
+#ifndef PSCG_H
+#define PSCG_H
 
 #include <stdio.h>
-#include <math.h>
+//#include <math.h>
 #include <cmath>
 #include <string>
-#include <memory>
+//#include <memory>
 #include <sstream>
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <list>
+//#include <list>
 #include <cmath>
 #include <algorithm>
 #include <time.h>
 #include <sys/time.h>
-#include "tclap/CmdLine.h"
-#include "StructureDefs.h"
+#include "PSCGParams.h"
+#include <utility>
 #include "TssModel.h"
 #include "PSCGScen.h"
-#include "PSCGParams.h"
+
+using namespace std;
 
 #define SSC_DEN_TOL 1e-10
 #define DEFAULT_THREADS 1
@@ -78,6 +79,7 @@ class PSCG {
 public:
 PSCGParams *par;
 TssModel smpsModel;
+IloEnv env;
 int algorithm;
 vector<int> scenariosToThisModel;
 vector<PSCGScen*> subproblemSolvers;
@@ -118,6 +120,7 @@ double* z_local;// = new double[n1];
 double* z_incumbent_; //this should be the last feasible z with best obj
 double *z_rounded;
 double *z_saved;
+double *z_average;
 double* totalSoln_; //new double[n1+n2];
 vector<double> constrVec_; //This is filled with the value of Ax
 double *penSumLocal;// = new double[n1];
@@ -129,7 +132,7 @@ vector<int> spSolverStatuses_;
 
 int modelStatus_[2];
 
-char filepath[64];
+char filepath[256];
 char probname[64];
 double LagrLB_Local;
 double innerLagrLB_Local;
@@ -155,7 +158,6 @@ double localDiscrepNorm;
 double rho;
 double baselineRho;
 //double penMult;
-int maxStep;
 int maxNoSteps;
 int maxSeconds;
 int fixInnerStep;
@@ -191,78 +193,13 @@ double *currentVarUB_;
 
 // Termination conditions
 int totalNoGSSteps;
-char zOptFile[128];
+//char zOptFile[128];
 
 ProblemDataBodur pdBodur;
 
-PSCG(PSCGParams *p):par(p),nNodeSPs(0),algorithm(ALGDD),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
-LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),
-	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),phase(0){
+PSCG(PSCGParams *p);
 
-   	//******************Read Command Line Parameters**********************
-	//Params par;
-	initialiseParameters();
-
-	//******************Display Command Line Parameters**********************
-	if (mpiRank==0) {
-		displayParameters();
-	}
-
-	//******************Reading Problem Data**********************
-
-	initialiseModel();
-	
-
-
-	//******************Assign Scenarios**********************
-	assignSubproblems();
-	setupSolvers();
-	sprintf(zOptFile,"zOpt-%s-noP%dalg%d",probname,mpiSize,algorithm);
-	
-}
-
-~PSCG(){
-	//Clean up structures
-	for (int tS = 0; tS < nNodeSPs; tS++) {
-		delete [] scaling_matrix[tS];
-		delete [] omega_tilde[tS];
-		delete [] omega_current[tS];
-		delete [] omega_centre[tS];
-		delete [] omega_sp[tS];
-		delete [] omega_saved[tS];
-		delete subproblemSolvers[tS];
-	    #ifdef KEEP_LOG
-	        if(logFiles.size() > tS) logFiles[tS]->close();
-	    #endif
-	}
-	//delete[] z_current;
-	delete [] z_current;
-#if 0
-	delete [] z_intdisp;
-	delete [] z_old;
-	delete [] z_saved;
-	delete [] z_average;
-	delete [] z_vertex_average;
-	delete [] z_average1;
-	delete [] z_average2;
-#endif
-	delete [] z_local;
-	delete [] z_incumbent_;
-	delete [] z_rounded;
-	delete [] penSumLocal;
-	delete [] penSum;
-	delete [] origVarLB_;
-	delete [] origVarUB_;
-	delete [] currentVarLB_;
-	delete [] currentVarUB_;
-	delete [] totalSoln_;
-	delete [] recordKeeping;
-	delete [] colType_;
-	delete [] intVar_;
-	delete [] weights_;
-	delete [] integrDiscr_;
-}
+~PSCG();
 
 void setMPIParams(int rank, int size){
 	mpiRank=rank;
@@ -270,25 +207,18 @@ void setMPIParams(int rank, int size){
 }
 int getMPIRank(){return mpiRank;}
 
-void assignSubproblems(){
-	for (int tS = 0; tS < nS; tS++) {
-		//scenarioAssign[tS] = tS % mpiSize;
-		if( (tS % mpiSize)==mpiRank ){
-		    scenariosToThisModel.push_back(tS);
-		    spSolverStatuses_.push_back(SP_UNKNOWN);
-		}
-	}
-}
-
+void assignSubproblems();
+IloEnv& getEnv(){return env;}
 
 void initialiseParameters();
 
 
 void initialiseFileName(){
-char str[] ="- This, a sample string.";
+  char filepathcpy[256];
+  strcpy(filepathcpy,filepath);
   char * pch, *prb;
   //printf ("Splitting string \"%s\" into tokens:\n",str);
-  pch = strtok (filepath,"/");
+  pch = strtok (filepathcpy,"/");
   while (pch != NULL)
   {
     strcpy(probname,pch);
@@ -297,81 +227,8 @@ char str[] ="- This, a sample string.";
   }
 }
 
-void initialiseModel(){
+void initialiseModel();
 
-
-
-	int j=0;
-	switch( ftype ){
-	  case 1:
-	    pdBodur.initialise(par);
-	    n1 = pdBodur.get_n1();
-	    n2 = pdBodur.get_n2();
-	    nS = pdBodur.get_nS();
-	    totalSoln_=new double[n1+n2];
-	    colType_ = new char[n1];
-	    intVar_ = new int[n1];
-	    numIntVars_=0;
-	    break;
-	  case 2:
-	    smpsModel.readSmps(par->filename.c_str());
-	    n1 = smpsModel.getNumCols(0);
-	    n2 = smpsModel.getNumCols(1);
-	    totalSoln_=new double[n1+n2];
-	    nS = smpsModel.getNumScenarios();
-		//Is there something wrong with StoModel::getNumIntegers(0) ???
-	    //numIntVars_=smpsModel.getNumIntegers(0); //first-stage only
-	    colType_ = new char[n1];
-	    intVar_ = new int[n1];
-	    numIntVars_=0;
-	    memcpy(colType_,smpsModel.getCtypeCore(0),n1*sizeof(char));
-	    for(int i=0; i<n1; i++){
-//cout << " " << colType_[i];
-		if(colType_[i]=='I' || colType_[i]=='B'){
-		    intVar_[numIntVars_++]=i;
-		}
-	    }
-	    //assert(j==numIntVars_);
-	    break;
-	  default:
-	    throw(-1);
-	    break;
-	}
-
-	z_current = new double[n1];
-	z_old = new double[n1];
-	z_saved = new double[n1];
-	z_local = new double[n1];
-	z_incumbent_ = new double[n1];
-	z_rounded = new double[n1];
-	penSumLocal = new double[n1];
-	penSum = new double[n1];
-	origVarLB_ = new double[n1];
-	origVarUB_ = new double[n1];
-	currentVarLB_ = new double[n1];
-	currentVarUB_ = new double[n1];
-	switch( ftype ){
-	  case 1:
-	    //TODO: initialise origVarBds.
-	    break;
-	  case 2:
-	    smpsModel.copyCoreColLower(origVarLB_,0);
-	    smpsModel.copyCoreColUpper(origVarUB_,0);
-	    memcpy(currentVarLB_,origVarLB_,n1*sizeof(double));
-	    memcpy(currentVarUB_,origVarUB_,n1*sizeof(double));
-	    break;
-	  default:
-	    throw(-1);
-	    break;
-	}
-	if (mpiRank==0) {
-		std::cout << std::endl;
-		std::cout << "Problem data: " << std::endl;
-		std::cout << "Number of first stage variables: " << n1 << std::endl;
-		std::cout << "Number of second stage variables: " << n2 << std::endl;
-		std::cout << "Number of scenarios: " << nS << std::endl;
-    	}
-}
 
 void setupSolvers();
 
@@ -409,53 +266,36 @@ void clearSPVertexHistory(){
 }
 
 
-void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs, double pen){
-//if(mpiRank==0){cerr << "Begin installSubproblem ";}
-    for(int ii=0; ii<n1; ii++){
-	assert(zLBs[ii] <= zUBs[ii]);
-    }
-    setLBsAllSPs(zLBs);
-    setUBsAllSPs(zUBs);
-//if(mpiRank==0){cout << "Branching at (indices,bounds,type): ";}
-    readOmegaIntoModel(omega);
-    //loadOmega();
-    //zeroOmega();
-    currentLagrLB=-COIN_DBL_MAX;
-    centreLagrLB=-COIN_DBL_MAX;
-    referenceLagrLB=lb;
-    setPenalty(pen);
-    printOriginalVarBds();
-    printCurrentVarBds();
-    //subproblemSolvers[0]->printXBounds();
-//if(mpiRank==0){cerr << "End installSubproblem ";}
-}
-void installSubproblem(double lb, const double *zLBs, const double *zUBs, double pen){
-//if(mpiRank==0){cerr << "Begin installSubproblem ";}
-    for(int ii=0; ii<n1; ii++){
-	assert(zLBs[ii] <= zUBs[ii]);
-    }
-    setLBsAllSPs(zLBs);
-    setUBsAllSPs(zUBs);
-//if(mpiRank==0){cout << "Branching at (indices,bounds,type): ";}
-    //readOmegaIntoModel(omega);
-    //loadOmega();
-    //zeroOmega();
-    currentLagrLB=-COIN_DBL_MAX;
-    centreLagrLB=-COIN_DBL_MAX;
-    referenceLagrLB=lb;
-    setPenalty(pen);
-    printOriginalVarBds();
-    printCurrentVarBds();
-    //subproblemSolvers[0]->printXBounds();
-//if(mpiRank==0){cerr << "End installSubproblem ";}
-}
+void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs, double pen);
+
+
+void installSubproblem(double lb, const double *zLBs, const double *zUBs, double pen);
+
 
 double *getZ(){return z_current;}
+double *getZAverage(){return z_average;}
+double getSqrDiscrNorm(){return discrepNorm;}
 
 double* getOrigVarLbds(){return origVarLB_;}
 double* getOrigVarUbds(){return origVarUB_;}
 double* getCurrentVarLbds(){return currentVarLB_;}
 double* getCurrentVarUbds(){return currentVarUB_;}
+char* getColTypes(){return colType_;}
+
+void cloneCurrentVarBds(double* &lbs, double* &ubs){
+    lbs = new double[n1];
+    memcpy(lbs,currentVarLB_,n1*sizeof(double));
+    ubs = new double[n1];
+    memcpy(ubs,currentVarUB_,n1*sizeof(double));
+}
+void readCurrentVarBds(const double *lbs, const double *ubs){
+    memcpy(currentVarLB_,lbs,n1*sizeof(double));
+    memcpy(currentVarUB_,ubs,n1*sizeof(double));
+}
+void writeCurrentVarBds(double *lbs, double *ubs){
+    memcpy(lbs,currentVarLB_,n1*sizeof(double));
+    memcpy(ubs,currentVarUB_,n1*sizeof(double));
+}
 
 void printOriginalVarBds(){
   if(mpiRank==0){
@@ -513,9 +353,12 @@ void readOmegaIntoModel(vector<double*> &omega){
 void saveOmega(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_saved[tS],omega_current[tS],n1*sizeof(double));
 }
-void loadOmega(){
+void loadOmegaCurrent(){
     omegaIsZero_=false;
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_current[tS],omega_saved[tS],n1*sizeof(double));
+}
+void loadOmegaCentre(){
+    omegaIsZero_=false;
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_centre[tS],omega_saved[tS],n1*sizeof(double));
 }
 void loadOmega(vector<double*> &omega){
@@ -526,6 +369,18 @@ void zeroOmega(){
     omegaIsZero_=true;
     for(int tS=0; tS<nNodeSPs; tS++){ for(int ii=0; ii<n1; ii++){omega_current[tS][ii]=0.0;}}
     for(int tS=0; tS<nNodeSPs; tS++){ for(int ii=0; ii<n1; ii++){omega_centre[tS][ii]=0.0;}}
+}
+void writeOmegaCurrent(vector<double*> &writeOmega){
+    //assert(writeOmega.size() >= nNodeSPs); 
+    if(writeOmega.size()==0){
+        for(int tS=0; tS<nNodeSPs; tS++){
+	    writeOmega.push_back(new double[n1]);
+	}
+    }
+    for(int tS=0; tS<nNodeSPs; tS++){
+	assert(writeOmega[tS]!=NULL);
+        memcpy(writeOmega[tS],omega_current[tS],n1*sizeof(double));
+    }
 }
 
 int initialIteration();
@@ -753,9 +608,9 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
 	#ifdef KEEP_LOG
 	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
 	#endif
-        if(currentIter_ < 10) phase=0;
+        if(currentIter_ < 10 || currentIter_%10==0) phase=0;
         else if(currentIter_ < 20) phase=1;
-        else phase=2;
+        else phase=1;
 
 	if(phase==0) regularIteration(true,true);
 	else if(phase==1) regularIteration(false,true);
@@ -770,25 +625,23 @@ double computeBound(int maxNoConseqNullSteps, bool adjustPenalty=false){
 }
 
 double evaluateIntegralityDiscrepancies(){
-    double integrDiscrSum=0.0;
+    double integrDiscrSumLocal=0.0,integrDiscrSum=0.0;
     for(int tS=0; tS<nNodeSPs; tS++){
 	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
-	integrDiscrSum += integrDiscr_[tS];  
+	integrDiscrSumLocal += integrDiscr_[tS];  
 	//if(integrDiscr > 1e-10) cout << "Node " << mpiRank << " scenario " << tS << " integrality discrepancy: " << integrDiscr << endl;  
     }
+    #ifdef USING_MPI
+    if(mpiSize>1){
+        MPI_Allreduce(&integrDiscrSumLocal, &integrDiscrSum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    }
+    #endif
+    if(mpiSize==1){
+        integrDiscrSum=integrDiscrSumLocal;
+    }
+
     return integrDiscrSum;
 }
-#if 0
-void resetOmega(){
-     currentLagrLB=-ALPS_DBL_MAX;
-     decimateOmega(0.8);
-     setPenalty(baselineRho);
-     for (int tS = 0; tS < nNodeSPs; tS++) {
-	 recordKeeping[tS][0]=-ALPS_DBL_MAX;//subproblemSolvers[tS]->getLagrBd();
-	 recordKeeping[tS][1]=recordKeeping[tS][0];
-     }
-}
-#endif
 
 //Perform more iterations, e.g., to obtain recourse when integrality met.
 double findPrimalFeasSolnWith(double *z){
@@ -805,6 +658,7 @@ double findPrimalFeasSolnWith(double *z){
 
 double getBound(){return currentLagrLB;}
 void setBound(double bd){currentLagrLB=bd;}
+void setReferenceLB(double bd){referenceLagrLB=bd;}
 
 void solveForWeights(){
    for (int tS = 0; tS < nNodeSPs; tS++) {
@@ -814,7 +668,6 @@ void solveForWeights(){
 	}
 	//if(mpiRank==0){subproblemSolvers[tS]->printWeights();}
    }
-
 }
 
 
@@ -837,7 +690,7 @@ int performColGenStep();
 int performColGenStepBasic();
 
 
-void updateZ(double *z=NULL,double *dispZ=NULL){
+void updateZ(double *z=NULL){
 	if(z==NULL) z=z_current;
 	for(int tS=0; tS<nNodeSPs; tS++){
 	    weights_[tS] = pr[tS];
@@ -845,9 +698,10 @@ void updateZ(double *z=NULL,double *dispZ=NULL){
         averageOfX(z, n1, weights_);
 }
 
-#if 0
-void averageOfVertices(double *z=NULL, bool roundZ=false){
+#if 1
+void averageOfBestVertices(double *z=NULL, double *weightVec=NULL){
 	if(z==NULL) z=z_average;
+	double weight=0.0;
 	for (int i = 0; i < n1; i++)
 	{
 	    z_local[i] = 0.0;
@@ -857,18 +711,47 @@ void averageOfVertices(double *z=NULL, bool roundZ=false){
 		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
 	    }
 	}
-	#ifdef USING_MPI
-	    MPI_Allreduce(z_local, z, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	#else
-	    for (int i=0; i<n1; i++) z[i] = z_local[i]; //Only one node, trivially set z_local = z
-	#endif
-	//for (int i=0; i<n1; i++) z[i] /= ((double)nS); //Only one node, trivially set z_local = z
-	for (int i=0; i<n1; i++) z[i] /= ((double)nS); //Only one node, trivially set z_local = z
-	if(roundZ){//rounding integer restricted vars to nearest integer
-	  for(int ii=0; ii< numIntVars_; ii++){
-	    z[intVar_[ii]]=round(z[intVar_[ii]]);
-	  }
+	if(weightVec!=NULL){
+	  for (int tS = 0; tS < nNodeSPs; tS++) weight += weightVec[tS];
 	}
+	else{
+	for (int i = 0; i < n1; i++)
+	{
+	    z_local[i] = 0.0;
+	    z[i] = 0.0;
+	    for (int tS = 0; tS < nNodeSPs; tS++)
+	    {
+		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
+	    }
+	}
+	  for (int tS = 0; tS < nNodeSPs; tS++) weight += 1.0;
+	}
+	computeAverageAcrossProcs(z_local, z, weight, n1);
+}
+
+void dispOfBestXVertices(double *retVec, double *aveVec=NULL, double *weightVec=NULL){
+    double weightSum=0.0;
+    if(aveVec==NULL){aveVec=z_average;}
+    for(int ii=0; ii<n1; ii++){
+	z_local[ii]=0.0;
+    }
+    if(weightVec!=NULL){
+      for(int tS=0; tS<nNodeSPs; tS++){
+        for(int ii=0; ii<n1; ii++){
+    	     z_local[ii] += weightVec[tS]*fabs(aveVec[ii] - subproblemSolvers[tS]->getXVertex()[ii]);
+	}
+	weightSum += weightVec[tS];
+      }
+    }
+    else{
+      for(int tS=0; tS<nNodeSPs; tS++){
+        for(int ii=0; ii<n1; ii++){
+    	     z_local[ii] += fabs(aveVec[ii] - x_current[tS][ii]);
+	}
+	weightSum += 1.0;
+      }
+    }
+    computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
 }
 #endif
 void computeAverageAcrossProcs(double *partialAveVec, double* retVec, double weight, int vecSize){
@@ -910,8 +793,9 @@ void averageOfX(double *retVec, int vecSize, double *weights=NULL){
     }
     computeAverageAcrossProcs(z_local, retVec, weightSum, vecSize);
 }
-void dispOfX(double *aveVec, double *retVec, int vecSize, double *weights=NULL){
+void dispOfX(double *retVec, double *aveVec=NULL, double *weights=NULL){
     double weightSum=0.0;
+    if(aveVec==NULL) aveVec=z_current;
     for(int ii=0; ii<n1; ii++){
 	z_local[ii]=0.0;
     }
@@ -931,7 +815,7 @@ void dispOfX(double *aveVec, double *retVec, int vecSize, double *weights=NULL){
 	weightSum += 1.0;
       }
     }
-    computeAverageAcrossProcs(z_local, retVec, weightSum, vecSize);
+    computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
 }
 #if 0
 void averageOfVertices(double* retVal, double *zDisp=NULL){
@@ -1293,7 +1177,7 @@ void computeOmegaDisp(double *dispOmega){
 
 /** Check if a value is integer. */
 bool checkInteger(double value) const {
-    double integerTolerance = 1.0e-8;
+    double integerTolerance = 1.0e-10;
     double nearest = floor(value + 0.5);
 //cout << " " << fabs(value-nearest);
     if (fabs(value - nearest) <= integerTolerance) {
@@ -1378,6 +1262,7 @@ if(mpiRank==0){
 
 
 bool solveRecourseProblemGivenFixedZ();	
+
 int getSPStatus(){return modelStatus_[SP_STATUS];}
 void setSPStatus(int stat){modelStatus_[SP_STATUS]=stat;}
 int getZStatus(){return modelStatus_[Z_STATUS];}
@@ -1401,9 +1286,29 @@ double computeSSCVal(){
 }
 		
 bool updateOmega(bool useSSC){
+	double stepLength = exp(SSCVal-1);
+	double centreLagrLBLocal = 0.0;
+	for (int tS = 0; tS < nNodeSPs; tS++) {
+	  for (int i = 0; i < n1; i++) {
+	    omega_centre[tS][i] += stepLength*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	  }
+	  centreLagrLBLocal += pr[tS]*subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_centre[tS]);
+	  recordKeeping[tS][1]=recordKeeping[tS][0];
+	}
+    	omegaUpdated_ = true;
+	#ifdef USING_MPI
+	if (mpiSize > 1) {
+		MPI_Allreduce(&centreLagrLBLocal, &centreLagrLB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	}
+	#endif
+	if (mpiSize == 1) {
+		centreLagrLB = centreLagrLBLocal;
+	}
+
+#if 0
 	if(SSCVal >= SSCParam || !useSSC) {
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
-		memcpy(omega_centre[tS],omega_tilde[tS],n1*sizeof(double));
+		//memcpy(omega_centre[tS],omega_tilde[tS],n1*sizeof(double));
 		memcpy(omega_current[tS],omega_tilde[tS],n1*sizeof(double));
 	        recordKeeping[tS][1]=recordKeeping[tS][0];
 	        //subproblemSolvers[tS]->updateOptSoln();
@@ -1411,7 +1316,6 @@ bool updateOmega(bool useSSC){
 	    centreLagrLB = trialLagrLB;
 	    //currentLagrLB = centreLagrLB;
 	    //recordKeeping[0]=LagrLB;
-    	    omegaUpdated_ = true;
     	    omegaIsZero_=false;
 //if(mpiRank==0){cout << "Updating omega..." << endl;}
 	}
@@ -1419,6 +1323,7 @@ bool updateOmega(bool useSSC){
     	    omegaUpdated_ = false;
 	    //if(mpiRank==0) cout << "Null step taken..." << endl;
 	}
+#endif
 	if(omegaUpdated_){ 
             noConseqNullSteps=0;
  	    noSeriousSteps++;
@@ -1548,29 +1453,23 @@ void setPenalty(int tS, double p){
 }
 //This should normally be turned off, this is a rule for updating the 
 //penalty from Kiwiel 2006 and Lubin et al.
-void computeKiwielPenaltyUpdate(){	
-	//rho = 1.0/min( max( (2.0/rho)*(1.0-SSCVal),  max(1.0/(10.0*rho),1e-4)    ), 10.0/rho);
-	//setPenalty(rho);
-    	//if( SSCVal >= 0.5 ){ computeScalingPenaltyUpdate(min( 0.5/(1-SSCVal),2.0));}
-	double limit = 1000.0;
-	double k=(double)(currentIter_);
-	double scalingFactor;
-    	if(fabs(1.0-SSCVal) > 1e-10){
-	     scalingFactor =  (1.0-pow(0.618,k)) + pow(0.618,k)*max( min( 0.5/(1.0-SSCVal),limit), 1.0/limit);
-	     //computeScalingPenaltyUpdate( max( min( 0.5/(1.0-SSCVal),limit), 1.0/limit));
-	     computeScalingPenaltyUpdate( scalingFactor );
-	}
+double computeKiwielScalingFactor(){
+    double limit = 1000.0;
+    if(fabs(1.0-SSCVal) > 1e-10){
+        return (max( min( 0.5/(1.0-SSCVal),limit), 1.0/limit));
+    }
+    else{
+	return limit;
+    }
+}
+double computeKiwielPenaltyUpdate(){	
+	double scalingFactor = computeKiwielScalingFactor();
+	computeScalingPenaltyUpdate( scalingFactor );
+	return scalingFactor;
 }
 void computeScalingPenaltyUpdate(double scaling){	
     for (int tS = 0; tS < nNodeSPs; tS++) {
 	computeScalingPenaltyUpdate(tS,scaling);
-#if 0
-        for (int i = 0; i < n1; i++) {
-	    scaling_matrix[tS][i] *= scaling;
-	    scaling_matrix[tS][i] = max( scaling_matrix[tS][i], MIN_PEN);
-    	}
-	subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
-#endif
     }
 }
 void computeScalingPenaltyUpdate(int tS, double scaling){	
@@ -1580,21 +1479,6 @@ void computeScalingPenaltyUpdate(int tS, double scaling){
     }
     subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
 }
-#if 0
-void computePenaltyGapVec(){
-    for (int tS = 0; tS < nNodeSPs; tS++) {
-    computeScalingPenaltyUpdate(tS,scaleVec_[tS]);
-#if 0
-        for (int i = 0; i < n1; i++) {
-	    scaling_matrix[tS][i] *= scaleVec_[tS];
-	    scaling_matrix[tS][i] = max( scaling_matrix[tS][i], MIN_PEN);
-    	}
-	subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
-#endif
-    }
-}
-#endif
-
 
 void displayParameters();
 #if 0

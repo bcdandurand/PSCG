@@ -1,5 +1,5 @@
-#ifndef PSCGMODELSCEN_H
-#define PSCGMODELSCEN_H
+#ifndef PSCGSCEN_H
+#define PSCGSCEN_H
 
 #include "StructureDefs.h"
 #include <list>
@@ -23,7 +23,7 @@
 #define MIP_TOL 1e-9
 
 
-ILOSTLBEGIN
+//ILOSTLBEGIN
 
 #if 1
 enum SolverReturnStatus {
@@ -58,8 +58,7 @@ int nS;
 int tS; //scenario
 bool initialised;
 
-IloEnv env;
-bool disableHeuristic;
+IloEnv &env;
 int nThreads;
 double pr;
 double *c;
@@ -106,8 +105,8 @@ int solverStatus_;
 
 
 public:
-PSCGScen():
-n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
+PSCGScen(IloEnv &envarg, int nthreads=1):
+n1(0),n2(0),nS(0),tS(-1),initialised(false),env(envarg),nThreads(nthreads),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
@@ -115,7 +114,7 @@ mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
 //copy constructor
 PSCGScen(const PSCGScen &other):
-n1(0),n2(0),nS(0),tS(-1),initialised(false),env(),disableHeuristic(false),nThreads(0),solverStatus_(0),
+n1(0),n2(0),nS(0),tS(-1),initialised(false),env(other.env),nThreads(other.nThreads),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
@@ -177,6 +176,7 @@ virtual double getMIPBestNodeVal(){
 virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool doReducePrint=true){
    cout << "setPrintLevel(): default implementation, does nothing" << endl;
 }
+void setNThreads(int nthreads){nThreads=nthreads;}
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 //virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual void setSolverStatus()=0;
@@ -826,12 +826,12 @@ printColTypesFirstStage();
 
 class PSCGScen_SMPS : public PSCGScen{
 public:
-PSCGScen_SMPS():PSCGScen(),LagrMIPInterface_(NULL){;}
+PSCGScen_SMPS(IloEnv &envarg):PSCGScen(envarg),LagrMIPInterface_(NULL){;}
 
 //copy constructor
 PSCGScen_SMPS(const PSCGScen_SMPS &other):PSCGScen(other),LagrMIPInterface_(NULL){;}
 
-int initialiseSMPS(PSCGParams *par, TssModel &smpsModel, int scenario);
+int initialiseSMPS(TssModel &smpsModel, int scenario);
 
 virtual void fixVarAt(int index, double fixVal){
       LagrMIPInterface_->setColBounds(index,fixVal,fixVal);
@@ -987,7 +987,6 @@ void setCPXMIPParameters(){
 	osi->setHintParam(OsiDoReducePrint,true);
 
 	if (nThreads >= 0) { osi->setIntParam(OsiParallelThreads, nThreads); }
-	//if (disableHeuristic) { osi->setIntParam(OsiHeurFreq, -1); }
 	//CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Preprocessing_BoundStrength, 1);
 	osi->setHintParam(OsiDoPresolveInInitial,true);
 	osi->setHintParam(OsiDoScale,true);
@@ -1240,7 +1239,7 @@ OsiCpxSolverInterface *LagrMIPInterface_;
 
 class PSCGScen_Bodur : public PSCGScen{
 public:
-PSCGScen_Bodur():PSCGScen(),
+PSCGScen_Bodur(IloEnv &envarg):PSCGScen(envarg),
 cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}
 PSCGScen_Bodur(const PSCGScen_Bodur &other):PSCGScen(other), 
 cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}

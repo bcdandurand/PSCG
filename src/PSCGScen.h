@@ -155,7 +155,7 @@ return 0;
 }
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false)=0;
 
-virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal)=0;
+virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal)=0;
 virtual int solveFeasibilityProblem()=0;
 virtual int getCPLEXErrorStatus(){
     cerr << "getCPLEXErrorStatus(): default implementation, does nothing, returning 0" << endl;
@@ -217,7 +217,7 @@ double evaluateSolution(const double* omega){
     for(int jj=0; jj<n2; jj++) retVal+= d[jj]*y[jj];
     return retVal;
 }
-double evaluateSolution(const double* omega, const double *z, const double *scaling_vector){
+double evaluateSolution(const double* omega, const double *z, const double rho, const double *scaling_vector){
 //TODO
     double retVal=0.0;
     if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*x[ii];}
@@ -347,7 +347,8 @@ bool roundIfClose(double &toBeRounded){
 #endif
 
 double getWeight0(){return weight0;}
-double getWeight(int vv){return weightSoln[vv];}
+//double getWeight(int vv){return weightSoln[vv];}
+double getWeight(int vv){return vecWeights[vv];}
 
 
 void printWeights(){
@@ -679,17 +680,17 @@ void setQuadraticTerm(const double scaling_const) {
 	}
 }
 
-void setQuadraticTerm(const double *scaling_vector) {
+void setQuadraticTerm(const double rho, const double *scaling_vector) {
 	for (int i = 0; i < n1; i++) {
-		quadraticTerm.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * scaling_vector[i]);
+		quadraticTerm.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * rho * scaling_vector[i]);
 	}
 }
 
-void solveMPLineSearch(const double *omega, const double *z, const double *scaling_vector, int vertIndex=-1, double *z_average=NULL); 
+void solveMPLineSearch(const double *omega, const double *z, const double rho, const double *scaling_vector, int vertIndex=-1, double *z_average=NULL); 
 void solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
-	const double *scaling_vector, bool updateDisp=false);
-void solveMPVertices(const double *omega, const double *z, const double *scaling_vector);
-void computeWeightsForCurrentSoln(const double *z); 
+	const double rho, const double *scaling_vector, bool updateDisp=false);
+void solveMPVertices(const double *omega, const double *z, const double rho, const double *scaling_vector);
+//void computeWeightsForCurrentSoln(const double *z); 
 void printDispersions(){
   cout << "Printing dispersions for scenario " << tS << endl;
   for(int ii=0; ii<n1; ii++){ cout << " " << dispersions[ii];}
@@ -727,11 +728,11 @@ void refresh(){
     for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
 }
 #endif
-void refresh(const double *omega, const double *z, const double *scaling_vector){
+void refresh(const double *omega, const double *z, const double rho, const double *scaling_vector){
     
     //setXToOptVertex();
     //setYToOptVertex();
-    solveMPLineSearch(omega, z, scaling_vector);
+    solveMPLineSearch(omega, z, rho, scaling_vector);
 
     //clearVertexHistory();
     //memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
@@ -797,11 +798,11 @@ cout << "PolishWeights(): sum: " << weightSum << endl;
 double getLagrBd(){return LagrBd;}
 double getProbabilities(){return pr;}
 
-double updateALValues(const double *omega, const double *z, const double *scaling_vector){
+double updateALValues(const double *omega, const double *z, const double rho, const double *scaling_vector){
     ALVal = 0.0;
     sqrNormDiscr = 0.0;
     for(int ii=0; ii<n1; ii++) {
-		sqrNormDiscr += scaling_vector[ii]*(x[ii]-z[ii])*(x[ii]-z[ii]);
+		sqrNormDiscr += rho*scaling_vector[ii]*(x[ii]-z[ii])*(x[ii]-z[ii]);
 		if(omega==NULL){ALVal += (c[ii])*x[ii];}
 		else{ALVal += (c[ii]+omega[ii])*x[ii];}
     }
@@ -841,7 +842,7 @@ virtual void fixVarAt(int index, double fixVal){
 virtual int initialLPSolve(const double* omega=NULL);
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
 
-virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
+virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void polishSolution(){
   for(int ii=0; ii<n1; ii++){
@@ -1248,7 +1249,7 @@ void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
 
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
 
-virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal);
+virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
     solverStatus_ = PSCG_OPTIMAL;

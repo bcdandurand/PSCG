@@ -221,7 +221,7 @@ int PSCGScen_Bodur::solveLagrangianProblem(const double *omega, bool doInitialSo
 	return 0;
 }
 #endif
-int PSCGScen_Bodur::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
+int PSCGScen_Bodur::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal){
 //TODO
     return solveLagrangianProblem(omega);
 }
@@ -356,20 +356,20 @@ if(omega==NULL){
 	
 	return solverStatus_;
 }
-int PSCGScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double* scal){
+int PSCGScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal){
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
         changeFromMILPToMIQP(); //This only does anything if the problem has not already been changed back
 	double *diag = new double[n1+n2];
 	if(omega!=NULL){
 	  for (int i = 0; i < n1; i++) {
-		osi->setObjCoeff(i, c[i] + omega[i] - z[i]*scal[i]);
-		diag[i]=scal[i];
+		osi->setObjCoeff(i, c[i] + omega[i] - z[i]*rho*scal[i]);
+		diag[i]=rho*scal[i];
 	  }
 	}
 	else{
 	  for (int i = 0; i < n1; i++) {
-		osi->setObjCoeff(i, c[i] - z[i]*scal[i]);
-		diag[i]=scal[i];
+		osi->setObjCoeff(i, c[i] - z[i]*rho*scal[i]);
+		diag[i]=rho*scal[i];
 	  }
 	}
 	for (int j=0; j<n2; j++){
@@ -402,7 +402,7 @@ int PSCGScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double
 	    memcpy(y_vertex,osi->getColSolution()+n1,n2*sizeof(double));
 	    objVal = osi->getObjValue();
 	    for(int ii=0; ii<n1; ii++){
-		objVal += 0.5*scal[ii]*z[ii]*z[ii];
+		objVal += 0.5*rho*scal[ii]*z[ii]*z[ii];
 	    }
 	}
 	for (int i = 0; i < n1; i++) {
@@ -465,7 +465,7 @@ cout << endl;
 
 
 //Not tested!
-void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const double *scaling_vector, int vertexIndex, double *z_average) {
+void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const double rho, const double *scaling_vector, int vertexIndex, double *z_average) {
 	
 	double numerator = 0.0;
 	double denominator = 0.0;
@@ -478,9 +478,9 @@ void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const dou
 	vertY = &(yVertices[vertexIndex][0]);
 	
 	for (int i = 0; i < n1; i++) {
-		if(omega==NULL){numerator -= (c[i] + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
-		else{numerator -= (c[i] + omega[i] + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
-		denominator += (vertX[i] - x[i]) * scaling_vector[i] * (vertX[i] - x[i]);
+		if(omega==NULL){numerator -= (c[i] + rho*scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
+		else{numerator -= (c[i] + omega[i] + rho*scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
+		denominator += (vertX[i] - x[i]) * rho*scaling_vector[i] * (vertX[i] - x[i]);
 	}
 	
 	for (int j = 0; j < n2; j++) {
@@ -516,18 +516,19 @@ void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const dou
 	vecWeights[vertexIndex]+=a;
 }
 
-void PSCGScen::solveMPVertices(const double *omega, const double *z, const double *scaling_vector)
+void PSCGScen::solveMPVertices(const double *omega, const double *z, const double rho, const double *scaling_vector)
 {
     for(int nn=0; nn<40; nn++){
-      solveMPLineSearch(omega,z,scaling_vector);
+      solveMPLineSearch(omega,z,rho,scaling_vector);
       for(int vv=0; vv<nVertices; vv++){
-	solveMPLineSearch(omega,z,scaling_vector,vv);
+	solveMPLineSearch(omega,z,rho,scaling_vector,vv);
       }
-      optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
+      optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,rho,scaling_vector)
     }
 
 }
 
+#if 0
 void PSCGScen::computeWeightsForCurrentSoln(const double *z) {
 //double *oldDispersions = new double[n1];
 //double absDiffSum=0.0;
@@ -574,9 +575,10 @@ void PSCGScen::computeWeightsForCurrentSoln(const double *z) {
 //cout << "Difference between old and new dispersions " << absDiffSum << endl;
 //delete [] oldDispersions;
 }
+#endif
 
 void PSCGScen::solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
-	const double *scaling_vector, bool updateDisp) {
+	const double rho, const double *scaling_vector, bool updateDisp) {
    double direction=1.0;
    try{
 #if 0
@@ -635,7 +637,7 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		cout << "Number of vertices: " << getNVertices() << endl;
 		cplexMP.exportModel("infeasModel.lp");
 		cout << "Refreshing solution..." << endl;
-		refresh(omega,z,scaling_vector);
+		refresh(omega,z,rho,scaling_vector);
 		//assert(false);
 		//throw(-1);
 	}
@@ -691,7 +693,7 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	cout << "MPSolve error: " << e.getMessage() << endl;
 	cout << "Exception caught...Refreshing solution..." << endl;
 	//refresh();
-	refresh(omega,z,scaling_vector);
+	refresh(omega,z,rho,scaling_vector);
 	e.end();
    }
 }

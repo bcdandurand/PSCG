@@ -14,8 +14,8 @@ using namespace std;
 
 PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),
-	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),phase(0){
+	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
+	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),innerSSCParam(0.99),phase(0){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -113,7 +113,7 @@ void PSCG::initialiseParameters(){
 
 	maxNoSteps = par->maxStep;
 	maxSeconds = par->maxSeconds;
-	fixInnerStep = par->fixInnerStep;
+	if(par->fixInnerStep > 1) noGSIts = par->fixInnerStep;
 	nVerticesUsed = par->UseVertexHistory;
 	nThreads = par->threads;
 	if (nThreads < 0) { nThreads = DEFAULT_THREADS; }
@@ -190,11 +190,12 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 	    omega_saved.push_back(new double[n1]);
 	    
 	    for (int i = 0; i < n1; i++) {
-		scaling_matrix[tS][i] = rho ;
+		//scaling_matrix[tS][i] = rho ;
+		scaling_matrix[tS][i] = 1.0 ;
 		//omega_saved[tS][i] = 0.0; //omega will be initialised from the node.
 		omega_centre[tS][i] = 0.0; 
 	    }
-	    subproblemSolvers[tS]->setQuadraticTerm(scaling_matrix[tS]);
+	    subproblemSolvers[tS]->setQuadraticTerm(rho,scaling_matrix[tS]);
 	}
 	zeroOmega();
 cout << "End setting up solvers at process " << mpiRank << endl;
@@ -324,8 +325,10 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
     	clearSPVertexHistory();
     	noSeriousSteps=0;
     	noConseqNullSteps=0;
+	innerSSCVal = 0.5;
 	double LagrLB_Local = 0.0;
-        setPenalty(1.0);
+        //setPenalty(1.0);
+if(mpiRank==0){cout << "Rho is: " << rho << endl;}
     	#ifdef KEEP_LOG
 	    for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
     	#endif
@@ -373,7 +376,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	    updateVertexHistory(tS);
 #if 0
 	    for (int i = 0; i < n1; i++) {
-	    	omega_current[tS][i] += scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    	omega_current[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 	    }
 #endif
 	}//for tS
@@ -416,13 +419,13 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	    reduceBuffer[1]=0.0;
 	    double ALVal_tS,sqrDiscrNorm_tS;
 	    for (int tS = 0; tS < nNodeSPs; tS++) {
-	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,scaling_matrix[tS]);
+	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
 		ALVal_Local += pr[tS]*ALVal_tS;
 		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
 		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
 		localDiscrepNorm += 0.5*pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
 		for (int i = 0; i < n1; i++) {
-		    omega_tilde[tS][i] = omega_centre[tS][i] + scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
 	    }
 	    #ifdef USING_MPI
@@ -438,11 +441,16 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 		ALVal = ALVal_Local;
 		discrepNorm = localDiscrepNorm;
 	    }
-#if 0
+            shouldContinue=true;
+#if 1
 	    if(discrepNorm >= 1e-20){
-		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,0.01*fabs(centreLagrLB)/discrepNorm) << endl;
+		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,fabs(centreLagrLB)/discrepNorm) << endl;
 		baselineRho = min(1e10,fabs(centreLagrLB)/discrepNorm);
 		setPenalty( baselineRho );
+	    }
+	    else{
+        	shouldContinue=false;
+		if(mpiRank==0){cout << "Terminating due to optimality at initial iteration..." << endl;}
 	    }
     	    if(currentLagrLB >= cutoffLagrLB){
 		modelStatus_[Z_STATUS]=Z_BOUNDED;
@@ -450,11 +458,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 		if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
       		//printStatus();
     	    }
-    	    else{
-        	shouldContinue=true;
-    	    }//else
 #endif
-            shouldContinue=true;
 #endif
 	}
 	if(mpiRank==0){cerr << "End initialIteration()" << endl;}
@@ -518,7 +522,7 @@ int PSCG::performColGenStep(){
 		//ALVal_tS = subproblemSolvers[tS]->getALVal();
 		//scaleVec_[tS] = 1.0;
 		lhsCritVal=0.0;
-	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,scaling_matrix[tS]);
+	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
 		ALVal_Local += pr[tS]*ALVal_tS;
 		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
 		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
@@ -576,9 +580,9 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		*(logFiles[tS]) << "Printing penalities: ";
 #endif
 		for(int ii=0; ii<n1; ii++){
-		    lhsCritVal += scaling_matrix[tS][ii]*z_current[ii]*(x_current[tS][ii]-z_current[ii]);
+		    lhsCritVal += rho*scaling_matrix[tS][ii]*z_current[ii]*(x_current[tS][ii]-z_current[ii]);
 #ifdef KEEP_LOG
-		    *(logFiles[tS]) << " " << scaling_matrix[tS][ii];
+		    *(logFiles[tS]) << " " << rho*scaling_matrix[tS][ii];
 #endif
 		}
 #ifdef KEEP_LOG
@@ -761,8 +765,8 @@ void PSCG::displayParameters(){
 	std::cout << "Maximum outer step: " << maxNoSteps << std::endl;
 	std::cout << "Maximum seconds spent on main updates: " << maxSeconds << std::endl;
 
-	if (fixInnerStep > 0) {
-		std::cout << "Number of inner loop iterations: " << fixInnerStep << std::endl;
+	if (noGSIts > 0) {
+		std::cout << "Number of inner loop iterations: " << noGSIts << std::endl;
 	}
 	else {
 		std::cout << "Number of inner loop iterations: " << "1" << std::endl;

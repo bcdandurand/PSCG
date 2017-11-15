@@ -76,7 +76,7 @@ void PSCGScen_Bodur::initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur,
 
 //Initialise SIPLIB
 //int CPLEXsolverSCG::initialiseSMPS(SMIP_fileRequest *request, int scenario) {
-int PSCGScen_SMPS::initialiseSMPS(TssModel &smpsModel, int scenario) {
+int PSCGScen_SMPS::initialiseSMPS(DecTssModel &smpsModel, int scenario) {
 	tS = scenario;
 	
 	//ProblemDataSMPS *problemSMPS = ProblemDataSMPS::getSingleton();
@@ -100,7 +100,7 @@ int PSCGScen_SMPS::initialiseSMPS(TssModel &smpsModel, int scenario) {
 	}
 	for (int j = 0; j < n2; j++) {
 		obj[j+n1] /= pr;  //More generally, divide by sum of probabilities. This is a hack; 
-				//the TssModel::decompose may need to be modified
+				//the DecTssModel::decompose may need to be modified
 				//in the dual decomp. case to avoid the need for this.
 		d[j] = obj[j+n1];
 	}
@@ -221,10 +221,12 @@ int PSCGScen_Bodur::solveLagrangianProblem(const double *omega, bool doInitialSo
 	return 0;
 }
 #endif
+#if 0
 int PSCGScen_Bodur::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal){
 //TODO
     return solveLagrangianProblem(omega);
 }
+#endif
 int PSCGScen_Bodur::solveFeasibilityProblem(){
 	
 	for (int i = 0; i < n1; i++) {
@@ -356,6 +358,7 @@ if(omega==NULL){
 	
 	return solverStatus_;
 }
+#if 0
 int PSCGScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal){
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
         changeFromMILPToMIQP(); //This only does anything if the problem has not already been changed back
@@ -413,6 +416,7 @@ int PSCGScen_SMPS::solveAugmentedLagrangianMIP(const double* omega, const double
 	osi->setSolvingMIQP(false);
    	delete [] diag; 
 }
+#endif
 
 int PSCGScen_SMPS::solveFeasibilityProblem(){
 

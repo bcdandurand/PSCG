@@ -6,7 +6,7 @@
 #include <iostream>
 #include <memory>
 #include <ilcplex/ilocplex.h>
-#include "TssModel.h"
+#include "DecTssModel.h"
 #include "OsiCpxSolverInterface.hpp"
 #include "PSCGParams.h"
 #include "ProblemDataBodur.h"
@@ -122,7 +122,7 @@ mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 
 //void initialiseBodur(ProblemDataBodur &pdBodur, SMIP_fileRequest* probSpecs, int scenario);
 //int initialiseSMPS(SMIP_fileRequest* probSpecs, int scenario);
-//int initialiseSMPS(SMIP_fileRequest* probSpecs, TssModel &smpsModel, int scenario);
+//int initialiseSMPS(SMIP_fileRequest* probSpecs, DecTssModel &smpsModel, int scenario);
 void finishInitialisation();
 
 ~PSCGScen(){
@@ -155,7 +155,7 @@ return 0;
 }
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false)=0;
 
-virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal)=0;
+//virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal)=0;
 virtual int solveFeasibilityProblem()=0;
 virtual int getCPLEXErrorStatus(){
     cerr << "getCPLEXErrorStatus(): default implementation, does nothing, returning 0" << endl;
@@ -834,7 +834,7 @@ PSCGScen_SMPS(IloEnv &envarg):PSCGScen(envarg),LagrMIPInterface_(NULL){;}
 //copy constructor
 PSCGScen_SMPS(const PSCGScen_SMPS &other):PSCGScen(other),LagrMIPInterface_(NULL){;}
 
-int initialiseSMPS(TssModel &smpsModel, int scenario);
+int initialiseSMPS(DecTssModel &smpsModel, int scenario);
 
 virtual void fixVarAt(int index, double fixVal){
       LagrMIPInterface_->setColBounds(index,fixVal,fixVal);
@@ -844,7 +844,7 @@ virtual void fixVarAt(int index, double fixVal){
 virtual int initialLPSolve(const double* omega=NULL);
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
 
-virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
+//virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void polishSolution(){
   for(int ii=0; ii<n1; ii++){
@@ -985,11 +985,11 @@ virtual void setInitialSolution(const int *indices, const double *startSol){
 
 void setCPXMIPParameters(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
-	osi->setIntParam(OsiOutputControl,0);
-	osi->setIntParam(OsiMIPOutputControl,0);
+	//osi->setIntParam(OsiOutputControl,0);
+	//osi->setIntParam(OsiMIPOutputControl,0);
 	osi->setHintParam(OsiDoReducePrint,true);
 
-	if (nThreads >= 0) { osi->setIntParam(OsiParallelThreads, nThreads); }
+	//if (nThreads >= 0) { osi->setIntParam(OsiParallelThreads, nThreads); }
 	//CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Preprocessing_BoundStrength, 1);
 	osi->setHintParam(OsiDoPresolveInInitial,true);
 	osi->setHintParam(OsiDoScale,true);
@@ -1000,6 +1000,8 @@ void setCPXMIPParameters(){
 	//osi->setDblParam(OsiDualTolerance, 1e-9);
 
 //#define MIP_TOL 1e-9
+	//osi->setIntParam(OsiOutputControl,0);
+	//osi->setIntParam(OsiMIPOutputControl,0);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_AbsMIPGap, MIP_TOL);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_MIPGap, MIP_TOL*1e-3);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_Integrality, MIP_TOL);
@@ -1015,8 +1017,8 @@ void setCPXMIPParameters(){
 
 virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool doReducePrint=true){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
-	osi->setIntParam(OsiOutputControl,outputControl);
-	osi->setIntParam(OsiMIPOutputControl,outputControlMIP);
+	//osi->setIntParam(OsiOutputControl,outputControl);
+	//osi->setIntParam(OsiMIPOutputControl,outputControlMIP);
 	osi->setHintParam(OsiDoReducePrint,doReducePrint);
 }
 
@@ -1251,7 +1253,7 @@ void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
 
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
 
-virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
+//virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
 virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
     solverStatus_ = PSCG_OPTIMAL;

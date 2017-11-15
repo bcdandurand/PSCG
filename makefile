@@ -3,7 +3,7 @@
 #LOCALDIRROOT = /lustre/pRMIT0153/infrastructure/SMI_Stuff
 #LOCALDIRROOT = /short/ka3/comp_infrastructure
 LOCALDIRROOT = /homes/bcdandurand/comp_infrastructure
-SMIDIR = $(LOCALDIRROOT)/CoinSMI
+#SMIDIR = $(LOCALDIRROOT)/CoinSMI
 SYSTEM     = x86-64_linux
 LIBFORMAT  = static_pic
 CPLEXDIR      = $(LOCALDIRROOT)/CPLEX/cplex
@@ -15,7 +15,8 @@ OPENMPIDIR = /usr/lib/openmpi/lib
 #LIBNUMADIR = /usr/lib/x86_64-linux-gnu
 #MPIDIRDSP = /nfs2/b216449/mpich-install/lib
 #DSPDIR = /homes/bcdandurand/DSP
-DSPDIR = $(LOCALDIRROOT)/DSP
+#DSPDIR = $(LOCALDIRROOT)/DSP
+DSPDIR = $(LOCALDIRROOT)/DSP-stable/DSP
 SRC = ./src
 OBJDIR = ./obj
 OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
@@ -43,18 +44,19 @@ CXXFLAGS = -O3 -g -std=c++11 -fpic
 # Stochastic data directory
 
 # additional C++ Compiler options for linking
-CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
-#CXXLINKFLAGS =  -Wl,--rpath -Wl,$(DSPDIR)/build/lib -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
+#CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
+CXXLINKFLAGS =  -Wl,--rpath -Wl,$(DSPDIR)/build/lib -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
 #CCOPT = -m64 -O -fPIC -fno-strict-aliasing -fexceptions -DNDEBUG -DIL_STD -std=c++0x
 
 # Include directories (we use the CYGPATH_W variables to allow compilation with Windows compilers)
 INCLTCLAP = -I $(LOCALDIRROOT) 
-INCLDSP = -I$(DSPDIR)/src/Model -I$(DSPDIR)/src -I$(DSPDIR)/src/Utility
-INCLSMI = -I$(SMIDIR)/include/coin 
+INCLDSP = -I$(DSPDIR)/build/include/coin -I$(DSPDIR)/src/Model -I$(DSPDIR)/src -I$(DSPDIR)/src/Utility
+#INCLSMI = -I$(SMIDIR)/include/coin 
 INCLCPLEX = -I$(CPLEXDIR)/include -I$(CONCERTDIR)/include 
 INCLMPI = -I$(OPENMPIDIR)/include
 
-INCL = $(INCLTCLAP) $(INCLDSP) $(INCLSMI) $(INCLCPLEX)
+INCL = $(INCLTCLAP) $(INCLDSP) $(INCLCPLEX)
+#INCL = $(INCLTCLAP) $(INCLDSP) $(INCLSMI) $(INCLCPLEX)
 #INCL = -I$(SMIDIR)/include/coin -I$(CPLEXDIR)/include -I$(CONCERTDIR)/include $(INCLDSP)
 #INCL += $(ADDINCFLAGS)
 
@@ -62,7 +64,7 @@ INCL = $(INCLTCLAP) $(INCLDSP) $(INCLSMI) $(INCLCPLEX)
 DSPLIBS = -L$(DSPDIR)/build/lib -lDsp 
 #DSPLIBS =  
 
-COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi -lOsiClp -lOsiCommonTests  
+#COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi -lOsiClp -lOsiCommonTests  
 #ALPSLIBS = -L$(ALPSDIR)/lib -lAlps -lBcps 
 #ALPSLIBS = -L$(ALPSDIR)/lib -lBcps 
 

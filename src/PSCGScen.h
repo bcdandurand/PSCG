@@ -1002,6 +1002,9 @@ void setCPXMIPParameters(){
 //#define MIP_TOL 1e-9
 	//osi->setIntParam(OsiOutputControl,0);
 	//osi->setIntParam(OsiMIPOutputControl,0);
+	//if (nThreads >= 0) { osi->setIntParam(OsiParallelThreads, nThreads); }
+	CPXsetintparam( osi->getEnvironmentPtr(), CPXPARAM_Parallel, CPX_PARALLEL_DETERMINISTIC); //no iteration message until solution
+	if (nThreads >= 0) CPXsetintparam( osi->getEnvironmentPtr(), CPXPARAM_Threads, nThreads); //no iteration message until solution
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_AbsMIPGap, MIP_TOL);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_MIPGap, MIP_TOL*1e-3);
 	CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_Integrality, MIP_TOL);

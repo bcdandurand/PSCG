@@ -14,7 +14,8 @@ CONCERTDIR    = $(LOCALDIRROOT)/CPLEX/concert
 OPENMPIDIR = /usr/lib/openmpi/lib
 #LIBNUMADIR = /usr/lib/x86_64-linux-gnu
 #MPIDIRDSP = /nfs2/b216449/mpich-install/lib
-DSPDIR = /homes/bcdandurand/DSP
+#DSPDIR = /homes/bcdandurand/DSP
+DSPDIR = $(LOCALDIRROOT)/DSP
 SRC = ./src
 OBJDIR = ./obj
 OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
@@ -43,11 +44,12 @@ CXXFLAGS = -O3 -g -std=c++11 -fpic
 
 # additional C++ Compiler options for linking
 CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
+#CXXLINKFLAGS =  -Wl,--rpath -Wl,$(DSPDIR)/build/lib -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
 #CCOPT = -m64 -O -fPIC -fno-strict-aliasing -fexceptions -DNDEBUG -DIL_STD -std=c++0x
 
 # Include directories (we use the CYGPATH_W variables to allow compilation with Windows compilers)
 INCLTCLAP = -I $(LOCALDIRROOT) 
-INCLDSP = -I$(DSPDIR)/src/Model -I$(DSPDIR)/src
+INCLDSP = -I$(DSPDIR)/src/Model -I$(DSPDIR)/src -I$(DSPDIR)/src/Utility
 INCLSMI = -I$(SMIDIR)/include/coin 
 INCLCPLEX = -I$(CPLEXDIR)/include -I$(CONCERTDIR)/include 
 INCLMPI = -I$(OPENMPIDIR)/include

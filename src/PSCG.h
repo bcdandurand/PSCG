@@ -20,7 +20,7 @@
 #include <sys/time.h>
 #include "PSCGParams.h"
 #include <utility>
-#include "TssModel.h"
+#include "DecTssModel.h"
 #include "PSCGScen.h"
 
 using namespace std;
@@ -78,7 +78,7 @@ enum SolverReturnStatus {
 class PSCG {
 public:
 PSCGParams *par;
-TssModel smpsModel;
+DecTssModel smpsModel;
 IloEnv env;
 int algorithm;
 vector<int> scenariosToThisModel;
@@ -288,7 +288,8 @@ double* getCurrentVarLbds(){return currentVarLB_;}
 double* getCurrentVarUbds(){return currentVarUB_;}
 char* getColTypes(){return colType_;}
 
-void cloneCurrentVarBds(double* &lbs, double* &ubs){
+void cloneCurrentVarBds(double*& lbs, double*& ubs){
+printCurrentVarBds();
     lbs = new double[n1];
     memcpy(lbs,currentVarLB_,n1*sizeof(double));
     ubs = new double[n1];
@@ -1432,11 +1433,13 @@ double getBaselinePenalty(){return baselineRho;}
 void setPenalty(double p){
     //rho=max(p,baselineRho);
     rho=max(p,1e-6);
+#if 0
     for (int tS = 0; tS < nNodeSPs; tS++) {
 	//setPenalty(tS,rho);
     	//subproblemSolvers[tS]->setQuadraticTerm(rho);
         subproblemSolvers[tS]->setQuadraticTerm(rho,scaling_matrix[tS]);
     }
+#endif
 //if(mpiRank==0) cout << "Penalty is now: " << rho << endl;
 }
 #if 0
@@ -1470,7 +1473,7 @@ double computeKiwielPenaltyUpdate(){
 }
 void computeScalingPenaltyUpdate(double scaling){	
     rho *= scaling;
-#if 1
+#if 0
     for (int tS = 0; tS < nNodeSPs; tS++) {
 	//computeScalingPenaltyUpdate(tS,scaling);
         subproblemSolvers[tS]->setQuadraticTerm(rho,scaling_matrix[tS]);

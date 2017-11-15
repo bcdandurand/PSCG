@@ -674,15 +674,17 @@ void removeBackVertex() {
 }
 #endif
 
+#if 0
 void setQuadraticTerm(const double scaling_const) {
 	for (int i = 0; i < n1; i++) {
 		quadraticTerm.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * scaling_const);
 	}
 }
+#endif
 
 void setQuadraticTerm(const double rho, const double *scaling_vector) {
 	for (int i = 0; i < n1; i++) {
-		quadraticTerm.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * rho * scaling_vector[i]);
+		quadraticTerm.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * scaling_vector[i]);
 	}
 }
 

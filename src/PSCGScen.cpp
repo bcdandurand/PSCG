@@ -590,26 +590,26 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	if(updateDisp) mpWeight0.setBounds(0.0,0.0);
 	IloNum weightObj0(0.0);
 	for (int wI = 0; wI < nVertices; wI++) {
-		weightObjective[wI] = baseWeightObj[wI];
+		weightObjective[wI] = baseWeightObj[wI]/rho;
 		if(omega!=NULL){	
 		    for (int i = 0; i < n1; i++) {
-			weightObjective[wI] += xVertices[wI][i] * omega[i];
+			weightObjective[wI] += xVertices[wI][i] * omega[i]/rho;
 		    }
 		}
 	}
 	if(omega!=NULL){	
 	    for (int i = 0; i < n1; i++) {
-		weightObj0 += x[i] * (c[i] + omega[i]);
+		weightObj0 += x[i] * (c[i] + omega[i])/rho;
 	    }
 	}
 	else{	
 	    for (int i = 0; i < n1; i++) {
-		weightObj0 += x[i] * (c[i]);
+		weightObj0 += x[i] * (c[i])/rho;
 	    }
 	}
 
 	for (int j = 0; j < n2; j++) {
-		weightObj0 += y[j] * d[j];
+		weightObj0 += y[j] * d[j]/rho;
 	}
 
 	mpObjective.setExpr(IloScalProd(mpWeightVariables, weightObjective) + weightObj0*mpWeight0 + quadraticTerm);

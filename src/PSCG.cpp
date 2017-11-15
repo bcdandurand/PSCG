@@ -15,7 +15,7 @@ using namespace std;
 PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
 	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
-	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),innerSSCParam(0.99),phase(0){
+	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),innerSSCParam(0.95),phase(0){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -261,6 +261,9 @@ void PSCG::initialiseModel(){
 	    smpsModel.copyCoreColUpper(origVarUB_,0);
 	    memcpy(currentVarLB_,origVarLB_,n1*sizeof(double));
 	    memcpy(currentVarUB_,origVarUB_,n1*sizeof(double));
+cout << "******************" << endl;
+printCurrentVarBds();
+cout << "******************" << endl;
 	    break;
 	  default:
 	    throw(-1);
@@ -278,6 +281,7 @@ void PSCG::initialiseModel(){
 void PSCG::installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs, double pen){
 //if(mpiRank==0){cerr << "Begin installSubproblem ";}
     for(int ii=0; ii<n1; ii++){
+	if(zLBs[ii] > zUBs[ii]) cerr << "Bounds inconsistent: " << zLBs[ii] << " > " << zUBs[ii] << endl;
 	assert(zLBs[ii] <= zUBs[ii]);
     }
     setLBsAllSPs(zLBs);
@@ -289,7 +293,7 @@ void PSCG::installSubproblem(double lb, vector<double*> &omega, const double *zL
     currentLagrLB=-COIN_DBL_MAX;
     centreLagrLB=-COIN_DBL_MAX;
     referenceLagrLB=lb;
-    setPenalty(pen);
+    //setPenalty(pen);
     printOriginalVarBds();
     printCurrentVarBds();
     //subproblemSolvers[0]->printXBounds();
@@ -299,6 +303,7 @@ void PSCG::installSubproblem(double lb, vector<double*> &omega, const double *zL
 void PSCG::installSubproblem(double lb, const double *zLBs, const double *zUBs, double pen){
 //if(mpiRank==0){cerr << "Begin installSubproblem ";}
     for(int ii=0; ii<n1; ii++){
+	if(zLBs[ii] > zUBs[ii]) cerr << "Bounds inconsistent: " << zLBs[ii] << " > " << zUBs[ii] << endl;
 	assert(zLBs[ii] <= zUBs[ii]);
     }
     setLBsAllSPs(zLBs);
@@ -310,7 +315,7 @@ void PSCG::installSubproblem(double lb, const double *zLBs, const double *zUBs, 
     currentLagrLB=-COIN_DBL_MAX;
     centreLagrLB=-COIN_DBL_MAX;
     referenceLagrLB=lb;
-    setPenalty(pen);
+    //setPenalty(pen);
     printOriginalVarBds();
     printCurrentVarBds();
     //subproblemSolvers[0]->printXBounds();

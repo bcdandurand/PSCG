@@ -70,12 +70,12 @@ double gapVal;
 
 double *x;
 double *dispersions;
-double *dispersions2;
 double *y;
 
 int nVertices;
 int maxNVertices;
 int oldestVertexIndex;
+double* solVertex;
 double* x_vertex;
 double* y_vertex;
 //double* x_vertex_opt;
@@ -107,7 +107,7 @@ int solverStatus_;
 public:
 PSCGScen(IloEnv &envarg, int nthreads=1):
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(envarg),nThreads(nthreads),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
+x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
@@ -115,7 +115,7 @@ mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
 //copy constructor
 PSCGScen(const PSCGScen &other):
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(other.env),nThreads(other.nThreads),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
+x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
@@ -128,10 +128,10 @@ void finishInitialisation();
 ~PSCGScen(){
   delete [] x;
   delete [] dispersions;
-  delete [] dispersions2;
   delete [] y;
   delete [] c;
   delete [] d;
+  delete [] solVertex;
   delete [] x_vertex;
   delete [] y_vertex;
 
@@ -169,7 +169,6 @@ cout << "getColTypes(): Default implementation: doing nothing" << endl;
 double* getC(){return c;}
 double* getD(){return d;}
 double* getDispersions(){return dispersions;}
-double* getDispersions2(){return dispersions2;}
 virtual double getMIPBestNodeVal(){
     cout << "getMIPBestNodeVal(): default implementation, does nothing" << endl;
 }
@@ -316,6 +315,7 @@ double computeIntegralityDiscr(){
     }
     return retval;
 }
+
 
 void compareLagrBds(const double* omega){
    cout << LagrBd << " ***versus*** " << evaluateVertexSolution(omega) << endl;
@@ -551,13 +551,11 @@ void clearVertexHistory(){
   for(int v=0; v<maxNVertices; v++) zeroOutVertexAtIndex(v);
   oldestVertexIndex=-1;
   nVertices=0;
-  for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
-  for(int ii=0; ii<n1; ii++){ dispersions2[ii]=0.0;}
+  resetDispersionsToZero();
 }
 
 void resetDispersionsToZero(){
-    for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
-    for(int ii=0; ii<n1; ii++){ dispersions2[ii]=0.0;}
+    for(int ii=0; ii<n1+n2; ii++){ dispersions[ii]=0.0;}
 }
 
 virtual void printLinCoeffs(){
@@ -693,10 +691,35 @@ void solveMPHistory(const double *omega, const double *z, const double *zLBs, co
 	const double rho, const double *scaling_vector, bool updateDisp=false);
 void solveMPVertices(const double *omega, const double *z, const double rho, const double *scaling_vector);
 //void computeWeightsForCurrentSoln(const double *z); 
+
+double* computeDispersions(){
+    resetDispersionsToZero();
+    for(int wI=0; wI<nVertices; wI++) {
+        for(int ii=0; ii<n1; ii++){
+	   dispersions[ii] += vecWeights[wI]*fabs(xVertices[wI][ii] - x[ii]);
+        }
+        for(int jj=0; jj<n2; jj++){
+	   dispersions[jj] += vecWeights[wI]*fabs(yVertices[wI][jj] - y[jj]);
+        }
+    }
+    return dispersions;
+}
+
+
 void printDispersions(){
   cout << "Printing dispersions for scenario " << tS << endl;
   for(int ii=0; ii<n1; ii++){ cout << " " << dispersions[ii];}
   cout << endl;
+  for(int ii=n1; ii<n1+n2; ii++){ cout << " " << dispersions[ii];}
+  cout << endl;
+}
+
+void checkWeightsSumToOne(){
+    double weightSum=0.0;
+    for(int wI=0; wI<nVertices; wI++) {
+	weightSum += vecWeights[wI];
+    }
+    cout << "Weight sum: " << weightSum << endl;
 }
 
 //void getLagrangianGradient(SMIP_qu_getLagrangianGradient* question, SMIP_ans_getLagrangianGradient* answer);

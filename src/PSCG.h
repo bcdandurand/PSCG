@@ -51,6 +51,21 @@ BINARY,
 INTEGER
 };
 
+typedef struct{
+    double a,b,c;
+} BranchingInfo;
+#ifdef USING_MPI
+static void compareBranchInfo(BranchingInfo *in, BranchingInfo *inout, int *len, MPI_Datatype *dptr){
+  for(int ii=0; ii< *len; ii++){
+    if(in[ii].c > inout[ii].c){
+	inout[ii].c = in[ii].c;
+	inout[ii].b = in[ii].b;
+	inout[ii].a = in[ii].a;
+    }
+  }
+}
+#endif
+
 
 #if 0
 enum SolverReturnStatus {
@@ -123,6 +138,7 @@ double* z_incumbent_; //this should be the last feasible z with best obj
 double *z_rounded;
 double *z_saved;
 double *z_average;
+double *z_dispersions;
 double* totalSoln_; //new double[n1+n2];
 vector<double> constrVec_; //This is filled with the value of Ax
 double *penSumLocal;// = new double[n1];
@@ -407,7 +423,7 @@ void updatePenalty(){
     //computeKiwielPenaltyUpdate();
     //double penaltyScale = 1.05;
     //computeScalingPenaltyUpdate(penaltyScale);
-    setPenalty(rho+10.0);
+    setPenalty(rho+baselineRho);
     //}
 #if 0
     switch(phase){
@@ -488,14 +504,20 @@ bool solveContinuousMPs(bool adjustPenalty){
 	//int maxNoGSIts = 20+currentIter_;
 	//int maxNoGSIts = 100 + 10*currentIter_;//max(20,currentIter_/2);
 	//int maxNoGSIts = min(100*currentIter_,10000000);//max(20,currentIter_/2);
+    	for (int tS = 0; tS < nNodeSPs; tS++) {
+	    for (int i = 0; i < n1; i++) {
+	        omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    }
+	    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+	}
 	for(int itGS=0; itGS < noGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	    memcpy(z_old,z_current, n1*sizeof(double));
 	    zDiff=0.0;
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		//*************************** Quadratic subproblem ***********************************
 			    
-		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);}
-		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);}
+		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);}
+		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);}
 		#ifdef KEEP_LOG
 		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 		#endif
@@ -586,6 +608,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
 	printStatus();
 
+
         if(currentLagrLB >= cutoffLagrLB){
       	    modelStatus_[Z_STATUS]=Z_BOUNDED;
 	    if(mpiRank==0){cout << "computeBound(): Terminating due to exceeding cutoff..." << endl;}
@@ -628,7 +651,8 @@ double computeBound(){
 
 	phase=0;
 
-	regularIteration(true,false);
+	if(currentIter_ < 100) regularIteration(true,true);
+	else regularIteration(false,true);
 #if 0
 	if(phase==0) regularIteration(true,true);
 	else if(phase==1) regularIteration(false,true);
@@ -639,6 +663,7 @@ double computeBound(){
     printStatus();
     //integralityDisc=evaluateIntegralityDiscrepancies();
     objVal=findPrimalFeasSolnWith(z_current);
+    findBranchingIndex();
     return currentLagrLB;
 }
 
@@ -779,8 +804,9 @@ void averageOfAll(double *z=NULL, double *weightVec=NULL){
 	computeAverageAcrossProcs(z_local, z, weight, n1);
 }
 
-void dispOfBestXVertices(double *retVec, double *aveVec=NULL, double *weightVec=NULL){
+void dispOfBestXVertices(double *retVec=NULL, double *aveVec=NULL, double *weightVec=NULL){
     double weightSum=0.0;
+    if(retVec==NULL){retVec=z_dispersions;}
     if(aveVec==NULL){aveVec=z_average;}
     for(int ii=0; ii<n1; ii++){
 	z_local[ii]=0.0;
@@ -804,30 +830,74 @@ void dispOfBestXVertices(double *retVec, double *aveVec=NULL, double *weightVec=
     computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
 }
 
-void dispOfAllXVertices(double *retVec, double *aveVec=NULL, double *weightVec=NULL){
-    double weightSum=0.0;
-    if(aveVec==NULL){aveVec=z_average;}
+void dispOfAllXVertices(double *retVec=NULL){
+    double *dispVec;
+    if(retVec==NULL){retVec=z_dispersions;}
     for(int ii=0; ii<n1; ii++){
 	z_local[ii]=0.0;
     }
-    if(weightVec!=NULL){
-      for(int tS=0; tS<nNodeSPs; tS++){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	dispVec = subproblemSolvers[tS]->computeDispersions();
         for(int ii=0; ii<n1; ii++){
-    	     z_local[ii] += weightVec[tS]*fabs(aveVec[ii] - subproblemSolvers[tS]->getXVertex()[ii]);
+    	     z_local[ii] += dispVec[ii];
 	}
-	weightSum += weightVec[tS];
-      }
     }
-    else{
-      for(int tS=0; tS<nNodeSPs; tS++){
-        for(int ii=0; ii<n1; ii++){
-    	     z_local[ii] += fabs(aveVec[ii] - x_current[tS][ii]);
-	}
-	weightSum += 1.0;
-      }
+    #ifdef USING_MPI
+    if(mpiSize>1){
+	MPI_Allreduce(z_local, retVec, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     }
-    computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
+    #endif
+    if(mpiSize==1){
+	for (int i=0; i<n1; i++) retVec[i] = z_local[i];
+    }
+    //computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
 }
+
+
+int findBranchingIndex(){
+    double *dispVec;
+    BranchingInfo localBranchInfo={-1.0,0.0,0.0};
+    BranchingInfo branchInfo={-1.0,0.0,0.0};
+    double maxDisp;
+    int maxDispIndex;
+    
+    for(int tS=0; tS<nNodeSPs; tS++){
+	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
+	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
+	dispVec = subproblemSolvers[tS]->computeDispersions();
+	if(integrDiscr_[tS] > localBranchInfo.c){
+	    maxDisp=0.0;
+	    maxDispIndex=-1;
+	    for(int ii=0; ii<n1; ii++){
+	      if(dispVec[ii] > maxDisp){ 
+		maxDisp = dispVec[ii];
+		maxDispIndex = ii;
+	      }
+	    }
+	    localBranchInfo.a=maxDispIndex;
+	    localBranchInfo.b=maxDisp;
+	    localBranchInfo.c=integrDiscr_[tS];
+	}
+    }
+#ifdef USING_MPI
+    MPI_Op myOp;
+    MPI_Datatype mpitype;
+    MPI_Type_contiguous(3, MPI_DOUBLE, &mpitype);
+    MPI_Type_commit( &mpitype);
+    MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
+    if(mpiSize>1){
+	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, MPI_COMM_WORLD);
+    }
+#endif
+    if(mpiSize==1){
+	branchInfo = localBranchInfo;
+    }
+    if(mpiRank==0){
+        cout << "Branching on index: " << branchInfo.a << " disps: " << branchInfo.b << "  " << branchInfo.c << endl;
+    }
+    return branchInfo.a;
+}
+
 #endif
 void computeAverageAcrossProcs(double *partialAveVec, double* retVec, double weight, int vecSize){
     double weightG=0.0;

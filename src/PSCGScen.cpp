@@ -142,10 +142,8 @@ void PSCGScen::finishInitialisation() {
 	x_vertex = new double[n1];
 	y_vertex = new double[n2];
 	x = new double[n1];
-	dispersions = new double[n1];
-	dispersions2 = new double[n1];
-	for(int ii=0; ii<n1; ii++){ dispersions[ii]=0.0;}
-	for(int ii=0; ii<n1; ii++){ dispersions2[ii]=0.0;}
+	dispersions = new double[n1+n2];
+	for(int ii=0; ii<n1+n2; ii++){ dispersions[ii]=0.0;}
 	y = new double[n2];
 	//x_vertex.add(n1,0.0);
 	//y_vertex.add(n2,0.0);
@@ -506,7 +504,6 @@ void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const dou
 		dir = vertX[i] - x[i];
 		oldX=x[i];
 		x[i] = x[i] + a * (vertX[i] - x[i]);
-		if(z_average!=NULL){dispersions2[i] = (1.0-a)*dispersions2[i] + a*fabs(z_average[i]-vertX[i]) ;}
 		//if(updateDisp){dispersions[i] = max( (1.0-a)*(dispersions[i]+fabs(x[i]-oldX)) , a*fabs(x[i]-vertX[i]) );}
 	}
 
@@ -522,6 +519,9 @@ void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const dou
 
 void PSCGScen::solveMPVertices(const double *omega, const double *z, const double rho, const double *scaling_vector)
 {
+    //optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,rho,scaling_vector)
+    solveMPLineSearch(omega,z,rho,scaling_vector);
+#if 0
     for(int nn=0; nn<40; nn++){
       solveMPLineSearch(omega,z,rho,scaling_vector);
       for(int vv=0; vv<nVertices; vv++){
@@ -529,6 +529,7 @@ void PSCGScen::solveMPVertices(const double *omega, const double *z, const doubl
       }
       optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,rho,scaling_vector)
     }
+#endif
 
 }
 
@@ -591,7 +592,7 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	    mpAuxVariables[i].setUB(zUBs[i]-z[i]);
 	}
 #endif
-	if(updateDisp) mpWeight0.setBounds(0.0,0.0);
+	//if(updateDisp) mpWeight0.setBounds(0.0,0.0);
 	IloNum weightObj0(0.0);
 	for (int wI = 0; wI < nVertices; wI++) {
 		weightObjective[wI] = baseWeightObj[wI]/rho;
@@ -669,29 +670,13 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		for (int i = 0; i < n1; i++) {
 			x[i] += weightSoln[wI] * xVertices[wI][i];
 		}
-#if 0
-	}
-
-
-      if(updateDisp){
-	for (int ii = 0; ii < n1; ii++) {
-		dispersions[ii] = 0.0;
-		for(int wI=0; wI<nVertices; wI++) {
-		    dispersions[ii] += weightSoln[wI]*fabs(xVertices[ii][wI]-x[ii]) ; 
-		}
-	}
-      }
-
-
-	for(int wI=0; wI<nVertices; wI++) {
-#endif		
 		
 		for (int j = 0; j < n2; j++) {
 			y[j] += weightSoln[wI] * yVertices[wI][j];
 		}
 	}
 	
-	if(updateDisp) mpWeight0.setBounds(0.0,1.0);
+	//if(updateDisp) mpWeight0.setBounds(0.0,1.0);
    }
    catch(IloException& e){
 	cout << "MPSolve error: " << e.getMessage() << endl;

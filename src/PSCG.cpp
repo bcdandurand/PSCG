@@ -15,7 +15,7 @@ using namespace std;
 PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
 	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
-	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.0),innerSSCParam(0.95),phase(0){
+	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -56,6 +56,7 @@ PSCG::~PSCG(){
 
 	delete [] z_current;
 	delete [] z_average;
+	delete [] z_dispersions;
 	delete [] z_old;
 #if 0
 	delete [] z_intdisp;
@@ -91,8 +92,8 @@ void PSCG::initialiseParameters(){
 	strcpy(filepath,par->filename.c_str());
 	initialiseFileName();
 	nS = par->noScenarios;
-	rho = par->penalty;
-	baselineRho=rho;
+	baselineRho = 1.0;//par->penalty;
+	rho = baselineRho;
 	//penMult = par->penaltyMult;
 	if (rho <= 0) {
 	    rho = DEFAULT_PENALTY;
@@ -191,7 +192,8 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 	    
 	    for (int i = 0; i < n1; i++) {
 		//scaling_matrix[tS][i] = rho ;
-		scaling_matrix[tS][i] = 1.0 ;
+		scaling_matrix[tS][i] = max( fabs(subproblemSolvers[tS]->getC()[i]),1.0);
+		//scaling_matrix[tS][i] = 1.0;
 		//omega_saved[tS][i] = 0.0; //omega will be initialised from the node.
 		omega_centre[tS][i] = 0.0; 
 	    }
@@ -246,6 +248,7 @@ void PSCG::initialiseModel(){
 	z_incumbent_ = new double[n1];
 	z_rounded = new double[n1];
 	z_average = new double[n1];
+	z_dispersions = new double[n1];
 	penSumLocal = new double[n1];
 	penSum = new double[n1];
 	origVarLB_ = new double[n1];
@@ -447,7 +450,8 @@ if(mpiRank==0){cout << "Rho is: " << rho << endl;}
 		discrepNorm = localDiscrepNorm;
 	    }
             shouldContinue=true;
-#if 1
+
+#if 0
 	    if(discrepNorm >= 1e-20){
 		if(mpiRank==0) cout << "Initial penalty value: " << min(1e10,fabs(centreLagrLB)/discrepNorm) << endl;
 		baselineRho = min(1e10,fabs(centreLagrLB)/discrepNorm);
@@ -463,6 +467,8 @@ if(mpiRank==0){cout << "Rho is: " << rho << endl;}
 		if(mpiRank==0){cout << "Terminating due to exceeding cutoff..." << endl;}
       		//printStatus();
     	    }
+#else
+	    rho=baselineRho;
 #endif
 #endif
 	}

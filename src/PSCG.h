@@ -52,7 +52,7 @@ INTEGER
 };
 
 typedef struct{
-    double a,b,c;
+    double a,b,c,d;
 } BranchingInfo;
 #ifdef USING_MPI
 static void compareBranchInfo(BranchingInfo *in, BranchingInfo *inout, int *len, MPI_Datatype *dptr){
@@ -162,8 +162,9 @@ double centreLagrLB;
 double referenceLagrLB;
 double cutoffLagrLB;
 double ALVal;
-//double incumbentVal_;
+
 double objVal;
+double incumbentVal;
 
 // Norms
 double discrepNorm;
@@ -295,6 +296,8 @@ void installSubproblem(double lb, const double *zLBs, const double *zUBs, double
 
 
 double *getZ(){return z_current;}
+double *getZRounded(){return z_rounded;}
+double *getZIncumbent(){return z_incumbent_;}
 double *getZAverage(){return z_average;}
 double getSqrDiscrNorm(){return discrepNorm;}
 
@@ -347,6 +350,7 @@ vector<double*>& getOmegaCurrent(){return omega_current;}
 vector<double*>& getOmegaCentre(){return omega_centre;}
 double *getIncumbentZ(){return z_incumbent_;}
 double getObjVal(){return objVal;}
+double getIncumbentVal(){return incumbentVal;}
 
 void readZIntoModel(const double* z){
     memcpy(z_current,z,n1*sizeof(double));
@@ -504,19 +508,29 @@ bool solveContinuousMPs(bool adjustPenalty){
 	//int maxNoGSIts = 20+currentIter_;
 	//int maxNoGSIts = 100 + 10*currentIter_;//max(20,currentIter_/2);
 	//int maxNoGSIts = min(100*currentIter_,10000000);//max(20,currentIter_/2);
+#if 0
     	for (int tS = 0; tS < nNodeSPs; tS++) {
 	    for (int i = 0; i < n1; i++) {
 	        omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 	    }
 	    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 	}
+#endif
 	for(int itGS=0; itGS < noGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	    memcpy(z_old,z_current, n1*sizeof(double));
 	    zDiff=0.0;
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		//*************************** Quadratic subproblem ***********************************
 			    
-		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);}
+		if(subproblemSolvers[tS]->getNVertices()>0){
+		    for(int iii=0; iii<10; iii++){
+	    		for (int i = 0; i < n1; i++) {
+	        	    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    		}
+	    	    	subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		    	subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
+		    }
+		}
 		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);}
 		#ifdef KEEP_LOG
 		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
@@ -637,9 +651,10 @@ double computeBound(){
     //SSCParam = 0.10;
     int SPStatus=initialIteration();
     //if(mpiRank==0) cout << "After initial iteration: currentLB: " << trialLagrLB << " versus refLB: " << referenceLagrLB << endl;;
-    
-    //shouldFathomByOpt = false;
-    //shouldTerminate=false;
+    return processBound();    
+}
+
+double processBound(){
     for(currentIter_=0; shouldContinue; currentIter_++){
 	if(mpiRank==0) cout << "Regular iteration " << currentIter_ << endl;
 	#ifdef KEEP_LOG
@@ -854,10 +869,10 @@ void dispOfAllXVertices(double *retVec=NULL){
 }
 
 
-int findBranchingIndex(){
+BranchingInfo findBranchingIndex(){
     double *dispVec;
-    BranchingInfo localBranchInfo={-1.0,0.0,0.0};
-    BranchingInfo branchInfo={-1.0,0.0,0.0};
+    BranchingInfo localBranchInfo={-1.0,0.0,0.0,0.0};
+    BranchingInfo branchInfo={-1.0,0.0,0.0,0.0};
     double maxDisp;
     int maxDispIndex;
     
@@ -866,23 +881,23 @@ int findBranchingIndex(){
 	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
 	dispVec = subproblemSolvers[tS]->computeDispersions();
 	if(integrDiscr_[tS] > localBranchInfo.c){
-	    maxDisp=0.0;
-	    maxDispIndex=-1;
+	    localBranchInfo.c=integrDiscr_[tS];
+	    localBranchInfo.a=-1;
+	    localBranchInfo.b=0.0;
 	    for(int ii=0; ii<n1; ii++){
-	      if(dispVec[ii] > maxDisp){ 
-		maxDisp = dispVec[ii];
-		maxDispIndex = ii;
+	      if(dispVec[ii] > localBranchInfo.b){ 
+	        localBranchInfo.a = ii;
+		localBranchInfo.b = dispVec[ii];
+	        localBranchInfo.d=subproblemSolvers[tS]->getX()[ii];
 	      }
 	    }
-	    localBranchInfo.a=maxDispIndex;
-	    localBranchInfo.b=maxDisp;
-	    localBranchInfo.c=integrDiscr_[tS];
+	    
 	}
     }
 #ifdef USING_MPI
     MPI_Op myOp;
     MPI_Datatype mpitype;
-    MPI_Type_contiguous(3, MPI_DOUBLE, &mpitype);
+    MPI_Type_contiguous(4, MPI_DOUBLE, &mpitype);
     MPI_Type_commit( &mpitype);
     MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
     if(mpiSize>1){
@@ -893,9 +908,9 @@ int findBranchingIndex(){
 	branchInfo = localBranchInfo;
     }
     if(mpiRank==0){
-        cout << "Branching on index: " << branchInfo.a << " disps: " << branchInfo.b << "  " << branchInfo.c << endl;
+        cout << "Branching on index: " << branchInfo.a << " disps: " << branchInfo.b << "  " << branchInfo.c << " with value " << branchInfo.d << endl;
     }
-    return branchInfo.a;
+    return branchInfo;
 }
 
 #endif
@@ -1287,10 +1302,10 @@ void roundCurrentZ(double *z=NULL){
 }
 
 bool evaluateFeasibleZ(){
-    //if(getIncumbentVal() > objVal){ 
-    if(true){ 
+    if(incumbentVal > objVal){ 
+	incumbentVal = objVal;
 if(mpiRank==0){
-    cout << "New incumbent value: " << objVal << " and its corresponding solution: " << endl;
+    cout << "New incumbent value: " << incumbentVal << " and its corresponding solution: " << endl;
     printZRounded();
 }
 	memcpy( z_incumbent_, z_rounded, n1*sizeof(double) );

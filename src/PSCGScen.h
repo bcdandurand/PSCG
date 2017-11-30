@@ -698,7 +698,7 @@ double* computeDispersions(){
         for(int ii=0; ii<n1; ii++){
 	   dispersions[ii] += vecWeights[wI]*fabs(xVertices[wI][ii] - x[ii]);
         }
-        for(int jj=0; jj<n2; jj++){
+        for(int jj=n1; jj<n1+n2; jj++){
 	   dispersions[jj] += vecWeights[wI]*fabs(yVertices[wI][jj] - y[jj]);
         }
     }

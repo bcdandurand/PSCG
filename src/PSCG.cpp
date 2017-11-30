@@ -13,8 +13,9 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 using namespace std;
 
 PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
-LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
-	mpiRank(0),mpiSize(1),totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
+LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
+	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
+	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
 	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0){
 
    	//******************Read Command Line Parameters**********************

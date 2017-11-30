@@ -58,6 +58,7 @@ typedef struct{
 static void compareBranchInfo(BranchingInfo *in, BranchingInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
     if(in[ii].c > inout[ii].c){
+	inout[ii].d = in[ii].d;
 	inout[ii].c = in[ii].c;
 	inout[ii].b = in[ii].b;
 	inout[ii].a = in[ii].a;
@@ -122,10 +123,12 @@ bool omegaIsZero_;
 bool omegaUpdated_;
 bool shouldTerminate;
 
+
 double innerSSCVal;
 double SSCVal;
 double SSCParam;
 double innerSSCParam;
+double tCritVal;
 //double *scaleVec_;
 
 vector<double*> x_current;
@@ -300,6 +303,8 @@ double *getZRounded(){return z_rounded;}
 double *getZIncumbent(){return z_incumbent_;}
 double *getZAverage(){return z_average;}
 double getSqrDiscrNorm(){return discrepNorm;}
+double getTCritVal(){return tCritVal;}
+void printTCritVal(){if(mpiRank==0) cout << "tCritVal: " << tCritVal << endl;}
 
 double* getOrigVarLbds(){return origVarLB_;}
 double* getOrigVarUbds(){return origVarUB_;}
@@ -668,6 +673,8 @@ double processBound(){
 
 	if(currentIter_ < 100) regularIteration(true,true);
 	else regularIteration(false,true);
+    printTCritVal();
+        //if(currentIter_ < 10 || (currentIter_%10==0)) objVal=findPrimalFeasSolnWith(z_current);
 #if 0
 	if(phase==0) regularIteration(true,true);
 	else if(phase==1) regularIteration(false,true);
@@ -873,8 +880,6 @@ BranchingInfo findBranchingIndex(){
     double *dispVec;
     BranchingInfo localBranchInfo={-1.0,0.0,0.0,0.0};
     BranchingInfo branchInfo={-1.0,0.0,0.0,0.0};
-    double maxDisp;
-    int maxDispIndex;
     
     for(int tS=0; tS<nNodeSPs; tS++){
 	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
@@ -886,9 +891,9 @@ BranchingInfo findBranchingIndex(){
 	    localBranchInfo.b=0.0;
 	    for(int ii=0; ii<n1; ii++){
 	      if(dispVec[ii] > localBranchInfo.b){ 
-	        localBranchInfo.a = ii;
 		localBranchInfo.b = dispVec[ii];
-	        localBranchInfo.d=subproblemSolvers[tS]->getX()[ii];
+	        localBranchInfo.a = ii;
+	        localBranchInfo.d = subproblemSolvers[tS]->getX()[ii];
 	      }
 	    }
 	    
@@ -1351,6 +1356,7 @@ double computeSSCVal(){
         if(mpiRank==0){cout << mpiRank << " (ALVal,trialLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << trialLagrLB << ")" << endl;	
 	cout << "regularIteration(): Something probably went wrong with the last computation of trialLagrLB, returning..." << endl;}
     }
+    tCritVal = ALVal + 0.5*discrepNorm  - centreLagrLB;
     shouldTerminate = (ALVal + 0.5*discrepNorm  - centreLagrLB < SSC_DEN_TOL) && (discrepNorm < 1e-20);
     if(shouldTerminate){return 0.0;}
     else{

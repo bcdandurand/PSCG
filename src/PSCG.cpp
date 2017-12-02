@@ -16,7 +16,7 @@ PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
-	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0){
+	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritParam(1e-10){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -212,34 +212,29 @@ void PSCG::initialiseModel(){
 	    n1 = pdBodur.get_n1();
 	    n2 = pdBodur.get_n2();
 	    nS = pdBodur.get_nS();
-	    totalSoln_=new double[n1+n2];
-	    colType_ = new char[n1];
-	    intVar_ = new int[n1];
-	    numIntVars_=0;
 	    break;
 	  case 2:
 	    smpsModel.readSmps(par->filename.c_str());
 	    n1 = smpsModel.getNumCols(0);
 	    n2 = smpsModel.getNumCols(1);
-	    totalSoln_=new double[n1+n2];
 	    nS = smpsModel.getNumScenarios();
-		//Is there something wrong with StoModel::getNumIntegers(0) ???
-	    //numIntVars_=smpsModel.getNumIntegers(0); //first-stage only
-	    colType_ = new char[n1];
-	    intVar_ = new int[n1];
-	    numIntVars_=0;
-	    memcpy(colType_,smpsModel.getCtypeCore(0),n1*sizeof(char));
-	    for(int i=0; i<n1; i++){
-//cout << " " << colType_[i];
-		if(colType_[i]=='I' || colType_[i]=='B'){
-		    intVar_[numIntVars_++]=i;
-		}
-	    }
-	    //assert(j==numIntVars_);
 	    break;
 	  default:
 	    throw(-1);
 	    break;
+	}
+	totalSoln_=new double[n1+n2];
+	colType_ = new char[n1+n2];
+	intVar_ = new int[n1+n2];
+	numIntVars_=0;
+	if(ftype==2){
+	    memcpy(colType_,smpsModel.getCtypeCore(0),n1*sizeof(char));
+	    memcpy(colType_+n1,smpsModel.getCtypeCore(1),n2*sizeof(char));
+	    for(int i=0; i<n1+n2; i++){
+		if(colType_[i]=='I' || colType_[i]=='B'){
+		    intVar_[numIntVars_++]=i;
+		}
+	    }
 	}
 
 	z_current = new double[n1];
@@ -282,48 +277,41 @@ cout << "******************" << endl;
     	}
 }
 
-void PSCG::installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs, double pen){
-//if(mpiRank==0){cerr << "Begin installSubproblem ";}
+
+void PSCG::installSubproblem(double lb, const double *zLBs, const double *zUBs){
     for(int ii=0; ii<n1; ii++){
 	if(zLBs[ii] > zUBs[ii]) cerr << "Bounds inconsistent: " << zLBs[ii] << " > " << zUBs[ii] << endl;
 	assert(zLBs[ii] <= zUBs[ii]);
     }
     setLBsAllSPs(zLBs);
     setUBsAllSPs(zUBs);
-//if(mpiRank==0){cout << "Branching at (indices,bounds,type): ";}
-    readOmegaIntoModel(omega);
-    //loadOmega();
-    //zeroOmega();
     currentLagrLB=-COIN_DBL_MAX;
     centreLagrLB=-COIN_DBL_MAX;
     referenceLagrLB=lb;
-    //setPenalty(pen);
     printOriginalVarBds();
     printCurrentVarBds();
-    //subproblemSolvers[0]->printXBounds();
-//if(mpiRank==0){cerr << "End installSubproblem ";}
+}
+void PSCG::installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs){
+    installSubproblem(lb, zLBs, zUBs);
+    readOmegaIntoModel(omega);
 }
 
-void PSCG::installSubproblem(double lb, const double *zLBs, const double *zUBs, double pen){
-//if(mpiRank==0){cerr << "Begin installSubproblem ";}
-    for(int ii=0; ii<n1; ii++){
+void PSCG::installSubproblem(double lb, const vector<int> &indices, const vector<double> &zLBs, const vector<double> &zUBs){
+    for(int ii=0; ii<indices.size(); ii++){
 	if(zLBs[ii] > zUBs[ii]) cerr << "Bounds inconsistent: " << zLBs[ii] << " > " << zUBs[ii] << endl;
 	assert(zLBs[ii] <= zUBs[ii]);
     }
-    setLBsAllSPs(zLBs);
-    setUBsAllSPs(zUBs);
-//if(mpiRank==0){cout << "Branching at (indices,bounds,type): ";}
-    //readOmegaIntoModel(omega);
-    //loadOmega();
-    //zeroOmega();
+    restoreOriginalVarBounds();
+    setBdsAllSPs(indices, zLBs, zUBs);
     currentLagrLB=-COIN_DBL_MAX;
     centreLagrLB=-COIN_DBL_MAX;
     referenceLagrLB=lb;
-    //setPenalty(pen);
     printOriginalVarBds();
     printCurrentVarBds();
-    //subproblemSolvers[0]->printXBounds();
-//if(mpiRank==0){cerr << "End installSubproblem ";}
+}
+void PSCG::installSubproblem(double lb, vector<double*> &omega, const vector<int> &indices, const vector<double> &zLBs, const vector<double> &zUBs){
+    installSubproblem(lb, indices, zLBs, zUBs);
+    readOmegaIntoModel(omega);
 }
 
 int PSCG::initialIteration(){

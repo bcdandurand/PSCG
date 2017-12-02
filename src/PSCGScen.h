@@ -187,6 +187,12 @@ cerr << "setLBs(): Default implementation does nothing." << endl;
 virtual void setUBs(const double *ubs, int nUBs){
 cerr << "setLBs(): Default implementation does nothing." << endl;
 }
+virtual void setBounds(const double *lbs, const double *ubs, int nBds){
+cerr << "setBounds(): Default implementation does nothing." << endl;
+}
+virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
+cerr << "setBounds(): Default implementation does nothing." << endl;
+}
 #if 0
 void updateOptSoln(){
    if(x_vertex_opt==NULL) x_vertex_opt = new double[n1];
@@ -979,6 +985,13 @@ virtual void setUBs(const double *ubs, int nUBs){
     for(int ii=0; ii<nUBs; ii++){
 	LagrMIPInterface_->setColUpper(ii,ubs[ii]);
     }
+}
+virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
+    for(int ii=0; ii<inds.size(); ii++){
+	LagrMIPInterface_->setColLower(inds[ii],lbs[ii]);
+	LagrMIPInterface_->setColUpper(inds[ii],ubs[ii]);
+    }
+
 }
 
 virtual const char* getColTypes(){

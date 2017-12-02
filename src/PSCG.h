@@ -39,7 +39,7 @@ using namespace std;
 
 #define MAX_INNER_LOOP 200
 #define DEFAULT_PENALTY 100
-#define KEEP_LOG
+//#define KEEP_LOG
 
 // Parameters for newConvergenceCriterion
 
@@ -52,16 +52,31 @@ INTEGER
 };
 
 typedef struct{
-    double a,b,c,d;
+    //double a,b,c,d;
+    double rank,scen,index,disp,intDiscr,brVal;
 } BranchingInfo;
 #ifdef USING_MPI
 static void compareBranchInfo(BranchingInfo *in, BranchingInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
-    if(in[ii].c > inout[ii].c){
-	inout[ii].d = in[ii].d;
-	inout[ii].c = in[ii].c;
-	inout[ii].b = in[ii].b;
-	inout[ii].a = in[ii].a;
+    if(in[ii].intDiscr > inout[ii].intDiscr){
+	inout[ii].rank = in[ii].rank;
+	inout[ii].scen = in[ii].scen;
+	inout[ii].index = in[ii].index;
+	inout[ii].disp = in[ii].disp;
+	inout[ii].intDiscr = in[ii].intDiscr;
+	inout[ii].brVal = in[ii].brVal;
+    }
+  }
+}
+static void compareBranchInfo2(BranchingInfo *in, BranchingInfo *inout, int *len, MPI_Datatype *dptr){
+  for(int ii=0; ii< *len; ii++){
+    if(in[ii].disp > inout[ii].disp){
+	inout[ii].rank = in[ii].rank;
+	inout[ii].scen = in[ii].scen;
+	inout[ii].index = in[ii].index;
+	inout[ii].disp = in[ii].disp;
+	inout[ii].intDiscr = in[ii].intDiscr;
+	inout[ii].brVal = in[ii].brVal;
     }
   }
 }
@@ -129,6 +144,7 @@ double SSCVal;
 double SSCParam;
 double innerSSCParam;
 double tCritVal;
+double tCritParam;
 //double *scaleVec_;
 
 vector<double*> x_current;
@@ -277,6 +293,15 @@ void setUBsAllSPs(const double *ubs){
     }
     memcpy(currentVarUB_,ubs,n1*sizeof(double));		
 }
+void setBdsAllSPs(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	subproblemSolvers[tS]->setBounds(inds, lbs, ubs);
+    }
+    for(int ii=0; ii<inds.size(); ii++){
+	currentVarLB_[inds[ii]]=lbs[ii];
+	currentVarUB_[inds[ii]]=ubs[ii];
+    }
+}
 
 void restoreOriginalVarBounds(){
     for(int tS=0; tS<nNodeSPs; tS++){
@@ -292,10 +317,12 @@ void clearSPVertexHistory(){
 }
 
 
-void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs, double pen);
+void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs);
+void installSubproblem(double lb, vector<double*> &omega, const vector<int> &indices, const vector<double> &zLBs, const vector<double> &zUBs);
 
 
-void installSubproblem(double lb, const double *zLBs, const double *zUBs, double pen);
+void installSubproblem(double lb, const double *zLBs, const double *zUBs);
+void installSubproblem(double lb, const vector<int> &indices, const vector<double> &zLBs, const vector<double> &zUBs);
 
 
 double *getZ(){return z_current;}
@@ -480,6 +507,9 @@ void updateVertexHistory(int tS){
 
 void setMaxNoSteps(int noSteps){maxNoSteps=noSteps;}
 void setMaxNoConseqNullSteps(int noNullSteps){maxNoConseqNullSteps=noNullSteps;}
+void setSSCParam(double ssc){SSCParam=ssc;}
+void setTCritParam(double tcrit){tCritParam=tcrit;}
+void setPhase(int ph){phase=ph;}
 
 void preSolveMP(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
@@ -660,25 +690,27 @@ double computeBound(){
 }
 
 double processBound(){
+    bool updatePenalty=true;
     for(currentIter_=0; shouldContinue; currentIter_++){
 	if(mpiRank==0) cout << "Regular iteration " << currentIter_ << endl;
 	#ifdef KEEP_LOG
 	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
 	#endif
-        if(currentIter_ < 1) phase=0;
+        //if(currentIter_ < 1) phase=0;
         //else if(currentIter_ < 20) phase=1;
-        else phase=1;
+        //else phase=1;
 
 	phase=0;
 
-	if(currentIter_ < 100) regularIteration(true,true);
-	else regularIteration(false,true);
+	if(currentIter_>50) updatePenalty=false;
+	//if(currentIter_ < 100) regularIteration(true,true);
+	//else regularIteration(false,true);
     printTCritVal();
         //if(currentIter_ < 10 || (currentIter_%10==0)) objVal=findPrimalFeasSolnWith(z_current);
-#if 0
-	if(phase==0) regularIteration(true,true);
-	else if(phase==1) regularIteration(false,true);
-	else regularIteration(false,false);
+#if 1
+	if(phase==0) regularIteration(updatePenalty,true);
+	else if(phase==1) regularIteration(updatePenalty,true);
+	else regularIteration(updatePenalty,false);
 #endif
     }// main loop over currentIter_
 
@@ -878,22 +910,22 @@ void dispOfAllXVertices(double *retVec=NULL){
 
 BranchingInfo findBranchingIndex(){
     double *dispVec;
-    BranchingInfo localBranchInfo={-1.0,0.0,0.0,0.0};
-    BranchingInfo branchInfo={-1.0,0.0,0.0,0.0};
+    BranchingInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    BranchingInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
     
     for(int tS=0; tS<nNodeSPs; tS++){
 	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
 	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
 	dispVec = subproblemSolvers[tS]->computeDispersions();
-	if(integrDiscr_[tS] > localBranchInfo.c){
-	    localBranchInfo.c=integrDiscr_[tS];
-	    localBranchInfo.a=-1;
-	    localBranchInfo.b=0.0;
+	if(integrDiscr_[tS] > localBranchInfo.intDiscr){
+	    localBranchInfo.intDiscr=integrDiscr_[tS];
+	    localBranchInfo.index=-1;
+	    localBranchInfo.disp=0.0;
 	    for(int ii=0; ii<n1; ii++){
-	      if(dispVec[ii] > localBranchInfo.b){ 
-		localBranchInfo.b = dispVec[ii];
-	        localBranchInfo.a = ii;
-	        localBranchInfo.d = subproblemSolvers[tS]->getX()[ii];
+	      if(dispVec[ii] > localBranchInfo.disp){ 
+		localBranchInfo.disp = dispVec[ii];
+	        localBranchInfo.index = ii;
+	        localBranchInfo.brVal = subproblemSolvers[tS]->getX()[ii];
 	      }
 	    }
 	    
@@ -902,7 +934,7 @@ BranchingInfo findBranchingIndex(){
 #ifdef USING_MPI
     MPI_Op myOp;
     MPI_Datatype mpitype;
-    MPI_Type_contiguous(4, MPI_DOUBLE, &mpitype);
+    MPI_Type_contiguous(6, MPI_DOUBLE, &mpitype);
     MPI_Type_commit( &mpitype);
     MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
     if(mpiSize>1){
@@ -913,7 +945,59 @@ BranchingInfo findBranchingIndex(){
 	branchInfo = localBranchInfo;
     }
     if(mpiRank==0){
-        cout << "Branching on index: " << branchInfo.a << " disps: " << branchInfo.b << "  " << branchInfo.c << " with value " << branchInfo.d << endl;
+        cout << "Branching on index: " << branchInfo.index << " disps: " << branchInfo.disp << " intDiscr " << branchInfo.intDiscr << " with value " << branchInfo.brVal << endl;
+    }
+    return branchInfo;
+}
+
+BranchingInfo findBranchingIndex2(){
+    double *dispVec;
+    BranchingInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    BranchingInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    dispOfAllXVertices();
+    
+    for(int tS=0; tS<nNodeSPs; tS++){
+	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
+	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
+	dispVec = subproblemSolvers[tS]->computeDispersions();
+	    localBranchInfo.intDiscr=integrDiscr_[tS];
+	    localBranchInfo.index=-1;
+	    localBranchInfo.disp=0.0;
+	    for(int ii=0; ii<n1; ii++){
+	      if(!indexIsInt(ii)){continue;}
+	      if(z_dispersions[ii] > localBranchInfo.disp){ 
+	        localBranchInfo.index = ii;
+		localBranchInfo.disp = z_dispersions[ii];
+	        localBranchInfo.brVal = subproblemSolvers[tS]->getX()[ii];
+	      }
+	    }
+	    for(int ii=n1; ii<n1+n2; ii++){
+	      if(!indexIsInt(ii)){continue;}
+	      if(dispVec[ii] > localBranchInfo.disp){ 
+		localBranchInfo.rank = mpiRank;
+		localBranchInfo.scen = tS;
+		localBranchInfo.disp = dispVec[ii];
+	        localBranchInfo.index = ii;
+	        localBranchInfo.brVal = subproblemSolvers[tS]->getY()[ii-n1];
+	      }
+	    }
+	    
+    }
+#ifdef USING_MPI
+    MPI_Op myOp;
+    MPI_Datatype mpitype;
+    MPI_Type_contiguous(6, MPI_DOUBLE, &mpitype);
+    MPI_Type_commit( &mpitype);
+    MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
+    if(mpiSize>1){
+	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, MPI_COMM_WORLD);
+    }
+#endif
+    if(mpiSize==1){
+	branchInfo = localBranchInfo;
+    }
+    if(mpiRank==0){
+        cout << "Branching on index: " << branchInfo.index << " disps: " << branchInfo.disp << " intDiscr " << branchInfo.intDiscr << " with value " << branchInfo.brVal << endl;
     }
     return branchInfo;
 }
@@ -983,252 +1067,8 @@ void dispOfX(double *retVec, double *aveVec=NULL, double *weights=NULL){
     computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
 }
 
-#if 0
-void averageOfVertices1(double *z=NULL, double *zDisp=NULL){
-	//if(z==NULL) z=z_average1;
-	int numVertices;
-	double localTotalWeight=0.0;
-	double totalWeight=0.0;
-	double weight;
-	//for (int tS = 0; tS < nNodeSPs; tS++){ localTotalNVertices+=subproblemSolvers[tS]->getNVertices();}
-	for (int i = 0; i < n1; i++)
-	{
-	    z_local[i] = 0.0;
-	    z[i] = 0.0;
-	    
-	    for (int tS = 0; tS < nNodeSPs; tS++)
-	    {
-		numVertices = subproblemSolvers[tS]->getNVertices();
-		for(int vv=0; vv<numVertices; vv++){
-		//z_local[i] += x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		    //z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		    z_local[i] += subproblemSolvers[tS]->getXVertexEntry(i,vv);//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		    if(i==0){localTotalWeight += 1.0;}
-		}
-		//localTotalNVertices+=numVertices;
-	    }
-	}
-	#ifdef USING_MPI
-	    MPI_Allreduce(z_local, z, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	    MPI_Allreduce(&localTotalWeight, &totalWeight, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	#else
-	    for (int i=0; i<n1; i++) z[i] = z_local[i]; //Only one node, trivially set z_local = z
-	    totalWeight=localTotalWeight;
-	#endif
-	for (int i=0; i<n1; i++) z[i] /= totalWeight; //Only one node, trivially set z_local = z
 
 
-	if(zDisp!=NULL){
-	   double *zDispLocal = new double[n1]; 
-	   for (int i = 0; i < n1; i++){
-	     zDispLocal[i] = 0.0;
-	     zDisp[i] = 0.0;
-	     for (int tS = 0; tS < nNodeSPs; tS++)
-	     {
-		numVertices = subproblemSolvers[tS]->getNVertices();
-		for(int vv=0; vv<numVertices; vv++){
-		    zDispLocal[i] += fabs(subproblemSolvers[tS]->getXVertexEntry(i,vv)-z[i]);//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		}
-	     }
-	   }
-	#ifdef USING_MPI
-	    MPI_Allreduce(zDispLocal, zDisp, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	#else
-	    for (int i=0; i<n1; i++) zDisp[i] = zDispLocal[i];///penSumLocal[i]; //Only one node, trivially set z_local = z
-	#endif
-	   for(int i=0; i<n1; i++) zDisp[i] /= totalWeight;
-	   
-	   delete [] zDispLocal; 
-	}
-}
-#endif
-#if 0
-void averageOfVertices2(double *z=NULL, double *zDisp=NULL){
-	//if(z==NULL) z=z_average2;
-	int numVertices;
-	double localTotalWeight=0.0;
-	double totalWeight=0.0;
-	double weight;
-	//for (int tS = 0; tS < nNodeSPs; tS++){ localTotalNVertices+=subproblemSolvers[tS]->getNVertices();}
-	for (int i = 0; i < n1; i++)
-	{
-	    z_local[i] = 0.0;
-	    z[i] = 0.0;
-	    
-	    for (int tS = 0; tS < nNodeSPs; tS++)
-	    {
-		numVertices = subproblemSolvers[tS]->getNVertices();
-		weight = subproblemSolvers[tS]->computeIntegralityDiscr();
-		for(int vv=0; vv<numVertices; vv++){
-		//z_local[i] += x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		    //z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		    z_local[i] += weight*subproblemSolvers[tS]->getXVertexEntry(i,vv);//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		    if(i==0){localTotalWeight += weight;}
-		}
-		//localTotalNVertices+=numVertices;
-	    }
-	}
-	#ifdef USING_MPI
-	    MPI_Allreduce(z_local, z, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	    MPI_Allreduce(&localTotalWeight, &totalWeight, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	#else
-	    for (int i=0; i<n1; i++) z[i] = z_local[i]; //Only one node, trivially set z_local = z
-	    totalWeight=localTotalWeight;
-	#endif
-	for (int i=0; i<n1; i++) z[i] /= totalWeight; //Only one node, trivially set z_local = z
-
-	if(zDisp!=NULL){
-	   double *zDispLocal = new double[n1]; 
-	   for (int i = 0; i < n1; i++){
-	     zDispLocal[i] = 0.0;
-	     zDisp[i] = 0.0;
-	     for (int tS = 0; tS < nNodeSPs; tS++)
-	     {
-		numVertices = subproblemSolvers[tS]->getNVertices();
-		weight = subproblemSolvers[tS]->computeIntegralityDiscr();
-		for(int vv=0; vv<numVertices; vv++){
-		    zDispLocal[i] += weight*fabs(subproblemSolvers[tS]->getXVertexEntry(i,vv)-z[i]);//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		}
-	     }
-	   }
-	#ifdef USING_MPI
-	    MPI_Allreduce(zDispLocal, zDisp, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	    //for(int i=0; i<n1; i++) zDisp[i] /= totalWeight;
-	#else
-	    for (int i=0; i<n1; i++) zDisp[i] = zDispLocal[i];///penSumLocal[i]; //Only one node, trivially set z_local = z
-	#endif
-	   
-	   delete [] zDispLocal; 
-	}
-
-}
-#endif
-#if 0
-void averageOfVerticesZ(double *z=NULL, double *zDisp=NULL){
-	//if(z==NULL) z=z_intdisp;
-        solveForWeights();
-	int numVertices;
-	//double localTotalWeight=0.0;
-	//double totalWeight=0.0;
-	double intDiscr;
-	double weight;
-	//for (int tS = 0; tS < nNodeSPs; tS++){ localTotalNVertices+=subproblemSolvers[tS]->getNVertices();}
-	for (int i = 0; i < n1; i++)
-	{
-	    z_local[i] = 0.0;
-	    z[i] = 0.0;
-	    penSumLocal[i]=0.0;
-            penSum[i]=0.0;
-	    
-	    
-	    for (int tS = 0; tS < nNodeSPs; tS++)
-	    {
-		numVertices = subproblemSolvers[tS]->getNVertices();
-		intDiscr = subproblemSolvers[tS]->computeIntegralityDiscr();
-		for(int vv=0; vv<numVertices; vv++){
-		//zDispLocal[i] += scaling_matrix[tS][i]*pr[tS]*fabs(subproblemSolvers[tS]->getXVertex()[i] - z[i]);
-		    //weight = intDiscr*(subproblemSolvers[tS]->getWeight(vv))*pr[tS]*scaling_matrix[tS][i];
-		    //weight = intDiscr*(subproblemSolvers[tS]->getWeight(vv));
-		    weight = (subproblemSolvers[tS]->getWeight(vv))*pr[tS]*scaling_matrix[tS][i];
-		    z_local[i] += weight*subproblemSolvers[tS]->getXVertexEntry(i,vv);//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		    penSumLocal[i] += weight;
-		}
-	    }
-	}
-	#ifdef USING_MPI
-	    MPI_Allreduce(z_local, z, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	    MPI_Allreduce(penSumLocal, penSum, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	#else
-	    for (int i=0; i<n1; i++) z[i] = z_local[i]; //Only one node, trivially set z_local = z
-	    for (int i=0; i<n1; i++) penSum[i] = penSumLocal[i]; //Only one node, trivially set z_local = z
-	#endif
-	for (int i=0; i<n1; i++) z[i] /= penSum[i]; 
-
-	if(zDisp!=NULL){
-	   double *zDispLocal = new double[n1]; 
-	   for (int i = 0; i < n1; i++){
-	     zDispLocal[i] = 0.0;
-	     zDisp[i] = 0.0;
-	     for (int tS = 0; tS < nNodeSPs; tS++)
-	     {
-		numVertices = subproblemSolvers[tS]->getNVertices();
-		intDiscr = subproblemSolvers[tS]->computeIntegralityDiscr();
-		for(int vv=0; vv<numVertices; vv++){
-		    //weight = intDiscr*(subproblemSolvers[tS]->getWeight(vv))*pr[tS]*scaling_matrix[tS][i];
-		    //weight = intDiscr*(subproblemSolvers[tS]->getWeight(vv));
-		    weight = (subproblemSolvers[tS]->getWeight(vv))*pr[tS]*scaling_matrix[tS][i];
-		    zDispLocal[i] += weight*fabs(subproblemSolvers[tS]->getXVertexEntry(i,vv)-z[i]);//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		}
-	     }
-	   }
-	#ifdef USING_MPI
-	    MPI_Allreduce(zDispLocal, zDisp, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	#else
-	    for (int i=0; i<n1; i++) zDisp[i] = zDispLocal[i];///penSumLocal[i]; //Only one node, trivially set z_local = z
-	#endif
-	    //for(int i=0; i<n1; i++) zDisp[i] /= totalWeight;
-	   
-	   delete [] zDispLocal; 
-	}
-
-}
-#endif
-
-#if 0
-void computeVertexDispAroundX(double *zDisp){
-        solveForWeights();
-	int numVertices;
-	double intDiscr;
-	double weight;
-	if(zDisp!=NULL){
-	   double *zDispLocal = new double[n1]; 
-	   for (int i = 0; i < n1; i++){
-	     zDispLocal[i] = 0.0;
-	     zDisp[i] = 0.0;
-	     for (int tS = 0; tS < nNodeSPs; tS++)
-	     {
-		numVertices = subproblemSolvers[tS]->getNVertices();
-		intDiscr = subproblemSolvers[tS]->computeIntegralityDiscr();
-		for(int vv=0; vv<numVertices; vv++){
-		    //weight = pr[tS]*scaling_matrix[tS][i]*(subproblemSolvers[tS]->getWeight(vv));
-		    weight = (subproblemSolvers[tS]->getWeight(vv));
-		    zDispLocal[i] += intDiscr*weight*fabs(subproblemSolvers[tS]->getXVertexEntry(i,vv)-x_current[tS][i]);//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
-		}
-	     }
-	   }
-	#ifdef USING_MPI
-	    MPI_Allreduce(zDispLocal, zDisp, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	#else
-	    for (int i=0; i<n1; i++) zDisp[i] = zDispLocal[i];///penSumLocal[i]; //Only one node, trivially set z_local = z
-	#endif
-	    //for(int i=0; i<n1; i++) zDisp[i] /= totalWeight;
-	   
-	   delete [] zDispLocal; 
-	}
-
-}
-#endif
-
-#if 0
-void sumWeightedVertexDisp(double *zDisp){
-    double intDiscr;
-    double *zDispLocal = new double[n1]; 
-    for(int ii=0; ii<n1; ii++){zDispLocal[ii]=0.0;}
-    for (int tS = 0; tS < nNodeSPs; tS++){
-	intDiscr = subproblemSolvers[tS]->computeIntegralityDiscr();
-	for(int ii=0; ii<n1; ii++){
-	    zDispLocal[ii] += intDiscr*subproblemSolvers[tS]->getDispersions2()[ii];
-	}
-    }
-    #ifdef USING_MPI
-        MPI_Allreduce(zDispLocal, zDisp, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    #else
-        for (int i=0; i<n1; i++) zDisp[i] = zDispLocal[i];///penSumLocal[i]; //Only one node, trivially set z_local = z
-    #endif
-    delete [] zDispLocal; 
-
-}
-#endif
 
 void computeOmegaDisp(double *dispOmega){
     double *dispOmegaLocal = new double[n1];
@@ -1276,7 +1116,7 @@ int checkZIsInfeasForScen(int tS){
 
 bool indexIsInt(int ii){
 assert(ii>=0);
-assert(ii < n1);
+assert(ii < n1+n2);
 	if(colType_[ii]=='I' || colType_[ii]=='B'){
 	  return true;
 	}
@@ -1357,7 +1197,7 @@ double computeSSCVal(){
 	cout << "regularIteration(): Something probably went wrong with the last computation of trialLagrLB, returning..." << endl;}
     }
     tCritVal = ALVal + 0.5*discrepNorm  - centreLagrLB;
-    shouldTerminate = (ALVal + 0.5*discrepNorm  - centreLagrLB < SSC_DEN_TOL) && (discrepNorm < 1e-20);
+    shouldTerminate = (tCritVal<tCritParam);// && (discrepNorm < 1e-20);
     if(shouldTerminate){return 0.0;}
     else{
 	return (trialLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB);

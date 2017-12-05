@@ -616,7 +616,7 @@ bool solveContinuousMPs(bool adjustPenalty){
 	}
 	#endif
 	if (mpiSize == 1) {
-		innerLagrLB = LagrLB_Local;
+		innerLagrLB = innerLagrLB_Local;
 		ALVal = ALVal_Local;
 		discrepNorm = localDiscrepNorm;
 	}

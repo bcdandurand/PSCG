@@ -16,7 +16,7 @@ PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
-	nIntInfeas_(-1),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritParam(1e-10){
+	omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritParam(1e-10){
 
    	//******************Read Command Line Parameters**********************
 	//Params par;
@@ -77,8 +77,6 @@ PSCG::~PSCG(){
 	delete [] currentVarUB_;
 	delete [] totalSoln_;
 	delete [] recordKeeping;
-	delete [] colType_;
-	delete [] intVar_;
 	delete [] weights_;
 	delete [] integrDiscr_;
 	env.end();
@@ -224,18 +222,6 @@ void PSCG::initialiseModel(){
 	    break;
 	}
 	totalSoln_=new double[n1+n2];
-	colType_ = new char[n1+n2];
-	intVar_ = new int[n1+n2];
-	numIntVars_=0;
-	if(ftype==2){
-	    memcpy(colType_,smpsModel.getCtypeCore(0),n1*sizeof(char));
-	    memcpy(colType_+n1,smpsModel.getCtypeCore(1),n2*sizeof(char));
-	    for(int i=0; i<n1+n2; i++){
-		if(colType_[i]=='I' || colType_[i]=='B'){
-		    intVar_[numIntVars_++]=i;
-		}
-	    }
-	}
 
 	z_current = new double[n1];
 	z_old = new double[n1];
@@ -251,22 +237,32 @@ void PSCG::initialiseModel(){
 	origVarUB_ = new double[n1];
 	currentVarLB_ = new double[n1];
 	currentVarUB_ = new double[n1];
-	switch( ftype ){
-	  case 1:
-	    //TODO: initialise origVarBds.
-	    break;
-	  case 2:
+
+	if(ftype==2){
+#if 0
+	    //memcpy(colType_,smpsModel.getCtypeCore(0),n1*sizeof(char));
+	    //memcpy(colType_+n1,smpsModel.getCtypeCore(1),n2*sizeof(char));
+	    for(int i=0; i<n1; i++){
+		colType_[i] = smpsModel.getCtypeCore(0)[i];
+		if(colType_[i]=='I' || colType_[i]=='B'){
+		    intVar_[numIntVars_++]=i;
+		}
+	    }
+	    for(int i=n1; i<n1+n2; i++){
+	    //for(int i=0; i<n1; i++){
+		colType_[i] = smpsModel.getCtypeCore(1)[i-n1];
+		if(colType_[i]=='I' || colType_[i]=='B'){
+		    intVar_[numIntVars_++]=i;
+		}
+	    }
+#endif
 	    smpsModel.copyCoreColLower(origVarLB_,0);
 	    smpsModel.copyCoreColUpper(origVarUB_,0);
 	    memcpy(currentVarLB_,origVarLB_,n1*sizeof(double));
 	    memcpy(currentVarUB_,origVarUB_,n1*sizeof(double));
-cout << "******************" << endl;
-printCurrentVarBds();
-cout << "******************" << endl;
-	    break;
-	  default:
-	    throw(-1);
-	    break;
+	    cout << "******************" << endl;
+	    printCurrentVarBds();
+	    cout << "******************" << endl;
 	}
 	if (mpiRank==0) {
 		std::cout << std::endl;
@@ -475,7 +471,7 @@ if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
 		// Find next vertex and Lagrangian lower bound
 		
 		//Solve Lagrangian MIP
-		int solverStatus=subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_rounded, NULL, currentVarLB_, currentVarUB_, colType_);
+		int solverStatus=subproblemSolvers[tS]->solveLagrangianWithXFixedToZ(z_rounded, NULL, currentVarLB_, currentVarUB_);
 
                 if(solverStatus==PSCG_PRIMAL_INF || solverStatus==PSCG_DUAL_INF)
 		{

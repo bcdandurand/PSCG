@@ -176,7 +176,7 @@ virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool 
    cout << "setPrintLevel(): default implementation, does nothing" << endl;
 }
 void setNThreads(int nthreads){nThreads=nthreads;}
-virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes)=0;
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs)=0;
 //virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual void setSolverStatus()=0;
 virtual void upBranchOnVar(int varIndex, double bound)=0;
@@ -642,9 +642,8 @@ virtual void fixVarAt(int index, double fixVal){
     cout << "fixVarAt() is doing nothing..." << endl;
 }
 //virtual void fixXToZ(const double *z)=0;
-virtual void fixXToZ(const double *z, const char* colTypes)=0;
+virtual void fixXToZ(const double *z)=0;
 virtual void unfixX(const double* origLBs, const double* origUBs)=0;
-virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes)=0;
 
 void fixWeightToZero(int index){
     if(index >=0 && index < nVertices){
@@ -1193,10 +1192,11 @@ virtual void fixXToZ(const double *z){
    return; 
 }
 #endif
-virtual void fixXToZ(const double *z, const char* colTypes){
+virtual void fixXToZ(const double *z){
    for(int ii=0; ii<n1; ii++){
       //LagrMIPInterface_->setContinuous(ii);
-      if(colTypes[ii]=='I' || colTypes[ii]=='B'){
+      if(getColTypes()[ii]!=0){
+      //if(colTypes[ii]=='I' || colTypes[ii]=='B'){
           LagrMIPInterface_->setColBounds(ii,round(z[ii]),round(z[ii]));
       }
       else{
@@ -1216,10 +1216,12 @@ virtual void unfixX(const double* origLBs, const double* origUBs){
 
 }
 //undo the fixing of fixXToZ(), includes resetting variable types
+#if 0
 virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes){
    for(int ii=0; ii<n1; ii++){
       //cout << "  " << colTypes[ii];
-      if(colTypes[ii]=='I' || colTypes[ii]=='B'){
+      //if(colTypes[ii]=='I' || colTypes[ii]=='B'){
+      if(getColTypes()[ii]!=0){
 	 LagrMIPInterface_->setInteger(ii);
       }
       else{
@@ -1230,12 +1232,13 @@ virtual void unfixX(const double* origLBs, const double* origUBs, const char* co
    //cout << endl;
    return;
 }
+#endif
 
-virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes){
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs){
 //cout << "*********" << endl;
 //printColTypesFirstStage();
 //printColBds();
-   fixXToZ(z,colTypes);
+   fixXToZ(z);
 //printColTypesFirstStage();
 //printColBds();
 
@@ -1297,8 +1300,8 @@ virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
     solverStatus_ = PSCG_OPTIMAL;
 }
-virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs, const char *colTypes){
-   fixXToZ(z,colTypes);
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs){
+   fixXToZ(z);
 
    int solveStatus = solveLagrangianProblem(omega,true);
 
@@ -1319,7 +1322,7 @@ virtual void fixXToZ(const double *z){
     }
 }
 #endif
-virtual void fixXToZ(const double *z, const char* colTypes){;
+virtual void fixXToZ(const double *z){;
 //TODO: set the xVariables to be continuous
     for(int ii=0; ii<n1; ii++){
 	xVariables[ii].setBounds(z[ii],z[ii]);
@@ -1330,12 +1333,14 @@ virtual void unfixX(const double* origLBs, const double* origUBs){
 	xVariables[ii].setBounds(origLBs[ii],origUBs[ii]);
     }
 }
+#if 0
 virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes){
 //TODO: set the xVariables back to their original types
     for(int ii=0; ii<n1; ii++){
 	xVariables[ii].setBounds(origLBs[ii],origUBs[ii]);
     }
 }
+#endif
 
 
 

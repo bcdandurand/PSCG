@@ -215,9 +215,6 @@ int ftype;
 int mpiRank;
 int mpiSize;
 
-int numIntVars_;
-int *intVar_;
-char *colType_;
 int infeasIndex_;
 int nIntInfeas_;
 
@@ -337,7 +334,6 @@ double* getOrigVarLbds(){return origVarLB_;}
 double* getOrigVarUbds(){return origVarUB_;}
 double* getCurrentVarLbds(){return currentVarLB_;}
 double* getCurrentVarUbds(){return currentVarUB_;}
-char* getColTypes(){return colType_;}
 
 void cloneCurrentVarBds(double*& lbs, double*& ubs){
 printCurrentVarBds();
@@ -964,7 +960,8 @@ BranchingInfo findBranchingIndex2(){
 	    localBranchInfo.index=-1;
 	    localBranchInfo.disp=0.0;
 	    for(int ii=0; ii<n1; ii++){
-	      if(!indexIsInt(ii)){continue;}
+	      //if(!indexIsInt(ii)){continue;}
+	      if(subproblemSolvers[tS]->getColTypes()[ii]==0){continue;}
 	      if(z_dispersions[ii] > localBranchInfo.disp){ 
 	        localBranchInfo.index = ii;
 		localBranchInfo.disp = z_dispersions[ii];
@@ -972,7 +969,8 @@ BranchingInfo findBranchingIndex2(){
 	      }
 	    }
 	    for(int ii=n1; ii<n1+n2; ii++){
-	      if(!indexIsInt(ii)){continue;}
+	      //if(!indexIsInt(ii)){continue;}
+	      if(subproblemSolvers[tS]->getColTypes()[ii]==0){continue;}
 	      if(dispVec[ii] > localBranchInfo.disp){ 
 		localBranchInfo.rank = mpiRank;
 		localBranchInfo.scen = tS;
@@ -1114,9 +1112,10 @@ int checkZIsInfeasForScen(int tS){
     else{return 1;}
 }
 
+#if 0
 bool indexIsInt(int ii){
 assert(ii>=0);
-assert(ii < n1+n2);
+assert(ii < n1);
 	if(colType_[ii]=='I' || colType_[ii]=='B'){
 	  return true;
 	}
@@ -1125,6 +1124,7 @@ assert(ii < n1+n2);
 	}
 
 }
+#endif
 
 #if 0
 bool checkForCutoff(){
@@ -1134,6 +1134,7 @@ if(mpiRank==0){cout << getIncumbentVal() << " <= " << currentLagrLB << "???" << 
 #endif
 
 void roundCurrentZ(double *z=NULL){
+    const char *cTypes = subproblemSolvers[0]->getColTypes(); //Using only first-stage, so it doesn't matter which scenario is chosen.
     if(z==NULL){z=z_current;}
 //double *origVarLB_;
     for(int ii=0; ii<n1; ii++){
@@ -1141,9 +1142,13 @@ void roundCurrentZ(double *z=NULL){
 	if(z[ii] > origVarUB_[ii]){z[ii]=origVarUB_[ii];}
     }
     memcpy(z_rounded,z,n1*sizeof(double));
-    for(int ii=0; ii<numIntVars_; ii++) {z_rounded[intVar_[ii]] = round(z[intVar_[ii]]);}
     double roundingDisc = 0.0;
-    for(int ii=0; ii<n1; ii++){roundingDisc += fabs(z_rounded[ii]-z[ii]);}
+    for(int ii=0; ii<n1; ii++) {
+	if(cTypes[ii]!=0) {
+	    z_rounded[ii] = round(z[ii]);
+    	    roundingDisc += fabs(z_rounded[ii]-z[ii]);
+	}
+    }
 }
 
 bool evaluateFeasibleZ(){
@@ -1467,16 +1472,21 @@ void printZRounded(){
 	printf("]\n");
   }
 }
+#if 1
 void printIntegralityViolations(){
+  const char *cTypes = subproblemSolvers[0]->getColTypes(); //Using only first-stage, so it doesn't matter which scenario is chosen.
   if(mpiRank==0){
-    for(int ii=0; ii<numIntVars_; ii++){
-	if(!checkInteger(z_current[intVar_[ii]])){
-	    cout << " (" << intVar_[ii] << "," << z_current[intVar_[ii]] << ")";
+    for(int ii=0; ii<n1; ii++){
+      if(cTypes[ii]!=0){
+	if(!checkInteger(z_current[ii])){
+	    cout << " (" << ii << "," << z_current[ii] << ")";
 	}
+      }
     }
     cout << endl;
   }
 }
+#endif
 
 
 //*** Helper functions.

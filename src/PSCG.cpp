@@ -12,10 +12,11 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 
 using namespace std;
 
+#if 0
 PSCG::PSCG(PSCGParams *p):par(p),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
-	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoConseqNullSteps(1e6),noGSIts(1),
+	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1e6),maxNoGSSteps(1),maxNoConseqNullSteps(1e6),noGSIts(1),
 	omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritParam(1e-10){
 
    	//******************Read Command Line Parameters**********************
@@ -39,6 +40,66 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 	//sprintf(zOptFile,"zOpt-%s-noP%dalg%d",probname,mpiSize,algorithm);
 	
 }
+#endif
+
+PSCG::PSCG(DecTssModel &model):smpsModel(model),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
+LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
+	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
+	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(100),maxNoConseqNullSteps(1e6),noGSIts(1),
+	baselineRho(1.0),rho(baselineRho),nThreads(1),
+	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
+
+	//smpsModel.readSmps(par->filename.c_str());
+	
+	n1 = smpsModel.getNumCols(0);
+	n2 = smpsModel.getNumCols(1);
+	if(nS<=0) nS = smpsModel.getNumScenarios();
+	if (mpiRank==0) {
+		std::cout << std::endl;
+		std::cout << "Problem data: " << std::endl;
+		std::cout << "Number of first stage variables: " << n1 << std::endl;
+		std::cout << "Number of second stage variables: " << n2 << std::endl;
+		std::cout << "Number of scenarios: " << nS << std::endl;
+    	}
+
+	//******************Reading Problem Data**********************
+	initialiseModel();
+
+	//******************Assign Scenarios**********************
+	assignSubproblems();
+	setupSolvers();
+}
+#ifdef USING_MPI
+PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
+LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
+	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),comm_(comm),mpiRank(0),mpiSize(1),
+	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(100),maxNoConseqNullSteps(1e6),noGSIts(1),
+	baselineRho(1.0),rho(baselineRho),nThreads(1),
+	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
+
+	//smpsModel.readSmps(par->filename.c_str());
+	
+	MPI_Comm_rank(comm_,&mpiRank);
+	MPI_Comm_size(comm_,&mpiSize);
+	n1 = smpsModel.getNumCols(0);
+	n2 = smpsModel.getNumCols(1);
+	if(nS<=0) nS = smpsModel.getNumScenarios();
+	if (mpiRank==0) {
+		std::cout << std::endl;
+		std::cout << "Problem data: " << std::endl;
+		std::cout << "Number of first stage variables: " << n1 << std::endl;
+		std::cout << "Number of second stage variables: " << n2 << std::endl;
+		std::cout << "Number of scenarios: " << nS << std::endl;
+    	}
+
+	//******************Reading Problem Data**********************
+	initialiseModel();
+
+	//******************Assign Scenarios**********************
+	assignSubproblems();
+	setupSolvers();
+}
+#endif
 
 PSCG::~PSCG(){
 	//Clean up structures
@@ -75,13 +136,13 @@ PSCG::~PSCG(){
 	delete [] origVarUB_;
 	delete [] currentVarLB_;
 	delete [] currentVarUB_;
-	delete [] totalSoln_;
 	delete [] recordKeeping;
 	delete [] weights_;
 	delete [] integrDiscr_;
 	env.end();
 }
 
+#if 0
 void PSCG::initialiseParameters(){
 	//par->readParameters(argc, argv);
 	setMPIParams(par->mpiRank,par->mpiSize);
@@ -115,8 +176,8 @@ void PSCG::initialiseParameters(){
 	maxSeconds = par->maxSeconds;
 	if(par->fixInnerStep > 1) noGSIts = par->fixInnerStep;
 	nVerticesUsed = par->UseVertexHistory;
-	nThreads = par->threads;
-	if (nThreads < 0) { nThreads = DEFAULT_THREADS; }
+	if (par->threads < 0) { nThreads = DEFAULT_NO_THREADS; }
+	else{nThreads = par->threads;}
 	verbose = par->verbose;
 	debug = par->debug;
 	linRelaxFirst = par->linRelaxFirst;
@@ -129,6 +190,7 @@ void PSCG::initialiseParameters(){
 	ftype = par->filetype;
 
 }
+#endif
 
 void PSCG::assignSubproblems(){
 	if(mpiRank==0) { cout << "Assigning " << nS << " subproblems with " << mpiSize << " processors. " << endl;}
@@ -170,7 +232,7 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 		    case 2: //SIPLIB problems
 			subproblemSolvers.push_back( new PSCGScen_SMPS(env) );
 		      	dynamic_cast<PSCGScen_SMPS*>(subproblemSolvers[tS])->initialiseSMPS(smpsModel,scenariosToThisModel[tS]); 
-			subproblemSolvers[tS]->setNThreads(par->threads);
+			//subproblemSolvers[tS]->setNThreads(par->threads);
 		      	break;
 		    default:
 			throw(-1);
@@ -203,25 +265,6 @@ cout << "End setting up solvers at process " << mpiRank << endl;
 }
 
 void PSCG::initialiseModel(){
-	int j=0;
-	switch( ftype ){
-	  case 1:
-	    pdBodur.initialise(par);
-	    n1 = pdBodur.get_n1();
-	    n2 = pdBodur.get_n2();
-	    nS = pdBodur.get_nS();
-	    break;
-	  case 2:
-	    smpsModel.readSmps(par->filename.c_str());
-	    n1 = smpsModel.getNumCols(0);
-	    n2 = smpsModel.getNumCols(1);
-	    nS = smpsModel.getNumScenarios();
-	    break;
-	  default:
-	    throw(-1);
-	    break;
-	}
-	totalSoln_=new double[n1+n2];
 
 	z_current = new double[n1];
 	z_old = new double[n1];
@@ -264,13 +307,6 @@ void PSCG::initialiseModel(){
 	    printCurrentVarBds();
 	    cout << "******************" << endl;
 	}
-	if (mpiRank==0) {
-		std::cout << std::endl;
-		std::cout << "Problem data: " << std::endl;
-		std::cout << "Number of first stage variables: " << n1 << std::endl;
-		std::cout << "Number of second stage variables: " << n2 << std::endl;
-		std::cout << "Number of scenarios: " << nS << std::endl;
-    	}
 }
 
 
@@ -381,7 +417,7 @@ if(mpiRank==0){cout << "Rho is: " << rho << endl;}
 
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
-		MPI_Allreduce(&LagrLB_Local, &trialLagrLB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(&LagrLB_Local, &trialLagrLB, 1, MPI_DOUBLE, MPI_SUM, comm_);
 	}
 	#endif
 	if(mpiSize == 1){
@@ -425,7 +461,7 @@ if(mpiRank==0){cout << "Rho is: " << rho << endl;}
 	    if (mpiSize > 1) {
 		localReduceBuffer[0]=ALVal_Local;
 		localReduceBuffer[1]=localDiscrepNorm;
-		MPI_Allreduce(localReduceBuffer, reduceBuffer, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(localReduceBuffer, reduceBuffer, 2, MPI_DOUBLE, MPI_SUM, comm_);
 		ALVal = reduceBuffer[0];
 		discrepNorm = reduceBuffer[1];
 	    }
@@ -488,7 +524,7 @@ if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
 	if (mpiSize > 1) {
 
 		localReduceBuffer[0]=localObjVal;
-		MPI_Allreduce(&localObjVal, &objVal, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(&localObjVal, &objVal, 1, MPI_DOUBLE, MPI_SUM, comm_);
 	}
 	#endif
 
@@ -531,17 +567,6 @@ int PSCG::performColGenStep(){
 
 		//Solve Lagrangian MIP
 
-#if 0
-
-    double *xSoln = subproblemSolvers[tS]->getXVertex();
-    memcpy(totalSoln_,xSoln,n1*sizeof(double));
-    double *ySoln = subproblemSolvers[tS]->getYVertex();
-    memcpy(totalSoln_+n1,ySoln,n2*sizeof(double));
-    int *all_indices = new int[n1+n2];
-    for(int jj=0; jj<n1+n2; jj++){ all_indices[jj]=jj;}
-    //subproblemSolvers[tS]->setInitialSolution(all_indices,totalSoln_);
-    delete [] all_indices;
-#endif
 
 		
 		dynamic_cast<PSCGScen_SMPS*>(subproblemSolvers[tS])->getOSI()->resolve();
@@ -673,12 +698,12 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	#ifdef USING_MPI
 //if(mpiRank==0) cerr << "PerformColGenStep(): MPI before MPI_Barrier" << endl;;
 //cerr << "*";
-//MPI_Barrier(MPI_COMM_WORLD);
+//MPI_Barrier(comm_);
 	if (mpiSize > 1) {
 		localReduceBuffer[0]=LagrLB_Local;
 		localReduceBuffer[1]=ALVal_Local;
 		localReduceBuffer[2]=localDiscrepNorm;
-		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, comm_);
 
 		trialLagrLB = reduceBuffer[0];
 		ALVal = reduceBuffer[1];

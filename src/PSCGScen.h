@@ -5,6 +5,7 @@
 #include <list>
 #include <iostream>
 #include <memory>
+#include <algorithm>
 #include <ilcplex/ilocplex.h>
 #include "DecTssModel.h"
 #include "OsiCpxSolverInterface.hpp"
@@ -63,6 +64,12 @@ int nThreads;
 double pr;
 double *c;
 double *d;
+
+vector<int> branchIndices;
+vector<double> restoreLBs;
+vector<double> restoreUBs;
+vector<double> branchLBs;
+vector<double> branchUBs;
 
 double LagrBd;
 double objVal;
@@ -192,6 +199,9 @@ cerr << "setBounds(): Default implementation does nothing." << endl;
 }
 virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
 cerr << "setBounds(): Default implementation does nothing." << endl;
+}
+virtual void restoreBounds(){
+cerr << "restoreBounds(): Default implementation does nothing." << endl;
 }
 #if 0
 void updateOptSoln(){
@@ -986,11 +996,37 @@ virtual void setUBs(const double *ubs, int nUBs){
     }
 }
 virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
+    restoreBounds();
+    branchIndices.resize(inds.size());
+    std::copy(inds.begin(),inds.end(), branchIndices.begin());
+
+
+    branchLBs.resize(inds.size());
+    std::copy(lbs.begin(),lbs.end(), branchLBs.begin());
+    branchUBs.resize(inds.size());
+    std::copy(ubs.begin(),ubs.end(), branchUBs.begin());
+
+    restoreLBs.resize(inds.size());
+    restoreUBs.resize(inds.size());
+
     for(int ii=0; ii<inds.size(); ii++){
+	restoreLBs[inds[ii]]=LagrMIPInterface_->getColLower()[inds[ii]];
+	restoreUBs[inds[ii]]=LagrMIPInterface_->getColUpper()[inds[ii]];
 	LagrMIPInterface_->setColLower(inds[ii],lbs[ii]);
 	LagrMIPInterface_->setColUpper(inds[ii],ubs[ii]);
     }
 
+}
+virtual void restoreBounds(){
+#if 0
+vector<int> branchIndices;
+vector<double> restoreLBs;
+vector<double> restoreUBs;
+#endif
+    for(int ii=0; ii<branchIndices.size(); ii++){
+	LagrMIPInterface_->setColLower(branchIndices[ii],restoreLBs[ii]);
+	LagrMIPInterface_->setColUpper(branchIndices[ii],restoreUBs[ii]);
+    }
 }
 
 virtual const char* getColTypes(){

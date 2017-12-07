@@ -6,7 +6,7 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 #include "PSCG.h"
 //#include "ProblemDataBodur.h"
 //#include "Stopwatch.h"
-//#include "TssModel.h"
+#include "DecTssModel.h"
 
 //#define OUTER_LOOP_TERMINATION 1e-10
 //#define TIME_TYPES 2
@@ -54,11 +54,18 @@ int main(int argc, char **argv) {
 	mpiHead = (mpiRank == 0);
 
 	PSCGParams par;
-	par.readParameters(argc, argv);
+	//par.readParameters(argc, argv);
 	par.setMPIParams(mpiSize,mpiRank);
 	
+	DecTssModel smpsModel;
+	smpsModel.readSmps(argv[1]);	
 
-	PSCG model(&par);
+	//PSCG model(&par);
+	#ifdef USING_MPI
+	 PSCG model(smpsModel,MPI_COMM_WORLD);
+	#else
+	 PSCG model(smpsModel);
+	#endif
 	model.computeBound();
 	//double *z = new double[model.n1];
 	#if 0

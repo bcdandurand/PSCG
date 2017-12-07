@@ -26,7 +26,7 @@
 using namespace std;
 
 #define SSC_DEN_TOL 1e-10
-#define DEFAULT_THREADS 1
+#define DEFAULT_NO_THREADS 1
 #define KIWIEL_PENALTY 1 //set 1 to use Kiwiel (2006) penalty update rule
 #define MIN_PEN 0.0 
 
@@ -54,9 +54,9 @@ INTEGER
 typedef struct{
     //double a,b,c,d;
     double rank,scen,index,disp,intDiscr,brVal;
-} BranchingInfo;
+} BranchingVarInfo;
 #ifdef USING_MPI
-static void compareBranchInfo(BranchingInfo *in, BranchingInfo *inout, int *len, MPI_Datatype *dptr){
+static void compareBranchInfo(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
     if(in[ii].intDiscr > inout[ii].intDiscr){
 	inout[ii].rank = in[ii].rank;
@@ -68,7 +68,7 @@ static void compareBranchInfo(BranchingInfo *in, BranchingInfo *inout, int *len,
     }
   }
 }
-static void compareBranchInfo2(BranchingInfo *in, BranchingInfo *inout, int *len, MPI_Datatype *dptr){
+static void compareBranchInfo2(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
     if(in[ii].disp > inout[ii].disp){
 	inout[ii].rank = in[ii].rank;
@@ -108,8 +108,8 @@ enum SolverReturnStatus {
 
 class PSCG {
 public:
-PSCGParams *par;
-DecTssModel smpsModel;
+//PSCGParams *par;
+DecTssModel &smpsModel;
 IloEnv env;
 int algorithm;
 vector<int> scenariosToThisModel;
@@ -158,7 +158,6 @@ double *z_rounded;
 double *z_saved;
 double *z_average;
 double *z_dispersions;
-double* totalSoln_; //new double[n1+n2];
 vector<double> constrVec_; //This is filled with the value of Ax
 double *penSumLocal;// = new double[n1];
 double *penSum;// = new double[n1];
@@ -197,6 +196,8 @@ double rho;
 double baselineRho;
 //double penMult;
 int maxNoSteps;
+int maxNoInnerSteps;
+int maxNoGSSteps;
 int maxNoConseqNullSteps;
 int noGSIts;
 int maxSeconds;
@@ -214,6 +215,9 @@ bool dataPathOverride;
 int ftype;
 int mpiRank;
 int mpiSize;
+#ifdef USING_MPI
+MPI_Comm comm_;
+#endif
 
 int infeasIndex_;
 int nIntInfeas_;
@@ -234,6 +238,10 @@ int totalNoGSSteps;
 ProblemDataBodur pdBodur;
 
 PSCG(PSCGParams *p);
+PSCG(DecTssModel &model);
+#ifdef USING_MPI
+PSCG(DecTssModel &model, MPI_Comm comm);
+#endif
 
 ~PSCG();
 
@@ -502,6 +510,7 @@ void updateVertexHistory(int tS){
 
 
 void setMaxNoSteps(int noSteps){maxNoSteps=noSteps;}
+void setMaxNoGSSteps(int noSteps){maxNoGSSteps=noSteps;}
 void setMaxNoConseqNullSteps(int noNullSteps){maxNoConseqNullSteps=noNullSteps;}
 void setSSCParam(double ssc){SSCParam=ssc;}
 void setTCritParam(double tcrit){tCritParam=tcrit;}
@@ -605,7 +614,7 @@ bool solveContinuousMPs(bool adjustPenalty){
 		localReduceBuffer[0]=innerLagrLB_Local;
 		localReduceBuffer[1]=ALVal_Local;
 		localReduceBuffer[2]=localDiscrepNorm;
-		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, comm_);
 		innerLagrLB = reduceBuffer[0];
 		ALVal = reduceBuffer[1];
 		discrepNorm = reduceBuffer[2];
@@ -647,6 +656,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
 	    numInnerSolves++;
 	  }while(innerSSCVal < innerSSCParam);
+	  //}while(innerSSCVal < innerSSCParam && numInnerSolves<maxNoInnerSteps);
 	  if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
 	  if(mpiRank==0) cout << "Inner SSC value is: " << innerSSCVal << endl;
 	}
@@ -726,7 +736,7 @@ double evaluateIntegralityDiscrepancies(){
     }
     #ifdef USING_MPI
     if(mpiSize>1){
-        MPI_Allreduce(&integrDiscrSumLocal, &integrDiscrSum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(&integrDiscrSumLocal, &integrDiscrSum, 1, MPI_DOUBLE, MPI_SUM, comm_);
     }
     #endif
     if(mpiSize==1){
@@ -894,7 +904,7 @@ void dispOfAllXVertices(double *retVec=NULL){
     }
     #ifdef USING_MPI
     if(mpiSize>1){
-	MPI_Allreduce(z_local, retVec, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(z_local, retVec, n1, MPI_DOUBLE, MPI_SUM, comm_);
     }
     #endif
     if(mpiSize==1){
@@ -904,10 +914,10 @@ void dispOfAllXVertices(double *retVec=NULL){
 }
 
 
-BranchingInfo findBranchingIndex(){
+BranchingVarInfo findBranchingIndex(){
     double *dispVec;
-    BranchingInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
-    BranchingInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    BranchingVarInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
     
     for(int tS=0; tS<nNodeSPs; tS++){
 	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
@@ -934,7 +944,7 @@ BranchingInfo findBranchingIndex(){
     MPI_Type_commit( &mpitype);
     MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
     if(mpiSize>1){
-	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, MPI_COMM_WORLD);
+	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, comm_);
     }
 #endif
     if(mpiSize==1){
@@ -942,14 +952,15 @@ BranchingInfo findBranchingIndex(){
     }
     if(mpiRank==0){
         cout << "Branching on index: " << branchInfo.index << " disps: " << branchInfo.disp << " intDiscr " << branchInfo.intDiscr << " with value " << branchInfo.brVal << endl;
+	cout << "Branching determined on process: " << branchInfo.rank << " subproblem " << branchInfo.scen << endl;
     }
     return branchInfo;
 }
 
-BranchingInfo findBranchingIndex2(){
+BranchingVarInfo findBranchingIndex2(){
     double *dispVec;
-    BranchingInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
-    BranchingInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    BranchingVarInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
     dispOfAllXVertices();
     
     for(int tS=0; tS<nNodeSPs; tS++){
@@ -988,7 +999,7 @@ BranchingInfo findBranchingIndex2(){
     MPI_Type_commit( &mpitype);
     MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
     if(mpiSize>1){
-	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, MPI_COMM_WORLD);
+	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, comm_);
     }
 #endif
     if(mpiSize==1){
@@ -1005,8 +1016,8 @@ void computeAverageAcrossProcs(double *partialAveVec, double* retVec, double wei
     double weightG=0.0;
     #ifdef USING_MPI
     if(mpiSize>1){
-	MPI_Allreduce(partialAveVec, retVec, vecSize, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	MPI_Allreduce(&weight, &weightG, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(partialAveVec, retVec, vecSize, MPI_DOUBLE, MPI_SUM, comm_);
+	MPI_Allreduce(&weight, &weightG, 1, MPI_DOUBLE, MPI_SUM, comm_);
 	for(int i=0; i<vecSize; i++) retVec[i] /= weightG;
     }
     #endif
@@ -1080,7 +1091,7 @@ void computeOmegaDisp(double *dispOmega){
     }
 #ifdef USING_MPI
     if(mpiSize>1){
-	MPI_Allreduce(dispOmegaLocal, dispOmega, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(dispOmegaLocal, dispOmega, n1, MPI_DOUBLE, MPI_SUM, comm_);
     }
 #endif
     if(mpiSize==1){
@@ -1103,26 +1114,18 @@ bool checkInteger(double value) const {
         return false;
     }
 }
-int checkZIsInfeasForScen(int tS){
-    memcpy(totalSoln_,z_rounded,n1*sizeof(double));
-    double *ySoln = subproblemSolvers[tS]->getY();
-    memcpy(totalSoln_+n1,ySoln,n2*sizeof(double));
-    bool feas = subproblemSolvers[tS]->checkSolnForFeasibility(totalSoln_, constrVec_);
-    if(feas) {return 0;}
-    else{return 1;}
-}
 
-#if 0
-bool indexIsInt(int ii){
-assert(ii>=0);
-assert(ii < n1);
-	if(colType_[ii]=='I' || colType_[ii]=='B'){
-	  return true;
-	}
-	else{
-	  return false;
-	}
-
+#if 1
+bool firstStageIndexIsInt(int ii){
+    const char *cTypes = subproblemSolvers[0]->getColTypes();  //Using only first-stage, so it doesn't matter which scenario is chosen.
+    assert(ii>=0);
+    assert(ii < n1);
+    if(cTypes[ii]!=0){
+	return true;
+    }
+    else{
+	return false;
+    }
 }
 #endif
 
@@ -1227,7 +1230,7 @@ bool updateOmega(bool useSSC){
 #if 0
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
-		MPI_Allreduce(&centreLagrLBLocal, &centreLagrLB, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+		MPI_Allreduce(&centreLagrLBLocal, &centreLagrLB, 1, MPI_DOUBLE, MPI_SUM, comm_);
 	}
 	#endif
 	if (mpiSize == 1) {
@@ -1283,7 +1286,7 @@ void repairOmega(){
     }
 #ifdef USING_MPI
     if(mpiSize>1){
-	MPI_Allreduce(omegaLocal, omegaSum, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(omegaLocal, omegaSum, n1, MPI_DOUBLE, MPI_SUM, comm_);
     }
 #endif
     if(mpiSize==1){
@@ -1324,9 +1327,9 @@ bool printOmegaProperties(){
     }
 #ifdef USING_MPI
     if(mpiSize>1){
-	MPI_Allreduce(omegaLocal, omegaSum, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	MPI_Allreduce(&omegaFroNormLocal, &omegaFroNorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	MPI_Allreduce(&cFroNormLocal, &cFroNorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(omegaLocal, omegaSum, n1, MPI_DOUBLE, MPI_SUM, comm_);
+	MPI_Allreduce(&omegaFroNormLocal, &omegaFroNorm, 1, MPI_DOUBLE, MPI_SUM, comm_);
+	MPI_Allreduce(&cFroNormLocal, &cFroNorm, 1, MPI_DOUBLE, MPI_SUM, comm_);
     }
 #endif
     if(mpiSize==1){

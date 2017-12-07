@@ -74,11 +74,11 @@ public:
 	bool dataPathOverride;
 	bool LBcalc;
 	bool disableHeuristic;
-	PSCGParams() : filename(""), noScenarios(-1), maxStep(-1), maxSeconds(-1),
-   fixInnerStep(-1), UseVertexHistory(-1), penalty(-1), penaltyMult(-1),
-   filetype(0), verbose(false), debug(false), linRelaxFirst(false),
+	PSCGParams() : filename(""), noScenarios(-1), maxStep(20), maxSeconds(1000000000),
+   fixInnerStep(-1), UseVertexHistory(100), penalty(1.0), penaltyMult(1.0),
+   filetype(2), verbose(false), debug(false), linRelaxFirst(false),
    linRelaxSecond(false), scaling(false), dataPathOverride(false),
-   LBcalc(false), disableHeuristic(false), mpiSize(1),mpiRank(0) {}
+   LBcalc(false), disableHeuristic(false), threads(-1), mpiSize(1),mpiRank(0) {}
 
 // ADDFLAG : Put the definition and declaration here.
     typedef struct CArgs {
@@ -277,25 +277,11 @@ void updateParams(CArgs* a) {
 
 	if (a->CAP_Switch.getValue() == true)
 	{
-		if (filetype == 0) {
-			filetype = 1;
-		}
-		else
-		{
-			std::cerr << "ERROR: Tried to set file type more than once" << std::endl;
-			throw(-1);
-		}
+		filetype = 1;
 	}
 	if (a->SMPS_Switch.getValue() == true)
 	{
-		if (filetype == 0) {
-			filetype = 2;
-		}
-		else
-		{
-			std::cerr << "ERROR: Tried to set file type more than once" << std::endl;
-			throw(-1);
-		}
+		filetype = 2;
 	}
 	if (a->LB_Switch.getValue() == true) {
 		LBcalc = true;

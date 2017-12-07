@@ -655,8 +655,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	    solveContinuousMPs(adjustPenalty);
 	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
 	    numInnerSolves++;
-	  }while(innerSSCVal < innerSSCParam);
-	  //}while(innerSSCVal < innerSSCParam && numInnerSolves<maxNoInnerSteps);
+	  }while(innerSSCVal < innerSSCParam && numInnerSolves<maxNoInnerSteps);
 	  if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
 	  if(mpiRank==0) cout << "Inner SSC value is: " << innerSSCVal << endl;
 	}

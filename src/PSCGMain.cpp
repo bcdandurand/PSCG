@@ -53,9 +53,9 @@ int main(int argc, char **argv) {
    	//Flag for the head node recognise itself as such
 	mpiHead = (mpiRank == 0);
 
-	PSCGParams par;
+	//PSCGParams par;
 	//par.readParameters(argc, argv);
-	par.setMPIParams(mpiSize,mpiRank);
+	//par.setMPIParams(mpiSize,mpiRank);
 	
 	DecTssModel smpsModel;
 	smpsModel.readSmps(argv[1]);	

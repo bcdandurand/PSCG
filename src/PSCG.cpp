@@ -46,7 +46,7 @@ PSCG::PSCG(DecTssModel &model):smpsModel(model),env(),nNodeSPs(0),referenceLagrL
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(100),maxNoConseqNullSteps(1e6),noGSIts(1),
-	baselineRho(1.0),rho(baselineRho),nThreads(1),
+	baselineRho(1.0),rho(baselineRho),nThreads(1),nVerticesUsed(100),
 	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
 
 	//smpsModel.readSmps(par->filename.c_str());
@@ -74,7 +74,7 @@ PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),env(),nNodeSPs(0)
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),comm_(comm),mpiRank(0),mpiSize(1),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(100),maxNoConseqNullSteps(1e6),noGSIts(1),
-	baselineRho(1.0),rho(baselineRho),nThreads(1),
+	baselineRho(1.0),rho(baselineRho),nThreads(1),nVerticesUsed(100),
 	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
 
 	//smpsModel.readSmps(par->filename.c_str());
@@ -233,6 +233,7 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 			subproblemSolvers.push_back( new PSCGScen_SMPS(env) );
 		      	dynamic_cast<PSCGScen_SMPS*>(subproblemSolvers[tS])->initialiseSMPS(smpsModel,scenariosToThisModel[tS]); 
 			//subproblemSolvers[tS]->setNThreads(par->threads);
+			subproblemSolvers[tS]->setNThreads(nThreads);
 		      	break;
 		    default:
 			throw(-1);

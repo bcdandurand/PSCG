@@ -29,6 +29,7 @@ using namespace std;
 #define DEFAULT_NO_THREADS 1
 #define KIWIEL_PENALTY 1 //set 1 to use Kiwiel (2006) penalty update rule
 #define MIN_PEN 0.0 
+#define MAX_NO_INNERSTEPS 1000
 
 #ifdef USING_MPI
    #include <mpi.h>
@@ -286,6 +287,7 @@ void fixVarAllSPsAt(int index, double fixVal){
     currentVarLB_[index]=fixVal;		
     currentVarUB_[index]=fixVal;		
 }
+#if 0
 void setLBsAllSPs(const double *lbs){
     for(int tS=0; tS<nNodeSPs; tS++){
 	subproblemSolvers[tS]->setLBs(lbs, n1);
@@ -297,6 +299,17 @@ void setUBsAllSPs(const double *ubs){
 	subproblemSolvers[tS]->setUBs(ubs, n1);
     }
     memcpy(currentVarUB_,ubs,n1*sizeof(double));		
+}
+#endif
+void setBdForSP(const int sp, const int ind, const double lb, const double ub){
+    subproblemSolvers[sp]->setBound(ind, lb, ub);
+}
+void setBdAllSPs(const int ind, const double lb, const double ub){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	subproblemSolvers[tS]->setBound(ind, lb, ub);
+    }
+    currentVarLB_[ind]=lb;
+    currentVarUB_[ind]=ub;
 }
 void setBdsAllSPs(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
     for(int tS=0; tS<nNodeSPs; tS++){
@@ -310,7 +323,7 @@ void setBdsAllSPs(const vector<int> &inds, const vector<double> &lbs, const vect
 
 void restoreOriginalVarBounds(){
     for(int tS=0; tS<nNodeSPs; tS++){
-	subproblemSolvers[tS]->unfixX(origVarLB_,origVarUB_);
+	subproblemSolvers[tS]->restoreBounds();//unfixX(origVarLB_,origVarUB_);
     }
     memcpy(currentVarLB_,origVarLB_,n1*sizeof(double));
     memcpy(currentVarUB_,origVarUB_,n1*sizeof(double));
@@ -321,6 +334,19 @@ void clearSPVertexHistory(){
     }
 }
 
+void addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double br_ub){
+    if(br_rank < 0 && br_SP < 0){
+	for(int tS=0; tS<nNodeSPs; tS++){
+	    subproblemSolvers[tS]->setBound(br_index, br_lb, br_ub);
+	}
+    }
+    else if(br_rank==mpiRank && br_SP>=0 && br_SP < nNodeSPs){
+	    subproblemSolvers[br_SP]->setBound(br_index, br_lb, br_ub);
+    }
+    else{
+	cerr << "addBranchVarBd(): Something is wrong!" << endl;
+    }
+}
 
 void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs);
 void installSubproblem(double lb, vector<double*> &omega, const vector<int> &indices, const vector<double> &zLBs, const vector<double> &zUBs);

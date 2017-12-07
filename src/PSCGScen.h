@@ -186,6 +186,7 @@ void setNThreads(int nthreads){nThreads=nthreads;}
 virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs)=0;
 //virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual void setSolverStatus()=0;
+#if 0
 virtual void upBranchOnVar(int varIndex, double bound)=0;
 virtual void downBranchOnVar(int varIndex, double bound)=0;
 virtual void setLBs(const double *lbs, int nLBs){
@@ -195,6 +196,10 @@ virtual void setUBs(const double *ubs, int nUBs){
 cerr << "setLBs(): Default implementation does nothing." << endl;
 }
 virtual void setBounds(const double *lbs, const double *ubs, int nBds){
+cerr << "setBounds(): Default implementation does nothing." << endl;
+}
+#endif
+virtual void setBound(const int ind, const double lb, const double ub, bool indNonRedundant=true){
 cerr << "setBounds(): Default implementation does nothing." << endl;
 }
 virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
@@ -973,7 +978,7 @@ virtual void setSolverStatus(){
 		}
     	}
 }
-
+#if 0
 virtual void upBranchOnVar(int varIndex, double bound){
     if(varIndex >= 0 && varIndex < n1+n2){
 	LagrMIPInterface_->setColLower(varIndex,bound);
@@ -994,6 +999,29 @@ virtual void setUBs(const double *ubs, int nUBs){
     for(int ii=0; ii<nUBs; ii++){
 	LagrMIPInterface_->setColUpper(ii,ubs[ii]);
     }
+}
+#endif
+virtual void setBound(const int ind, const double lb, const double ub, bool indNonRedundant){
+    //Save the current bound, if it is not already saved
+    if(!indNonRedundant){
+        int ii;
+        for(ii=0; ii<branchIndices.size(); ii++){
+	    if(ind==ii) break;
+    	}
+    	if(ii==branchIndices.size()){
+	    branchIndices.push_back(ind);
+	    restoreLBs.push_back(LagrMIPInterface_->getColLower()[ind]);
+	    restoreUBs.push_back(LagrMIPInterface_->getColUpper()[ind]);
+    	}
+    }
+    else{
+	    branchIndices.push_back(ind);
+	    restoreLBs.push_back(LagrMIPInterface_->getColLower()[ind]);
+	    restoreUBs.push_back(LagrMIPInterface_->getColUpper()[ind]);
+    }
+    LagrMIPInterface_->setColLower(ind,lb);
+    LagrMIPInterface_->setColUpper(ind,ub);
+
 }
 virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
     restoreBounds();

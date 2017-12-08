@@ -66,6 +66,8 @@ static void compareBranchInfoOld(BranchingVarInfo *in, BranchingVarInfo *inout, 
 	inout[ii].disp = in[ii].disp;
 	inout[ii].intDiscr = in[ii].intDiscr;
 	inout[ii].brVal = in[ii].brVal;
+	inout[ii].brLB = in[ii].brLB;
+	inout[ii].brUB = in[ii].brUB;
     }
   }
 }
@@ -414,7 +416,7 @@ void printCurrentVarBds(){
 vector<double*>& getOmegaCurrent(){return omega_current;}
 vector<double*>& getOmegaCentre(){return omega_centre;}
 double *getIncumbentZ(){return z_incumbent_;}
-double getObjVal(){return objVal;}
+double getPrimalObjVal(){return objVal;}
 double getIncumbentVal(){return incumbentVal;}
 
 void readZIntoModel(const double* z){
@@ -785,7 +787,7 @@ double findPrimalFeasSolnWith(double *z){
 }
 
 
-double getBound(){return currentLagrLB;}
+double getLagrBound(){return currentLagrLB;}
 void setBound(double bd){currentLagrLB=bd;}
 void setReferenceLB(double bd){referenceLagrLB=bd;}
 
@@ -966,7 +968,7 @@ BranchingVarInfo findBranchingIndexOld(){
 #ifdef USING_MPI
     MPI_Op myOp;
     MPI_Datatype mpitype;
-    MPI_Type_contiguous(6, MPI_DOUBLE, &mpitype);
+    MPI_Type_contiguous(8, MPI_DOUBLE, &mpitype);
     MPI_Type_commit( &mpitype);
     MPI_Op_create( (MPI_User_function *) compareBranchInfoOld, true, &myOp ); 
     if(mpiSize>1){
@@ -1024,7 +1026,7 @@ BranchingVarInfo findBranchingIndex(){
 #ifdef USING_MPI
     MPI_Op myOp;
     MPI_Datatype mpitype;
-    MPI_Type_contiguous(6, MPI_DOUBLE, &mpitype);
+    MPI_Type_contiguous(8, MPI_DOUBLE, &mpitype);
     MPI_Type_commit( &mpitype);
     MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
     if(mpiSize>1){
@@ -1035,7 +1037,7 @@ BranchingVarInfo findBranchingIndex(){
 	branchInfo = localBranchInfo;
     }
     if(mpiRank==0){
-        cout << "Branching on index: " << branchInfo.index << " disps: " << branchInfo.disp << " intDiscr " << branchInfo.intDiscr << " with value " << branchInfo.brVal << endl;
+        cout << "Branching on (rank, sp, index): (" << branchInfo.rank <<","<<branchInfo.scen<<","<<branchInfo.index<<") " << " disps: " << branchInfo.disp << " intDiscr " << branchInfo.intDiscr << " with value " << branchInfo.brVal << endl;
     }
     return branchInfo;
 }
@@ -1219,6 +1221,7 @@ if(mpiRank==0){
 bool solveRecourseProblemGivenFixedZ();	
 
 int getSPStatus(){return modelStatus_[SP_STATUS];}
+bool statusIsFeasible(){return modelStatus_[SP_STATUS]!=SP_INFEAS;}
 void setSPStatus(int stat){modelStatus_[SP_STATUS]=stat;}
 int getZStatus(){return modelStatus_[Z_STATUS];}
 void setZStatus(int stat){modelStatus_[Z_STATUS]=stat;}

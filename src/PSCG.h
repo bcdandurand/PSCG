@@ -54,10 +54,10 @@ INTEGER
 
 typedef struct{
     //double a,b,c,d;
-    double rank,scen,index,disp,intDiscr,brVal;
+    double rank,scen,index,disp,intDiscr,brVal,brLB,brUB;
 } BranchingVarInfo;
 #ifdef USING_MPI
-static void compareBranchInfo(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
+static void compareBranchInfoOld(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
     if(in[ii].intDiscr > inout[ii].intDiscr){
 	inout[ii].rank = in[ii].rank;
@@ -69,7 +69,7 @@ static void compareBranchInfo(BranchingVarInfo *in, BranchingVarInfo *inout, int
     }
   }
 }
-static void compareBranchInfo2(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
+static void compareBranchInfo(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
     if(in[ii].disp > inout[ii].disp){
 	inout[ii].rank = in[ii].rank;
@@ -78,6 +78,8 @@ static void compareBranchInfo2(BranchingVarInfo *in, BranchingVarInfo *inout, in
 	inout[ii].disp = in[ii].disp;
 	inout[ii].intDiscr = in[ii].intDiscr;
 	inout[ii].brVal = in[ii].brVal;
+	inout[ii].brLB = in[ii].brLB;
+	inout[ii].brUB = in[ii].brUB;
     }
   }
 }
@@ -124,6 +126,7 @@ int n1;
 int n2;
 int nNodeSPs;
 int currentIter_;
+int noInnerSolves;
 int noConseqNullSteps;
 int noSeriousSteps;
 int phase;
@@ -667,7 +670,6 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	int SPStatus=performColGenStep();
 	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
 	SSCVal = computeSSCVal(); //shouldTerminate is also updated here.
-	if(mpiRank==0) cout << "SSC value is: " << SSCVal << endl;
     //verifyOmegaDualFeas();
     //printStatus();
 	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
@@ -676,14 +678,12 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 
 	if(phase==2) preSolveMP();
 	else{
-          int numInnerSolves=0;	
+          noInnerSolves=0;	
 	  do{
 	    solveContinuousMPs(adjustPenalty);
 	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
-	    numInnerSolves++;
-	  }while(innerSSCVal < innerSSCParam && numInnerSolves<maxNoInnerSteps);
-	  if(mpiRank==0) cout << "Number of inner solve MP calls: " << numInnerSolves << endl;
-	  if(mpiRank==0) cout << "Inner SSC value is: " << innerSSCVal << endl;
+	    noInnerSolves++;
+	  }while(innerSSCVal < innerSSCParam && noInnerSolves<maxNoInnerSteps);
 	}
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
 	printStatus();
@@ -705,9 +705,11 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	    }
             shouldContinue=false;
 	}
+#if 0
 	if(mpiRank==0) cerr << "Omega updated " << noSeriousSteps << " times, " 
 		<< " integrality disc: " << integralityDisc << endl;
 if(mpiRank==0){cout << "Rho is: " << rho << endl;}
+#endif
 	return SPStatus;
 }
 
@@ -723,7 +725,6 @@ double computeBound(){
 double processBound(){
     bool updatePenalty=true;
     for(currentIter_=0; shouldContinue; currentIter_++){
-	if(mpiRank==0) cout << "Regular iteration " << currentIter_ << endl;
 	#ifdef KEEP_LOG
 	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
 	#endif
@@ -733,10 +734,10 @@ double processBound(){
 
 	phase=0;
 
-	if(currentIter_>50) updatePenalty=false;
+	if(currentIter_>200) updatePenalty=false;
 	//if(currentIter_ < 100) regularIteration(true,true);
 	//else regularIteration(false,true);
-    printTCritVal();
+    //printTCritVal();
         //if(currentIter_ < 10 || (currentIter_%10==0)) objVal=findPrimalFeasSolnWith(z_current);
 #if 1
 	if(phase==0) regularIteration(updatePenalty,true);
@@ -939,7 +940,7 @@ void dispOfAllXVertices(double *retVec=NULL){
 }
 
 
-BranchingVarInfo findBranchingIndex(){
+BranchingVarInfo findBranchingIndexOld(){
     double *dispVec;
     BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
     BranchingVarInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
@@ -967,7 +968,7 @@ BranchingVarInfo findBranchingIndex(){
     MPI_Datatype mpitype;
     MPI_Type_contiguous(6, MPI_DOUBLE, &mpitype);
     MPI_Type_commit( &mpitype);
-    MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
+    MPI_Op_create( (MPI_User_function *) compareBranchInfoOld, true, &myOp ); 
     if(mpiSize>1){
 	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, comm_);
     }
@@ -982,28 +983,29 @@ BranchingVarInfo findBranchingIndex(){
     return branchInfo;
 }
 
-BranchingVarInfo findBranchingIndex2(){
+BranchingVarInfo findBranchingIndex(){
     double *dispVec;
-    BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
-    BranchingVarInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
+    BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0};
+    BranchingVarInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0};
     dispOfAllXVertices();
+    localBranchInfo.index=-1;
+    localBranchInfo.disp=0.0;
+    for(int ii=0; ii<n1; ii++){
+        if(subproblemSolvers[0]->getColTypes()[ii]==0){continue;}
+	if(z_dispersions[ii] > localBranchInfo.disp){ 
+	    localBranchInfo.index = ii;
+	    localBranchInfo.disp = z_dispersions[ii];
+	    localBranchInfo.brVal = z_current[ii];
+	    localBranchInfo.brLB = currentVarLB_[ii];
+	    localBranchInfo.brUB = currentVarUB_[ii];
+        }
+    }
     
     for(int tS=0; tS<nNodeSPs; tS++){
 	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
 	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
-	dispVec = subproblemSolvers[tS]->computeDispersions();
+	    dispVec = subproblemSolvers[tS]->computeDispersions();
 	    localBranchInfo.intDiscr=integrDiscr_[tS];
-	    localBranchInfo.index=-1;
-	    localBranchInfo.disp=0.0;
-	    for(int ii=0; ii<n1; ii++){
-	      //if(!indexIsInt(ii)){continue;}
-	      if(subproblemSolvers[tS]->getColTypes()[ii]==0){continue;}
-	      if(z_dispersions[ii] > localBranchInfo.disp){ 
-	        localBranchInfo.index = ii;
-		localBranchInfo.disp = z_dispersions[ii];
-	        localBranchInfo.brVal = subproblemSolvers[tS]->getX()[ii];
-	      }
-	    }
 	    for(int ii=n1; ii<n1+n2; ii++){
 	      //if(!indexIsInt(ii)){continue;}
 	      if(subproblemSolvers[tS]->getColTypes()[ii]==0){continue;}
@@ -1013,6 +1015,8 @@ BranchingVarInfo findBranchingIndex2(){
 		localBranchInfo.disp = dispVec[ii];
 	        localBranchInfo.index = ii;
 	        localBranchInfo.brVal = subproblemSolvers[tS]->getY()[ii-n1];
+	        localBranchInfo.brLB = subproblemSolvers[tS]->getLB(ii);
+	        localBranchInfo.brUB = subproblemSolvers[tS]->getUB(ii);
 	      }
 	    }
 	    
@@ -1466,11 +1470,13 @@ double getBestNodeQuality(){
 }
 #endif
 void printStatus(){
+  int wid = 20;
   if(mpiRank==0){
-cout << "________________________________________________________________________" << endl;
-	printf("currentBestLagrLB: %0.14g, ALVal: %0.14g, sqrDiscNorm: %0.14g\n", currentLagrLB, ALVal, discrepNorm);
+	//cout << setfill( ' ' );
+	//cout << "Iter " << currentIter_ << setw(wid) << setprecision(10) << "LagrLB " << currentLagrLB << setw(wid) << "ALVal " << ALVal << setw(wid) << setprecision(5) << "primDiscr " << discrepNorm
+	//	<< setw(wid) << "SSCVal " << SSCVal << setw(wid) << "innSSCVal " << innerSSCVal << setw(wid) << "MP iters: " << noInnerSolves << endl;
+	printf("Iter %6d: LagrLB: %-10.8g\tALVal: %-10.8g\tpDisc: %-8.3g\tSSCVal: %-8.3g\tinnSSCVal: %-8.3g\tnoInnerMP: %-5d\n", currentIter_, currentLagrLB, ALVal, discrepNorm, SSCVal, innerSSCVal, noInnerSolves);
 //	printf("Best node: %0.14g, Incumbent value: %0.14g\n", getBestNodeQuality(), getIncumbentVal());
-cout << "________________________________________________________________________" << endl;
 	//printf("Aug. Lagrangian value: %0.9g\n", ALVal);
 	//printf("Norm of primal discrepancy: %0.6g\n", discrepNorm);
 	//printf("Current penalty: %0.2g\n",rho);

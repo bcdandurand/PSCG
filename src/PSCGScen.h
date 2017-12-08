@@ -199,8 +199,14 @@ virtual void setBounds(const double *lbs, const double *ubs, int nBds){
 cerr << "setBounds(): Default implementation does nothing." << endl;
 }
 #endif
+virtual double getLB(const int ind){
+cerr << "getLB(): Default implementation does nothing." << endl;
+}
+virtual double getUB(const int ind){
+cerr << "getUBound(): Default implementation does nothing." << endl;
+}
 virtual void setBound(const int ind, const double lb, const double ub, bool indNonRedundant=true){
-cerr << "setBounds(): Default implementation does nothing." << endl;
+cerr << "setBound(): Default implementation does nothing." << endl;
 }
 virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
 cerr << "setBounds(): Default implementation does nothing." << endl;
@@ -1001,6 +1007,12 @@ virtual void setUBs(const double *ubs, int nUBs){
     }
 }
 #endif
+virtual double getLB(const int ind){
+    return LagrMIPInterface_->getColLower()[ind];
+}
+virtual double getUB(const int ind){
+    return LagrMIPInterface_->getColUpper()[ind];
+}
 virtual void setBound(const int ind, const double lb, const double ub, bool indNonRedundant){
     //Save the current bound, if it is not already saved
     if(!indNonRedundant){

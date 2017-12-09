@@ -56,6 +56,14 @@ typedef struct{
     //double a,b,c,d;
     double rank,scen,index,disp,intDiscr,brVal,brLB,brUB;
 } BranchingVarInfo;
+
+typedef struct{
+    vector<int> ranks;
+    vector<int> sps;
+    vector<int> inds;
+    vector<double> lbs;
+    vector<double> ubs;
+} BranchingBDs;
 #ifdef USING_MPI
 static void compareBranchInfoOld(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
@@ -169,6 +177,8 @@ double *penSumLocal;// = new double[n1];
 double *penSum;// = new double[n1];
 double *weights_;// = new double[nS];
 double *integrDiscr_;
+
+BranchingBDs branchingBDs_;
 
 vector<int> spSolverStatuses_;
 
@@ -326,7 +336,15 @@ void setBdsAllSPs(const vector<int> &inds, const vector<double> &lbs, const vect
     }
 }
 
+void clearBranchingBounds(){
+    branchingBDs_.ranks.clear();
+    branchingBDs_.sps.clear();
+    branchingBDs_.inds.clear();
+    branchingBDs_.lbs.clear();
+    branchingBDs_.ubs.clear();
+}
 void restoreOriginalVarBounds(){
+    clearBranchingBounds();
     for(int tS=0; tS<nNodeSPs; tS++){
 	subproblemSolvers[tS]->restoreBounds();//unfixX(origVarLB_,origVarUB_);
     }
@@ -340,7 +358,12 @@ void clearSPVertexHistory(){
 }
 
 void addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double br_ub){
-    if(br_rank < 0 && br_SP < 0){
+    branchingBDs_.ranks.push_back(br_rank);
+    branchingBDs_.sps.push_back(br_SP);
+    branchingBDs_.inds.push_back(br_index);
+    branchingBDs_.lbs.push_back(br_lb);
+    branchingBDs_.ubs.push_back(br_ub);
+    if(br_rank < 0 && br_SP >= 0){
 	for(int tS=0; tS<nNodeSPs; tS++){
 	    subproblemSolvers[tS]->setBound(br_index, br_lb, br_ub);
 	}
@@ -348,7 +371,10 @@ void addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double b
     else if(br_rank==mpiRank && br_SP>=0 && br_SP < nNodeSPs){
 	    subproblemSolvers[br_SP]->setBound(br_index, br_lb, br_ub);
     }
-    else{
+    else if(br_rank < 0 && br_SP < 0){
+	cout << "No branch found, this node should be solved to optimality." << endl;
+    }
+    else {
 	cerr << "addBranchVarBd(): Something is wrong!" << endl;
     }
 }

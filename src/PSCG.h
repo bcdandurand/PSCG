@@ -363,20 +363,21 @@ void addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double b
     branchingBDs_.inds.push_back(br_index);
     branchingBDs_.lbs.push_back(br_lb);
     branchingBDs_.ubs.push_back(br_ub);
-    if(br_rank < 0 && br_SP >= 0){
-	for(int tS=0; tS<nNodeSPs; tS++){
+    if(br_index >=0){
+        if(br_rank < 0 && br_SP < 0){
+	  for(int tS=0; tS<nNodeSPs; tS++){
 	    subproblemSolvers[tS]->setBound(br_index, br_lb, br_ub);
-	}
-    }
-    else if(br_rank==mpiRank && br_SP>=0 && br_SP < nNodeSPs){
+	  }
+        }
+        else if(br_rank==mpiRank && br_SP>=0 && br_SP < nNodeSPs){
 	    subproblemSolvers[br_SP]->setBound(br_index, br_lb, br_ub);
+        }
+	//else this processor and/or subproblem does nothing
     }
-    else if(br_rank < 0 && br_SP < 0){
+    else{
 	cout << "No branch found, this node should be solved to optimality." << endl;
     }
-    else {
-	cerr << "addBranchVarBd(): Something is wrong!" << endl;
-    }
+
 }
 
 void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs);

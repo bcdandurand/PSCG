@@ -84,6 +84,8 @@ int PSCGScen_SMPS::initialiseSMPS(DecTssModel &smpsModel, int scenario) {
 	n2 = smpsModel.getNumCols(1);
 	nS = smpsModel.getNumScenarios();
 	//nThreads = par->threads;
+	origLBs_ = new double[n1+n2];
+	origUBs_ = new double[n1+n2];
 
 	c = new double[n1];
 	d = new double[n2];
@@ -112,6 +114,10 @@ int PSCGScen_SMPS::initialiseSMPS(DecTssModel &smpsModel, int scenario) {
 	    }
 	}
 	delete [] ctype; //All other allocated data passed to assignProblem is owned by LagrMIPInterface_
+        for(int iii=0; iii<n1+n2; iii++){
+	    origLBs_[iii]=LagrMIPInterface_->getColLower()[iii];
+	    origUBs_[iii]=LagrMIPInterface_->getColUpper()[iii];
+	}
 
 	setCPXMIPParameters();
 #if 0

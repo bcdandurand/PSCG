@@ -68,8 +68,10 @@ double *d;
 vector<int> branchIndices;
 vector<double> restoreLBs;
 vector<double> restoreUBs;
-vector<double> branchLBs;
-vector<double> branchUBs;
+//vector<double> branchLBs;
+//vector<double> branchUBs;
+double *origLBs_;
+double *origUBs_;
 
 double LagrBd;
 double objVal;
@@ -141,6 +143,8 @@ void finishInitialisation();
   delete [] solVertex;
   delete [] x_vertex;
   delete [] y_vertex;
+  delete [] origLBs_;
+  delete [] origUBs_;
 
   mpModel.end();
   mpObjective.end();
@@ -632,6 +636,9 @@ virtual void printXBounds(){
 virtual void printYBounds(){
     cout << "printYBounds() default: doing nothing..." << endl;
 }
+virtual bool printModifiedYBounds(){
+    cout << "printModifiedYBounds() default: doing nothing..." << endl;
+}
 
 #if 0
 void clearVertexHistory(){
@@ -1022,19 +1029,20 @@ virtual void setBound(const int ind, const double lb, const double ub, bool indN
     	}
     	if(ii==branchIndices.size()){
 	    branchIndices.push_back(ind);
-	    restoreLBs.push_back(LagrMIPInterface_->getColLower()[ind]);
-	    restoreUBs.push_back(LagrMIPInterface_->getColUpper()[ind]);
+	    restoreLBs.push_back(getLB(ind));
+	    restoreUBs.push_back(getUB(ind));
     	}
     }
     else{
 	    branchIndices.push_back(ind);
-	    restoreLBs.push_back(LagrMIPInterface_->getColLower()[ind]);
-	    restoreUBs.push_back(LagrMIPInterface_->getColUpper()[ind]);
+	    restoreLBs.push_back(getLB(ind));
+	    restoreUBs.push_back(getUB(ind));
     }
     LagrMIPInterface_->setColLower(ind,lb);
     LagrMIPInterface_->setColUpper(ind,ub);
 
 }
+#if 0
 virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
     restoreBounds();
     branchIndices.resize(inds.size());
@@ -1050,13 +1058,14 @@ virtual void setBounds(const vector<int> &inds, const vector<double> &lbs, const
     restoreUBs.resize(inds.size());
 
     for(int ii=0; ii<inds.size(); ii++){
-	restoreLBs[inds[ii]]=LagrMIPInterface_->getColLower()[inds[ii]];
-	restoreUBs[inds[ii]]=LagrMIPInterface_->getColUpper()[inds[ii]];
+	restoreLBs[ii]=LagrMIPInterface_->getColLower()[inds[ii]];
+	restoreUBs[ii]=LagrMIPInterface_->getColUpper()[inds[ii]];
 	LagrMIPInterface_->setColLower(inds[ii],lbs[ii]);
 	LagrMIPInterface_->setColUpper(inds[ii],ubs[ii]);
     }
 
 }
+#endif
 virtual void restoreBounds(){
 #if 0
 vector<int> branchIndices;
@@ -1066,6 +1075,15 @@ vector<double> restoreUBs;
     for(int ii=0; ii<branchIndices.size(); ii++){
 	LagrMIPInterface_->setColLower(branchIndices[ii],restoreLBs[ii]);
 	LagrMIPInterface_->setColUpper(branchIndices[ii],restoreUBs[ii]);
+    }
+    restoreLBs.clear();
+    restoreUBs.clear();
+    branchIndices.clear();
+    for(int iii=0; iii<n1+n2; iii++){
+	LagrMIPInterface_->setColLower(iii,origLBs_[iii]);
+	LagrMIPInterface_->setColUpper(iii,origUBs_[iii]);
+	assert(origLBs_[iii]==getLB(iii));
+	assert(origUBs_[iii]==getUB(iii));
     }
 }
 
@@ -1155,6 +1173,16 @@ cout << "Printing subproblem bounds: " << endl;
       cout << " (" << LagrMIPInterface_->getColLower()[n1+ii] << "," << LagrMIPInterface_->getColUpper()[n1+ii] << ")";
   }
   cout << endl;
+}
+virtual bool printModifiedYBounds(){
+    bool found=false;
+    for(int ii=0; ii<branchIndices.size(); ii++){
+	if(branchIndices[ii]>n1){
+	    found=true;
+      	    cout << " (" << branchIndices[ii] << "," << LagrMIPInterface_->getColLower()[branchIndices[ii]] << "," << LagrMIPInterface_->getColUpper()[branchIndices[ii]] << ")";
+	}
+    }
+    return found;
 }
 virtual void printLinCoeffs(){
 cout << "Printing linear coefficients: " << endl;

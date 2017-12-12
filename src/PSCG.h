@@ -54,7 +54,7 @@ INTEGER
 
 typedef struct{
     //double a,b,c,d;
-    double rank,scen,index,disp,intDiscr,brVal,brLB,brUB;
+    double rank,scen,index,disp,brVal,brLBUp,brUBUp,brLBDn,brUBDn;
 } BranchingVarInfo;
 
 typedef struct{
@@ -65,6 +65,7 @@ typedef struct{
     vector<double> ubs;
 } BranchingBDs;
 #ifdef USING_MPI
+#if 0
 static void compareBranchInfoOld(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
     if(in[ii].intDiscr > inout[ii].intDiscr){
@@ -72,13 +73,15 @@ static void compareBranchInfoOld(BranchingVarInfo *in, BranchingVarInfo *inout, 
 	inout[ii].scen = in[ii].scen;
 	inout[ii].index = in[ii].index;
 	inout[ii].disp = in[ii].disp;
-	inout[ii].intDiscr = in[ii].intDiscr;
 	inout[ii].brVal = in[ii].brVal;
-	inout[ii].brLB = in[ii].brLB;
-	inout[ii].brUB = in[ii].brUB;
+	inout[ii].brLBUp = in[ii].brLBUp;
+	inout[ii].brUBUp = in[ii].brUBUp;
+	inout[ii].brLBDn = in[ii].brLBDn;
+	inout[ii].brUBDn = in[ii].brUBDn;
     }
   }
 }
+#endif
 static void compareBranchInfo(BranchingVarInfo *in, BranchingVarInfo *inout, int *len, MPI_Datatype *dptr){
   for(int ii=0; ii< *len; ii++){
     if(in[ii].disp > inout[ii].disp){
@@ -86,10 +89,11 @@ static void compareBranchInfo(BranchingVarInfo *in, BranchingVarInfo *inout, int
 	inout[ii].scen = in[ii].scen;
 	inout[ii].index = in[ii].index;
 	inout[ii].disp = in[ii].disp;
-	inout[ii].intDiscr = in[ii].intDiscr;
 	inout[ii].brVal = in[ii].brVal;
-	inout[ii].brLB = in[ii].brLB;
-	inout[ii].brUB = in[ii].brUB;
+	inout[ii].brLBUp= in[ii].brLBUp;
+	inout[ii].brUBUp = in[ii].brUBUp;
+	inout[ii].brLBDn = in[ii].brLBDn;
+	inout[ii].brUBDn = in[ii].brUBDn;
     }
   }
 }
@@ -179,6 +183,7 @@ double *weights_;// = new double[nS];
 double *integrDiscr_;
 
 BranchingBDs branchingBDs_;
+BranchingVarInfo brVarInfo;
 
 vector<int> spSolverStatuses_;
 
@@ -295,6 +300,7 @@ void initialiseModel();
 
 void setupSolvers();
 
+#if 0
 void fixVarAllSPsAt(int index, double fixVal){
     for(int tS=0; tS<nNodeSPs; tS++){
 	subproblemSolvers[tS]->fixVarAt(index, fixVal);
@@ -302,6 +308,7 @@ void fixVarAllSPsAt(int index, double fixVal){
     currentVarLB_[index]=fixVal;		
     currentVarUB_[index]=fixVal;		
 }
+#endif
 #if 0
 void setLBsAllSPs(const double *lbs){
     for(int tS=0; tS<nNodeSPs; tS++){
@@ -318,14 +325,17 @@ void setUBsAllSPs(const double *ubs){
 #endif
 void setBdForSP(const int sp, const int ind, const double lb, const double ub){
     subproblemSolvers[sp]->setBound(ind, lb, ub);
-}
-void setBdAllSPs(const int ind, const double lb, const double ub){
-    for(int tS=0; tS<nNodeSPs; tS++){
-	subproblemSolvers[tS]->setBound(ind, lb, ub);
-    }
     currentVarLB_[ind]=lb;
     currentVarUB_[ind]=ub;
 }
+void setBdAllSPs(const int ind, const double lb, const double ub){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	setBdForSP(tS,ind,lb,ub);	
+    }
+}
+
+void setCutoffLagrBD(double val){cutoffLagrLB = val;}
+#if 0
 void setBdsAllSPs(const vector<int> &inds, const vector<double> &lbs, const vector<double> &ubs){
     for(int tS=0; tS<nNodeSPs; tS++){
 	subproblemSolvers[tS]->setBounds(inds, lbs, ubs);
@@ -335,6 +345,7 @@ void setBdsAllSPs(const vector<int> &inds, const vector<double> &lbs, const vect
 	currentVarUB_[inds[ii]]=ubs[ii];
     }
 }
+#endif
 
 void clearBranchingBounds(){
     branchingBDs_.ranks.clear();
@@ -365,12 +376,10 @@ void addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double b
     branchingBDs_.ubs.push_back(br_ub);
     if(br_index >=0){
         if(br_rank < 0 && br_SP < 0){
-	  for(int tS=0; tS<nNodeSPs; tS++){
-	    subproblemSolvers[tS]->setBound(br_index, br_lb, br_ub);
-	  }
+	  setBdAllSPs(br_index, br_lb, br_ub);
         }
         else if(br_rank==mpiRank && br_SP>=0 && br_SP < nNodeSPs){
-	    subproblemSolvers[br_SP]->setBound(br_index, br_lb, br_ub);
+	    setBdForSP(br_SP, br_index, br_lb, br_ub);
         }
 	//else this processor and/or subproblem does nothing
     }
@@ -746,9 +755,23 @@ double computeBound(){
 //if(mpiRank==0) cout << "Begin computeBound()" << endl;
 
     //SSCParam = 0.10;
+    if(mpiRank==0) printCurrentVarBds();
+#if 1
+    for (int tS = 0; tS < nNodeSPs; tS++) {
+	if(subproblemSolvers[tS]->printModifiedYBounds()){
+	    cout << "[" << mpiRank << "," << tS << "]" << endl;
+	}
+    }
+#endif
+    
     int SPStatus=initialIteration();
     //if(mpiRank==0) cout << "After initial iteration: currentLB: " << trialLagrLB << " versus refLB: " << referenceLagrLB << endl;;
-    return processBound();    
+    if(modelStatus_[SP_STATUS]==SP_INFEAS){
+	currentLagrLB=COIN_DBL_MAX;
+        brVarInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0,0.0};
+	return currentLagrLB;
+    }
+    else{return processBound();}
 }
 
 double processBound(){
@@ -775,10 +798,17 @@ double processBound(){
 #endif
     }// main loop over currentIter_
 
-    printStatus();
     //integralityDisc=evaluateIntegralityDiscrepancies();
     objVal=findPrimalFeasSolnWith(z_current);
-    findBranchingIndex();
+    brVarInfo = findBranchingIndex();
+    while(brVarInfo.index<0 && objVal - currentLagrLB < 1e-6){
+      for(int kk=0; kk<100; kk++){
+	regularIteration(updatePenalty,true);
+	currentIter_++;
+      }
+      objVal=findPrimalFeasSolnWith(z_current);
+      brVarInfo = findBranchingIndex();
+    }
     return currentLagrLB;
 }
 
@@ -968,7 +998,7 @@ void dispOfAllXVertices(double *retVec=NULL){
     //computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
 }
 
-
+#if 0
 BranchingVarInfo findBranchingIndexOld(){
     double *dispVec;
     BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0};
@@ -1011,22 +1041,33 @@ BranchingVarInfo findBranchingIndexOld(){
     }
     return branchInfo;
 }
+#endif
+BranchingVarInfo getBranchingVarInfo(){return brVarInfo;}
 
 BranchingVarInfo findBranchingIndex(){
     double *dispVec;
-    BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0};
-    BranchingVarInfo branchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0};
-    dispOfAllXVertices();
+    BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0,0.0};
+    brVarInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0,0.0};
+    dispOfAllXVertices(); //sets z_dispersions
     localBranchInfo.index=-1;
     localBranchInfo.disp=0.0;
     for(int ii=0; ii<n1; ii++){
-        if(subproblemSolvers[0]->getColTypes()[ii]==0){continue;}
 	if(z_dispersions[ii] > localBranchInfo.disp){ 
 	    localBranchInfo.index = ii;
 	    localBranchInfo.disp = z_dispersions[ii];
 	    localBranchInfo.brVal = z_current[ii];
-	    localBranchInfo.brLB = currentVarLB_[ii];
-	    localBranchInfo.brUB = currentVarUB_[ii];
+	    if(subproblemSolvers[0]->getColTypes()[ii]==0){
+	        localBranchInfo.brLBUp = localBranchInfo.brVal;
+	        localBranchInfo.brUBUp = currentVarUB_[ii];
+	        localBranchInfo.brLBDn = currentVarLB_[ii];
+	        localBranchInfo.brUBDn = localBranchInfo.brVal;
+	    }
+	    else{
+	        localBranchInfo.brLBUp = ceil(localBranchInfo.brVal);
+	        localBranchInfo.brUBUp = currentVarUB_[ii];
+	        localBranchInfo.brLBDn = currentVarLB_[ii];
+	        localBranchInfo.brUBDn = floor(localBranchInfo.brVal);
+	    }
         }
     }
     
@@ -1034,7 +1075,7 @@ BranchingVarInfo findBranchingIndex(){
 	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
 	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
 	    dispVec = subproblemSolvers[tS]->computeDispersions();
-	    localBranchInfo.intDiscr=integrDiscr_[tS];
+	    //localBranchInfo.intDiscr=integrDiscr_[tS];
 	    for(int ii=n1; ii<n1+n2; ii++){
 	      //if(!indexIsInt(ii)){continue;}
 	      if(subproblemSolvers[tS]->getColTypes()[ii]==0){continue;}
@@ -1044,8 +1085,20 @@ BranchingVarInfo findBranchingIndex(){
 		localBranchInfo.disp = dispVec[ii];
 	        localBranchInfo.index = ii;
 	        localBranchInfo.brVal = subproblemSolvers[tS]->getY()[ii-n1];
-	        localBranchInfo.brLB = subproblemSolvers[tS]->getLB(ii);
-	        localBranchInfo.brUB = subproblemSolvers[tS]->getUB(ii);
+	    if(subproblemSolvers[tS]->getColTypes()[ii]==0){
+	        localBranchInfo.brLBUp = localBranchInfo.brVal;
+	        localBranchInfo.brUBUp = subproblemSolvers[tS]->getUB(ii);
+	        localBranchInfo.brLBDn = subproblemSolvers[tS]->getLB(ii);
+	        localBranchInfo.brUBDn = localBranchInfo.brVal;
+	    }
+	    else{
+	        localBranchInfo.brLBUp = ceil(localBranchInfo.brVal);
+	        localBranchInfo.brUBUp = subproblemSolvers[tS]->getUB(ii);
+	        localBranchInfo.brLBDn = subproblemSolvers[tS]->getLB(ii);
+	        localBranchInfo.brUBDn = floor(localBranchInfo.brVal);
+	    }
+	        //localBranchInfo.brLB = subproblemSolvers[tS]->getLB(ii);
+	        //localBranchInfo.brUB = subproblemSolvers[tS]->getUB(ii);
 	      }
 	    }
 	    
@@ -1053,20 +1106,22 @@ BranchingVarInfo findBranchingIndex(){
 #ifdef USING_MPI
     MPI_Op myOp;
     MPI_Datatype mpitype;
-    MPI_Type_contiguous(8, MPI_DOUBLE, &mpitype);
+    MPI_Type_contiguous(9, MPI_DOUBLE, &mpitype);
     MPI_Type_commit( &mpitype);
     MPI_Op_create( (MPI_User_function *) compareBranchInfo, true, &myOp ); 
     if(mpiSize>1){
-	MPI_Allreduce(&localBranchInfo, &branchInfo, 1, mpitype, myOp, comm_);
+	MPI_Allreduce(&localBranchInfo, &brVarInfo, 1, mpitype, myOp, comm_);
     }
 #endif
     if(mpiSize==1){
-	branchInfo = localBranchInfo;
+	brVarInfo = localBranchInfo;
     }
     if(mpiRank==0){
-        cout << "Branching on (rank, sp, index): (" << branchInfo.rank <<","<<branchInfo.scen<<","<<branchInfo.index<<") " << " disps: " << branchInfo.disp << " intDiscr " << branchInfo.intDiscr << " with value " << branchInfo.brVal << endl;
+        cout << "Branching on (rank, sp, index): (" << brVarInfo.rank <<","<<brVarInfo.scen<<","<<brVarInfo.index<<") " << " disps: " << brVarInfo.disp << " with value " << brVarInfo.brVal << " and branches " 
+	<< "(" << brVarInfo.brLBUp << "," << brVarInfo.brUBUp << ")" << " and "
+	<< "(" << brVarInfo.brLBDn << "," << brVarInfo.brUBDn << ")" << endl;
     }
-    return branchInfo;
+    return brVarInfo;
 }
 
 #endif

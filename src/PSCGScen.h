@@ -187,7 +187,7 @@ virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool 
    cout << "setPrintLevel(): default implementation, does nothing" << endl;
 }
 void setNThreads(int nthreads){nThreads=nthreads;}
-virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs)=0;
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, double *origLBs, double *origUBs)=0;
 //virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes)=0;
 virtual void setSolverStatus()=0;
 #if 0
@@ -1338,10 +1338,14 @@ virtual void unfixX(const double* origLBs, const double* origUBs, const char* co
 }
 #endif
 
-virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs){
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, double *origLBs, double *origUBs){
 //cout << "*********" << endl;
 //printColTypesFirstStage();
 //printColBds();
+   for(int ii=0; ii<n1; ii++){
+	origLBs[ii]=getLB(ii);
+	origUBs[ii]=getUB(ii);
+   }
    fixXToZ(z);
 //printColTypesFirstStage();
 //printColBds();
@@ -1404,7 +1408,7 @@ virtual int solveFeasibilityProblem();
 virtual void setSolverStatus(){
     solverStatus_ = PSCG_OPTIMAL;
 }
-virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, const double *origLBs, const double *origUBs){
+virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, double *origLBs, double *origUBs){
    fixXToZ(z);
 
    int solveStatus = solveLagrangianProblem(omega,true);

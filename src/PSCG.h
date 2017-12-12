@@ -801,7 +801,9 @@ double processBound(){
     //integralityDisc=evaluateIntegralityDiscrepancies();
     objVal=findPrimalFeasSolnWith(z_current);
     brVarInfo = findBranchingIndex();
-    while(brVarInfo.index<0 && objVal - currentLagrLB < 1e-6){
+    //if(mpiRank==0) cout << "Deciding whether to proceed to solve current node to higher precision..." << endl;
+    while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-6 && currentIter_<1000){
+      if(mpiRank==0) cout << "No branching, proceeding to solve current node to higher precision..." << endl;
       for(int kk=0; kk<100; kk++){
 	regularIteration(updatePenalty,true);
 	currentIter_++;
@@ -1045,9 +1047,17 @@ BranchingVarInfo findBranchingIndexOld(){
 BranchingVarInfo getBranchingVarInfo(){return brVarInfo;}
 
 BranchingVarInfo findBranchingIndex(){
+
+    brVarInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0,0.0};
+    double totalIntDiscr = evaluateIntegralityDiscrepancies();
+    if(mpiRank==0) cout << "Total integrality discrepancy is: " << totalIntDiscr << endl;
+    if(totalIntDiscr < 1e-10){
+	if(mpiRank==0) cout << "Total integrality discrepancy is negligible, no branching..." << endl;
+	return brVarInfo;
+    }
+
     double *dispVec;
     BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0,0.0};
-    brVarInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0,0.0};
     dispOfAllXVertices(); //sets z_dispersions
     localBranchInfo.index=-1;
     localBranchInfo.disp=0.0;

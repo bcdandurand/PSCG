@@ -707,7 +707,11 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 
 	int SPStatus=performColGenStep();
 	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
-	SSCVal = computeSSCVal(); //shouldTerminate is also updated here.
+	if(currentIter_>0)SSCVal = computeSSCVal(); //shouldTerminate is also updated here.
+	else{
+	     SSCVal=1.0;
+	     shouldTerminate=false;
+	}
     //verifyOmegaDualFeas();
     //printStatus();
 	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
@@ -724,7 +728,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	  }while(innerSSCVal < innerSSCParam && noInnerSolves<maxNoInnerSteps);
 	}
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
-	printStatus();
+	if(currentIter_%10==0) printStatus();
 
 
         if(currentLagrLB >= cutoffLagrLB){
@@ -797,12 +801,13 @@ double processBound(){
 	else regularIteration(updatePenalty,false);
 #endif
     }// main loop over currentIter_
+    printStatus();
 
     //integralityDisc=evaluateIntegralityDiscrepancies();
     objVal=findPrimalFeasSolnWith(z_current);
     brVarInfo = findBranchingIndex();
     //if(mpiRank==0) cout << "Deciding whether to proceed to solve current node to higher precision..." << endl;
-    while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-6 && currentIter_<1000){
+    while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-6 && currentIter_<5000){
       if(mpiRank==0) cout << "No branching, proceeding to solve current node to higher precision..." << endl;
       for(int kk=0; kk<100; kk++){
 	regularIteration(updatePenalty,true);
@@ -882,8 +887,7 @@ int performColGenStep();
 int performColGenStepBasic();
 
 
-void updateZ(double *z=NULL){
-	if(z==NULL) z=z_current;
+void updateZ(){
 	for(int tS=0; tS<nNodeSPs; tS++){
 	    weights_[tS] = pr[tS];
 	}
@@ -1570,7 +1574,7 @@ void printStatus(){
 	//cout << setfill( ' ' );
 	//cout << "Iter " << currentIter_ << setw(wid) << setprecision(10) << "LagrLB " << currentLagrLB << setw(wid) << "ALVal " << ALVal << setw(wid) << setprecision(5) << "primDiscr " << discrepNorm
 	//	<< setw(wid) << "SSCVal " << SSCVal << setw(wid) << "innSSCVal " << innerSSCVal << setw(wid) << "MP iters: " << noInnerSolves << endl;
-	printf("Iter %6d: LagrLB: %-10.8g\tALVal: %-10.8g\tpDisc: %-8.3g\tSSCVal: %-8.3g\tinnSSCVal: %-8.3g\tnoInnerMP: %-5d\n", currentIter_, currentLagrLB, ALVal, discrepNorm, SSCVal, innerSSCVal, noInnerSolves);
+	printf("Iter %6d: LagrLB: %-10.8gALVal: %-10.8gbestPr: %-10.8gpDisc: %-8.3gSSCVal: %-8.3ginnSSCVal: %-8.3gtcrit: %-8.3gnoInnerMP: %-5d\n", currentIter_, currentLagrLB, ALVal, incumbentVal,discrepNorm, SSCVal, innerSSCVal, tCritVal, noInnerSolves);
 //	printf("Best node: %0.14g, Incumbent value: %0.14g\n", getBestNodeQuality(), getIncumbentVal());
 	//printf("Aug. Lagrangian value: %0.9g\n", ALVal);
 	//printf("Norm of primal discrepancy: %0.6g\n", discrepNorm);

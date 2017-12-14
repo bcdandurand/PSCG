@@ -888,10 +888,29 @@ int performColGenStepBasic();
 
 
 void updateZ(){
-	for(int tS=0; tS<nNodeSPs; tS++){
-	    weights_[tS] = pr[tS];
-	}
-        averageOfX(z, n1, weights_);
+        double *penSumLocal = new double[n1];
+        double *penSum = new double[n1];
+        for (int i = 0; i < n1; i++)
+        {
+            z_local[i] = 0.0;
+            z_current[i] = 0.0;
+            penSumLocal[i]=0.0;
+            penSum[i]=0.0;
+            for (int tS = 0; tS < nNodeSPs; tS++)
+            {
+                z_local[i] += x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
+                penSumLocal[i]+= scaling_matrix[tS][i]*pr[tS];
+            }
+        }
+        #ifdef USING_MPI
+        MPI_Allreduce(z_local, z_current, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(penSumLocal, penSum, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        for(int i=0; i<n1; i++) z_current[i] /= penSum[i];
+        #else
+        for (int i=0; i<n1; i++) z_current[i] = z_local[i]/penSumLocal[i]; //Only one node, trivially set z_local = z_current
+        #endif
+        delete [] penSumLocal;
+        delete [] penSum;
 }
 
 #if 1

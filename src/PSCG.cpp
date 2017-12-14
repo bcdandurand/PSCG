@@ -255,7 +255,6 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 	    for (int i = 0; i < n1; i++) {
 		//scaling_matrix[tS][i] = rho ;
 		scaling_matrix[tS][i] = max( fabs(subproblemSolvers[tS]->getC()[i]),1.0);
-cout << scaling_matrix[tS][i] << endl;
 		//scaling_matrix[tS][i] = 1.0;
 		//omega_saved[tS][i] = 0.0; //omega will be initialised from the node.
 		omega_centre[tS][i] = 0.0; 

@@ -474,7 +474,7 @@ void loadSavedZ(double* z=NULL){
         memcpy(z,z_saved,n1*sizeof(double));
     }
 }
-void readOmegaIntoModel(vector<double*> &omega){
+void readOmegaIntoModel(const vector<double*> &omega){
 //cout << "nNodeSPs " << nNodeSPs << " size of vec " << omega.size() << endl;
     omegaIsZero_=false;
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_current[tS],omega[tS],n1*sizeof(double));
@@ -588,7 +588,7 @@ void preSolveMP(){
     //int maxNoGSIts = 100+currentIter_;//max(20,currentIter_/2);
     //int maxNoGSIts = 1;//max(20,currentIter_/2);
     //int maxNoGSIts = min(100*currentIter_,10000000);//max(20,currentIter_/2);
-    int maxNoGSIts = 100;//max(20,currentIter_/2);
+    int maxNoGSIts = 20;//max(20,currentIter_/2);
     for(int itGS=0; itGS < maxNoGSIts; itGS++) { //The inner loop has a fixed number of occurences
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPVertices(omega_tilde[tS],z_current,rho,scaling_matrix[tS]);}
@@ -725,10 +725,10 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	    solveContinuousMPs(adjustPenalty);
 	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
 	    noInnerSolves++;
-	  }while(innerSSCVal < innerSSCParam && noInnerSolves<maxNoInnerSteps);
+	  }while(innerSSCVal < innerSSCParam);
 	}
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
-	if(currentIter_%10==0) printStatus();
+	if(currentIter_%5==0) printStatus();
 
 
         if(currentLagrLB >= cutoffLagrLB){
@@ -739,13 +739,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 
 	double integralityDisc=evaluateIntegralityDiscrepancies();
 	if((shouldTerminate) || (currentIter_ >= maxNoSteps) ){
-	    if(mpiRank==0 && (currentIter_ >= maxNoSteps) ){
-		cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << currentIter_ << endl;
-	    }
-	    else{
-   		if(mpiRank==0){cout << "computeBound(): Terminating due to reaching maximum number of iterations: " << currentIter_ << endl;}
-	    }
-            shouldContinue=false;
+          shouldContinue=false;
 	}
 #if 0
 	if(mpiRank==0) cerr << "Omega updated " << noSeriousSteps << " times, " 
@@ -780,6 +774,7 @@ double computeBound(){
 
 double processBound(){
     bool updatePenalty=true;
+    setPhase(0);
     for(currentIter_=0; shouldContinue; currentIter_++){
 	#ifdef KEEP_LOG
 	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
@@ -788,9 +783,8 @@ double processBound(){
         //else if(currentIter_ < 20) phase=1;
         //else phase=1;
 
-	phase=0;
 
-	if(currentIter_>200) updatePenalty=false;
+	//if(currentIter_>200) updatePenalty=false;
 	//if(currentIter_ < 100) regularIteration(true,true);
 	//else regularIteration(false,true);
     //printTCritVal();
@@ -808,14 +802,26 @@ double processBound(){
     brVarInfo = findBranchingIndex();
     //if(mpiRank==0) cout << "Deciding whether to proceed to solve current node to higher precision..." << endl;
     while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-6 && currentIter_<5000){
+      //setPhase(2);
       if(mpiRank==0) cout << "No branching, proceeding to solve current node to higher precision..." << endl;
       for(int kk=0; kk<100; kk++){
-	regularIteration(updatePenalty,true);
+	regularIteration(updatePenalty,false);
 	currentIter_++;
       }
       objVal=findPrimalFeasSolnWith(z_current);
       brVarInfo = findBranchingIndex();
+      //setPhase(0);
     }
+#if 0
+    if(mpiRank==0){
+      if(currentIter_ >= maxNoSteps){
+   	cout << "computeBound(): Terminating due to reaching maximum number of iterations: " << currentIter_ << endl;
+      }
+      else{
+	cout << "computeBound(): Terminating due to reaching tolerance criterion at iteration " << currentIter_ << endl;
+      }
+    }
+#endif
     return currentLagrLB;
 }
 
@@ -888,8 +894,6 @@ int performColGenStepBasic();
 
 
 void updateZ(){
-        double *penSumLocal = new double[n1];
-        double *penSum = new double[n1];
         for (int i = 0; i < n1; i++)
         {
             z_local[i] = 0.0;
@@ -903,14 +907,12 @@ void updateZ(){
             }
         }
         #ifdef USING_MPI
-        MPI_Allreduce(z_local, z_current, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Allreduce(penSumLocal, penSum, n1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(z_local, z_current, n1, MPI_DOUBLE, MPI_SUM, comm_);
+        MPI_Allreduce(penSumLocal, penSum, n1, MPI_DOUBLE, MPI_SUM, comm_);
         for(int i=0; i<n1; i++) z_current[i] /= penSum[i];
         #else
         for (int i=0; i<n1; i++) z_current[i] = z_local[i]/penSumLocal[i]; //Only one node, trivially set z_local = z_current
         #endif
-        delete [] penSumLocal;
-        delete [] penSum;
 }
 
 #if 1
@@ -1002,23 +1004,36 @@ void dispOfBestXVertices(double *retVec=NULL, double *aveVec=NULL, double *weigh
 
 void dispOfAllXVertices(double *retVec=NULL){
     double *dispVec;
+    double totalIntDiscr = evaluateIntegralityDiscrepancies();
     if(retVec==NULL){retVec=z_dispersions;}
     for(int ii=0; ii<n1; ii++){
 	z_local[ii]=0.0;
+	penSumLocal[ii]=0.0;// = new double[n1];
+	penSum[ii]=0.0;// = new double[n1];
+	
     }
     for(int tS=0; tS<nNodeSPs; tS++){
-	dispVec = subproblemSolvers[tS]->computeDispersions();
+	dispVec = subproblemSolvers[tS]->computeDispersions(z_current);
         for(int ii=0; ii<n1; ii++){
-    	     z_local[ii] += dispVec[ii];
+    	     z_local[ii] += scaling_matrix[tS][ii]*dispVec[ii];
+	     penSumLocal[ii] = scaling_matrix[tS][ii];
 	}
     }
     #ifdef USING_MPI
     if(mpiSize>1){
 	MPI_Allreduce(z_local, retVec, n1, MPI_DOUBLE, MPI_SUM, comm_);
+        MPI_Allreduce(penSumLocal, penSum, n1, MPI_DOUBLE, MPI_SUM, comm_);
+        for(int i=0; i<n1; i++){ 
+	    retVec[i] /= penSum[i];
+	    retVec[i] *= totalIntDiscr;
+	}
     }
     #endif
     if(mpiSize==1){
-	for (int i=0; i<n1; i++) retVec[i] = z_local[i];
+	for (int i=0; i<n1; i++){
+	    retVec[i] = z_local[i]/penSumLocal[i];
+	    retVec[i] *= totalIntDiscr;
+	}
     }
     //computeAverageAcrossProcs(z_local, retVec, weightSum, n1);
 }
@@ -1084,6 +1099,7 @@ BranchingVarInfo findBranchingIndex(){
     dispOfAllXVertices(); //sets z_dispersions
     localBranchInfo.index=-1;
     localBranchInfo.disp=0.0;
+#if 1
     for(int ii=0; ii<n1; ii++){
 	if(z_dispersions[ii] > localBranchInfo.disp){ 
 	    localBranchInfo.index = ii;
@@ -1103,21 +1119,36 @@ BranchingVarInfo findBranchingIndex(){
 	    }
         }
     }
+#endif
     
     for(int tS=0; tS<nNodeSPs; tS++){
 	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
 	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
 	    dispVec = subproblemSolvers[tS]->computeDispersions();
+#if 0
+	    for(int ii=0; ii<n1; ii++){
+		dispVec[ii] *= nS;
+	    }
+#endif
 	    //localBranchInfo.intDiscr=integrDiscr_[tS];
 	    for(int ii=n1; ii<n1+n2; ii++){
 	      //if(!indexIsInt(ii)){continue;}
-	      if(subproblemSolvers[tS]->getColTypes()[ii]==0){continue;}
+	      //if(subproblemSolvers[tS]->getColTypes()[ii]==0){continue;}
 	      if(dispVec[ii] > localBranchInfo.disp){ 
-		localBranchInfo.rank = mpiRank;
-		localBranchInfo.scen = tS;
 		localBranchInfo.disp = dispVec[ii];
 	        localBranchInfo.index = ii;
+#if 0
+		if(ii<n1){
+		localBranchInfo.rank = -1;
+		localBranchInfo.scen = -1;
+	        localBranchInfo.brVal = z_current[ii];
+		}
+		else{
+#endif
+		localBranchInfo.rank = mpiRank;
+		localBranchInfo.scen = tS;
 	        localBranchInfo.brVal = subproblemSolvers[tS]->getY()[ii-n1];
+//		}
 	    if(subproblemSolvers[tS]->getColTypes()[ii]==0){
 	        localBranchInfo.brLBUp = localBranchInfo.brVal;
 	        localBranchInfo.brUBUp = subproblemSolvers[tS]->getUB(ii);
@@ -1353,7 +1384,7 @@ double computeSSCVal(){
     }
     tCritVal = ALVal + 0.5*discrepNorm  - centreLagrLB;
     shouldTerminate = (tCritVal<tCritParam);// && (discrepNorm < 1e-20);
-    if(shouldTerminate){return 0.0;}
+    if(tCritVal < 1e-20){return 0.0;}
     else{
 	return (trialLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB);
     }

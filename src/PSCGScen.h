@@ -725,11 +725,12 @@ void solveMPHistory(const double *omega, const double *z, const double *zLBs, co
 void solveMPVertices(const double *omega, const double *z, const double rho, const double *scaling_vector);
 //void computeWeightsForCurrentSoln(const double *z); 
 
-double* computeDispersions(){
+double* computeDispersions(double *z=NULL){
     resetDispersionsToZero();
+    if(z==NULL) z=x;
     for(int wI=0; wI<nVertices; wI++) {
         for(int ii=0; ii<n1; ii++){
-	   dispersions[ii] += vecWeights[wI]*fabs(xVertices[wI][ii] - x[ii]);
+	   dispersions[ii] += vecWeights[wI]*fabs(xVertices[wI][ii] - z[ii]);
         }
         for(int jj=n1; jj<n1+n2; jj++){
 	   dispersions[jj] += vecWeights[wI]*fabs(yVertices[wI][jj-n1] - y[jj-n1]);

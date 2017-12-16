@@ -486,13 +486,13 @@ void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const dou
 	vertY = &(yVertices[vertexIndex][0]);
 	
 	for (int i = 0; i < n1; i++) {
-		if(omega==NULL){numerator -= (c[i] + rho*scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
-		else{numerator -= (c[i] + omega[i] + rho*scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
-		denominator += (vertX[i] - x[i]) * rho*scaling_vector[i] * (vertX[i] - x[i]);
+		if(omega==NULL){numerator -= (c[i]/rho + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
+		else{numerator -= ( (c[i] + omega[i])/rho + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
+		denominator += (vertX[i] - x[i]) * scaling_vector[i] * (vertX[i] - x[i]);
 	}
 	
 	for (int j = 0; j < n2; j++) {
-		numerator -= d[j] * (vertY[j] - y[j]);
+		numerator -= d[j] * (vertY[j] - y[j]) / rho;
 	}
 	
 	double a;

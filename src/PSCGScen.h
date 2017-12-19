@@ -99,7 +99,7 @@ IloModel mpModel;
 IloNum weight0;
 IloNumArray weightSoln;//(env, nVertices);
 IloNumArray weightObjective;
-vector<double> baseWeightObj;
+//vector<double> baseWeightObj;
 IloExpr quadraticTerm;
 IloObjective mpObjective;
 IloRangeArray mpWeightConstraints;
@@ -491,19 +491,20 @@ bool addVertex(){
 	}
 	bestVertexIndex=nVertices-1;
 
-	//upvhWeightVariables.add(IloNumVar(env, 0.0, 1.0));
-	//upvhWeightConstraints[0].setLinearCoef(upvhWeightVariables[nVertices], 1.0);	
-	mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
-	mpWeightVariables[nVertices-1].setLB(0.0);
+	//mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
+	mpWeightVariables.add(IloNumVar(env));
+	//mpWeightVariables[nVertices-1].setLB(0.0);
 	
 	for(int i=0; i<n1; i++) {
 	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[nVertices-1], x_vertex[i]);
 	}
+	mpWeightConstraints[0].setLinearCoef(mpWeightVariables[nVertices-1],1.0);
 
-	baseWeightObj.push_back(0.0);
+	//baseWeightObj.push_back(0.0);
 	weightSoln.add(0.0);
 	weightObjective.add(0.0);
 
+#if 0
 	for (int i = 0; i < n1; i++) {
 		baseWeightObj[nVertices-1] += x_vertex[i] * c[i];
 	}
@@ -511,6 +512,7 @@ bool addVertex(){
 	for (int j = 0; j < n2; j++) {
 		baseWeightObj[nVertices-1] += y_vertex[j] * d[j];
 	}
+#endif
 
     }
     else{ //nVertices<maxNVertices
@@ -533,7 +535,10 @@ int findVVIndexNonProductive(){
   return idx;
 }
 
-void replaceVertexAtIndex(int iii){
+bool replaceVertexAtIndex(int iii){
+    if(checkWhetherVertexIsRedundant()){
+	return false;
+    }
 
 	//mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
 	//mpWeightVariables[nVertices].setBounds(0.0,1.0);
@@ -550,10 +555,11 @@ void replaceVertexAtIndex(int iii){
 	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], x_vertex[i]);
 	}
 
-	baseWeightObj[iii]=0.0; //.push_back(0.0);
+	//baseWeightObj[iii]=0.0; //.push_back(0.0);
 	//weightSoln.add(0.0);
 	weightObjective[iii]=0.0;//.add(0.0);
 
+#if 0
 	for (int i = 0; i < n1; i++) {
 		baseWeightObj[iii] += x_vertex[i] * c[i];
 	}
@@ -561,9 +567,11 @@ void replaceVertexAtIndex(int iii){
 	for (int j = 0; j < n2; j++) {
 		baseWeightObj[iii] += y_vertex[j] * d[j];
 	}
-	mpWeightVariables[iii].setBounds(0.0,1.0);
+#endif
+	mpWeightVariables[iii].setBounds(0.0,IloInfinity);
 	bestVertexIndex=iii;
 	vecWeights[iii]=0.0;
+	return true;
 }
 
 bool replaceOldestVertex(){

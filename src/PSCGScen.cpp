@@ -21,7 +21,7 @@
 #include "CoinPragma.hpp"
 #include "SmiScnModel.hpp"
 #include "SmiScnData.hpp"
-#include "OsiClpSolverInterface.hpp"
+//#include "OsiClpSolverInterface.hpp"
 #include "OsiCpxSolverInterface.hpp"
 
 // Initialises the problem data, reading it in from a file.
@@ -162,6 +162,7 @@ void PSCGScen::finishInitialisation() {
 	try{
 
 	mpObjective.setSense( IloObjective::Minimize );
+	//mpObjective.setExpr(quadraticTerm);
 		
 	mpModel.add(mpObjective);
 	mpWeightConstraints.add(IloRange(env,1.0,mpWeight0,1.0));
@@ -601,11 +602,15 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	//if(updateDisp) mpWeight0.setBounds(0.0,0.0);
 	IloNum weightObj0(0.0);
 	for (int wI = 0; wI < nVertices; wI++) {
-		weightObjective[wI] = baseWeightObj[wI]/rho;
+		//weightObjective[wI] = baseWeightObj[wI]/rho;
+		weightObjective[wI] = 0.0;
 		if(omega!=NULL){	
 		    for (int i = 0; i < n1; i++) {
-			weightObjective[wI] += xVertices[wI][i] * omega[i]/rho;
+			weightObjective[wI] += xVertices[wI][i] * (c[i]+omega[i])/rho;
 		    }
+		}
+		for (int j = 0; j < n2; j++) {
+		    weightObjective[wI] += yVertices[wI][j] * d[j]/rho;
 		}
 	}
 	if(omega!=NULL){	
@@ -623,7 +628,12 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		weightObj0 += y[j] * d[j]/rho;
 	}
 
-	mpObjective.setExpr(IloScalProd(mpWeightVariables, weightObjective) + weightObj0*mpWeight0 + quadraticTerm);
+	//mpObjective.setExpr(IloScalProd(mpWeightVariables, weightObjective) + weightObj0*mpWeight0 + quadraticTerm);
+	mpObjective.setLinearCoefs(mpWeightVariables, weightObjective);
+	mpObjective.setLinearCoef(mpWeight0, weightObj0);
+	for (int i = 0; i < n1; i++) {
+		mpObjective.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * scaling_vector[i]);
+	}
 		
 	//modify vertex constraint
 	for (int i = 0; i < n1; i++) {

@@ -119,7 +119,7 @@ n1(0),n2(0),nS(0),tS(-1),initialised(false),env(envarg),nThreads(nthreads),solve
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
+mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),pr(0.0){;}
 
 //copy constructor
 PSCGScen(const PSCGScen &other):
@@ -127,7 +127,7 @@ n1(0),n2(0),nS(0),tS(-1),initialised(false),env(other.env),nThreads(other.nThrea
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-mpWeightVariables(env),mpWeight0(env,0.0,1.0),mpAuxVariables(env),pr(0.0){;}
+mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),pr(0.0){;}
 
 //void initialiseBodur(ProblemDataBodur &pdBodur, SMIP_fileRequest* probSpecs, int scenario);
 //int initialiseSMPS(SMIP_fileRequest* probSpecs, int scenario);
@@ -460,13 +460,20 @@ double computeXDispersion(const double *z){
 }
 #endif
 
-void addVertex(){
+//Return true if vertex added.
+bool addVertex(){
+    if(checkWhetherVertexIsRedundant()){
+	return false;
+    }
+#if 0
     int idxToReplace = findVVIndexNonProductive();
     if(idxToReplace!=-1){
 	replaceVertexAtIndex(idxToReplace);
 	bestVertexIndex=idxToReplace;
     }
     else if(nVertices==maxNVertices){
+#endif
+    if(nVertices==maxNVertices){
 	if(vecWeights.size()==0){vecWeights.push_back(1.0);}
 	else{vecWeights.push_back(0.0);}
 //vector<double> vecWeights;
@@ -487,7 +494,7 @@ void addVertex(){
 	//upvhWeightVariables.add(IloNumVar(env, 0.0, 1.0));
 	//upvhWeightConstraints[0].setLinearCoef(upvhWeightVariables[nVertices], 1.0);	
 	mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
-	mpWeightVariables[nVertices-1].setBounds(0.0,1.0);
+	mpWeightVariables[nVertices-1].setLB(0.0);
 	
 	for(int i=0; i<n1; i++) {
 	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[nVertices-1], x_vertex[i]);
@@ -512,6 +519,7 @@ void addVertex(){
 	nVertices++;
     }
     if(oldestVertexIndex==-1) oldestVertexIndex=0;
+    return true;
 }
 
 int findVVIndexNonProductive(){
@@ -558,11 +566,15 @@ void replaceVertexAtIndex(int iii){
 	vecWeights[iii]=0.0;
 }
 
-void replaceOldestVertex(){
+bool replaceOldestVertex(){
+    if(checkWhetherVertexIsRedundant()){
+	return false;
+    }
 //cout << "Oldest vertex index was: " << oldestVertexIndex;
     replaceVertexAtIndex(oldestVertexIndex);
     oldestVertexIndex = (++oldestVertexIndex)%nVertices;
 //cout << " ...but is now " << oldestVertexIndex << endl;
+    return true;
 }
 
 void zeroOutVertexAtIndex(int iii){

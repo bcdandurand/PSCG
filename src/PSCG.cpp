@@ -587,6 +587,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
     	    *(logFiles[tS]) << "old LagrLB_ts: " << LagrLB_tS << "\tnew LagrLB_ts" << subproblemSolvers[tS]->getLagrBd() << "\tALVal_ts: " << ALVal_tS << "\tsqrDiscrNorm: " << sqrDiscrNorm_tS << endl;
     	    *(logFiles[tS]) << "Testing whether vertex is redundant: " << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd()) << endl;;
 #endif
+#if 0
 	if(LagrLB_tS <= subproblemSolvers[tS]->getLagrBd()+1e-10){
 #ifdef KEEP_LOG
     	    *(logFiles[tS]) << "  FLAGGING: Redundant vertex found" << endl;;
@@ -596,6 +597,8 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	else{
 	    updateVertexHistory(tS);
 	}
+#endif
+	updateVertexHistory(tS);
 #if 1
 		LagrLB_tS = subproblemSolvers[tS]->getLagrBd();	
 		lhsCritVal = ALVal_tS+0.5*sqrDiscrNorm_tS;

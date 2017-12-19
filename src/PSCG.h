@@ -629,6 +629,7 @@ bool solveContinuousMPs(bool adjustPenalty){
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		//*************************** Quadratic subproblem ***********************************
 			    
+#if 0
 		if(subproblemSolvers[tS]->getNVertices()>0){
 		    for(int iii=0; iii<10; iii++){
 	    		for (int i = 0; i < n1; i++) {
@@ -638,7 +639,8 @@ bool solveContinuousMPs(bool adjustPenalty){
 		    	subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
 		    }
 		}
-		//if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);}
+#endif
+		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);}
 		#ifdef KEEP_LOG
 		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 		#endif
@@ -696,6 +698,10 @@ bool solveContinuousMPs(bool adjustPenalty){
 	    innerSSCVal =    (innerLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB);
 	    needToContinue = innerSSCVal < innerSSCParam;
 	}
+        else{
+if(mpiRank==0) cout << "innerSSCVal computation: Denominator is close to zero (algorithm should terminate with optimal status)." << endl;
+	    needToContinue=false;
+	}
 #endif
 //if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
 
@@ -718,14 +724,15 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	updateOmega(SSC);
 	if(adjustPenalty) updatePenalty();
 
+	bool continueInner=true;
 	if(phase==2) preSolveMP();
 	else{
           noInnerSolves=0;	
 	  do{
-	    solveContinuousMPs(adjustPenalty);
+	    continueInner=solveContinuousMPs(adjustPenalty);
 	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
 	    noInnerSolves++;
-	  }while(innerSSCVal < innerSSCParam);
+	  }while(continueInner);
 	}
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
 	if(currentIter_%5==0) printStatus();

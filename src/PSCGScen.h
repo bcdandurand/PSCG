@@ -100,7 +100,7 @@ IloNum weight0;
 IloNumArray weightSoln;//(env, nVertices);
 IloNumArray weightObjective;
 //vector<double> baseWeightObj;
-IloExpr quadraticTerm;
+//IloExpr quadraticTerm;
 IloObjective mpObjective;
 IloRangeArray mpWeightConstraints;
 IloRangeArray mpVertexConstraints;
@@ -117,7 +117,7 @@ public:
 PSCGScen(IloEnv &envarg, int nthreads=1):
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(envarg),nThreads(nthreads),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
-weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
+weightSoln(env),weightObjective(env),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),pr(0.0){;}
 
@@ -125,7 +125,7 @@ mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),pr(0.0){;}
 PSCGScen(const PSCGScen &other):
 n1(0),n2(0),nS(0),tS(-1),initialised(false),env(other.env),nThreads(other.nThreads),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
-weightSoln(env),weightObjective(env),quadraticTerm(env,0.0),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
+weightSoln(env),weightObjective(env),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
 mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
 mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),pr(0.0){;}
 
@@ -461,68 +461,7 @@ double computeXDispersion(const double *z){
 #endif
 
 //Return true if vertex added.
-bool addVertex(){
-    if(checkWhetherVertexIsRedundant()){
-	return false;
-    }
-#if 0
-    int idxToReplace = findVVIndexNonProductive();
-    if(idxToReplace!=-1){
-	replaceVertexAtIndex(idxToReplace);
-	bestVertexIndex=idxToReplace;
-    }
-    else if(nVertices==maxNVertices){
-#endif
-    if(nVertices==maxNVertices){
-	if(vecWeights.size()==0){vecWeights.push_back(1.0);}
-	else{vecWeights.push_back(0.0);}
-//vector<double> vecWeights;
-	xVertices.push_back(vector<double>(n1));
-	yVertices.push_back(vector<double>(n2));
-	nVertices++;
-	maxNVertices++;
-	for(int i=0; i<n1; i++) {
-	   //xVertices[i].push_back(x_vertex[i]);
-	   xVertices[nVertices-1][i] = x_vertex[i];
-	}
-	for(int i=0; i<n2; i++) { 
-	   //yVertices[i].push_back(y_vertex[i]);
-	   yVertices[nVertices-1][i] = y_vertex[i];
-	}
-	bestVertexIndex=nVertices-1;
-
-	//mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
-	mpWeightVariables.add(IloNumVar(env));
-	//mpWeightVariables[nVertices-1].setLB(0.0);
-	
-	for(int i=0; i<n1; i++) {
-	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[nVertices-1], x_vertex[i]);
-	}
-	mpWeightConstraints[0].setLinearCoef(mpWeightVariables[nVertices-1],1.0);
-
-	//baseWeightObj.push_back(0.0);
-	weightSoln.add(0.0);
-	weightObjective.add(0.0);
-
-#if 0
-	for (int i = 0; i < n1; i++) {
-		baseWeightObj[nVertices-1] += x_vertex[i] * c[i];
-	}
-
-	for (int j = 0; j < n2; j++) {
-		baseWeightObj[nVertices-1] += y_vertex[j] * d[j];
-	}
-#endif
-
-    }
-    else{ //nVertices<maxNVertices
-	assert(nVertices < maxNVertices);
-	replaceVertexAtIndex(nVertices);
-	nVertices++;
-    }
-    if(oldestVertexIndex==-1) oldestVertexIndex=0;
-    return true;
-}
+bool addVertex();
 
 int findVVIndexNonProductive(){
   int idx = -1;
@@ -535,6 +474,8 @@ int findVVIndexNonProductive(){
   return idx;
 }
 
+bool replaceVertexAtIndex(int iii);
+#if 0
 bool replaceVertexAtIndex(int iii){
     if(checkWhetherVertexIsRedundant()){
 	return false;
@@ -544,6 +485,7 @@ bool replaceVertexAtIndex(int iii){
 	//mpWeightVariables[nVertices].setBounds(0.0,1.0);
 	assert(iii>=0);
 	assert(iii<maxNVertices);
+	mpWeightVariables[iii].setBounds(0.0,IloInfinity);
 	for(int i=0; i<n1; i++) {
 	   xVertices[iii][i] = x_vertex[i];
 	}
@@ -555,24 +497,13 @@ bool replaceVertexAtIndex(int iii){
 	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], x_vertex[i]);
 	}
 
-	//baseWeightObj[iii]=0.0; //.push_back(0.0);
-	//weightSoln.add(0.0);
-	weightObjective[iii]=0.0;//.add(0.0);
+	//weightObjective[iii]=0.0;//.add(0.0);
 
-#if 0
-	for (int i = 0; i < n1; i++) {
-		baseWeightObj[iii] += x_vertex[i] * c[i];
-	}
-
-	for (int j = 0; j < n2; j++) {
-		baseWeightObj[iii] += y_vertex[j] * d[j];
-	}
-#endif
-	mpWeightVariables[iii].setBounds(0.0,IloInfinity);
 	bestVertexIndex=iii;
 	vecWeights[iii]=0.0;
 	return true;
 }
+#endif
 
 bool replaceOldestVertex(){
     if(checkWhetherVertexIsRedundant()){
@@ -591,11 +522,18 @@ void zeroOutVertexAtIndex(int iii){
 	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], 0.0);
 	}
 #endif
-	//baseWeightObj[iii]=0.0 //.push_back(0.0);
+	//baseWeightObj[iii]=0.0; //.push_back(0.0);
 	//weightSoln.add(0.0);
 	//weightObjective[iii]=0.0//.add(0.0);
+    try{
+	weightObjective[iii] = 0.0;
 	mpWeightVariables[iii].setBounds(0.0,0.0);
         weightSoln[iii]=0.0;//(env, nVertices);
+    }
+    catch(IloException &e){
+        cout << "zeroOutVertexAtIndex error: " << e.getMessage() << endl;
+        exit(1);
+    }
 }
 
 void clearVertexHistory(){
@@ -693,6 +631,7 @@ virtual void fixVarAt(int index, double fixVal){
 virtual void fixXToZ(const double *z)=0;
 virtual void unfixX(const double* origLBs, const double* origUBs)=0;
 
+#if 0
 void fixWeightToZero(int index){
     if(index >=0 && index < nVertices){
 	mpWeightVariables[index].setBounds(0.0,0.0);
@@ -700,9 +639,10 @@ void fixWeightToZero(int index){
 }
 void unfixWeight(int index){
     if(index >=0 && index < nVertices){
-	mpWeightVariables[index].setBounds(0.0,1.0);
+	mpWeightVariables[index].setBounds(0.0,IloInfinity);
     }
 }
+#endif
 
 
 int getNVertices(){return nVertices;}
@@ -733,11 +673,13 @@ void setQuadraticTerm(const double scaling_const) {
 }
 #endif
 
+#if 0
 void setQuadraticTerm(const double rho, const double *scaling_vector) {
 	for (int i = 0; i < n1; i++) {
 		quadraticTerm.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * scaling_vector[i]);
 	}
 }
+#endif
 
 void solveMPLineSearch(const double *omega, const double *z, const double rho, const double *scaling_vector, int vertIndex=-1, double *z_average=NULL); 
 void solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
@@ -811,6 +753,7 @@ void refresh(const double *omega, const double *z, const double rho, const doubl
     
     //setXToOptVertex();
     //setYToOptVertex();
+    optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,rho,scaling_vector)
     solveMPLineSearch(omega, z, rho, scaling_vector);
 
     //clearVertexHistory();
@@ -860,7 +803,11 @@ printWeights();
 		weightSoln[wI]=0.0;
 	    }
 	}
-	assert(weightSum > 0);
+if(weightSum <= 0.99 || weightSum >= 1.01){
+printWeights();
+}
+	assert(weightSum > 0.99);
+	assert(weightSum < 1.01);
 	weight0 /= weightSum;
 	for(int wI=0; wI<nVertices; wI++) {
 	    weightSoln[wI] /=weightSum;

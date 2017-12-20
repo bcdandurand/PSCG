@@ -472,6 +472,105 @@ cout << endl;
 	return solverStatus_;
 }
 
+bool PSCGScen::addVertex(){
+    if(checkWhetherVertexIsRedundant()){
+	return false;
+    }
+    if(nVertices==maxNVertices){
+	if(vecWeights.size()==0){vecWeights.push_back(1.0);}
+	else{vecWeights.push_back(0.0);}
+	xVertices.push_back(vector<double>(n1));
+	yVertices.push_back(vector<double>(n2));
+	nVertices++;
+	maxNVertices++;
+	for(int i=0; i<n1; i++) {
+	   xVertices[nVertices-1][i] = x_vertex[i];
+	}
+	for(int i=0; i<n2; i++) { 
+	   yVertices[nVertices-1][i] = y_vertex[i];
+	}
+	bestVertexIndex=nVertices-1;
+
+try{
+	mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
+	//mpWeightVariables.add(IloNumVar());
+	//mpWeightVariables[nVertices-1].setLB(0.0);
+	
+	for(int i=0; i<n1; i++) {
+	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[nVertices-1], x_vertex[i]);
+	}
+	//mpWeightConstraints[0].setLinearCoef(mpWeightVariables[nVertices-1],1.0);
+
+	//baseWeightObj.push_back(0.0);
+	weightSoln.add(0.0);
+	weightObjective.add(0.0);
+}
+catch(IloException &e){
+    cout << "addVertex error: " << e.getMessage() << endl;
+    cout << "Occurred while updating vertex constraint info" << endl;	
+    exit(1);
+}
+
+#if 0
+	for (int i = 0; i < n1; i++) {
+		baseWeightObj[nVertices-1] += x_vertex[i] * c[i];
+	}
+
+	for (int j = 0; j < n2; j++) {
+		baseWeightObj[nVertices-1] += y_vertex[j] * d[j];
+	}
+#endif
+
+    }
+    else{ //nVertices<maxNVertices
+	assert(nVertices < maxNVertices);
+	replaceVertexAtIndex(nVertices);
+	nVertices++;
+    }
+    if(oldestVertexIndex==-1) oldestVertexIndex=0;
+    return true;
+}
+bool PSCGScen::replaceVertexAtIndex(int iii){
+    if(checkWhetherVertexIsRedundant()){
+	return false;
+    }
+
+	//mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
+	//mpWeightVariables[nVertices].setBounds(0.0,1.0);
+	assert(iii>=0);
+	assert(iii<maxNVertices);
+try{
+	mpWeightVariables[iii].setBounds(0.0,IloInfinity);
+}
+catch(IloException &e){
+    cout << "replaceVertexAtIndex error: " << e.getMessage() << endl;
+    cout << "Occurred while updating weight var bounds." << endl;	
+    exit(1);
+}
+	for(int i=0; i<n1; i++) {
+	   xVertices[iii][i] = x_vertex[i];
+	}
+	for(int i=0; i<n2; i++) { 
+	   yVertices[iii][i] = y_vertex[i];
+	}
+
+try{
+	for(int i=0; i<n1; i++) {
+	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], x_vertex[i]);
+	}
+}
+catch(IloException &e){
+    cout << "replaceVertexAtIndex error: " << e.getMessage() << endl;
+    cout << "Occurred while updating vertex constraint column coefficients." << endl;	
+    exit(1);
+}
+
+	//weightObjective[iii]=0.0;//.add(0.0);
+
+	bestVertexIndex=iii;
+	vecWeights[iii]=0.0;
+	return true;
+}
 
 //Not tested!
 void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const double rho, const double *scaling_vector, int vertexIndex, double *z_average) {
@@ -592,7 +691,6 @@ void PSCGScen::computeWeightsForCurrentSoln(const double *z) {
 void PSCGScen::solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double rho, const double *scaling_vector, bool updateDisp) {
    double direction=1.0;
-   try{
 #if 0
 	for(int i=0; i<n1; i++){
 	    mpAuxVariables[i].setLB(zLBs[i]-z[i]);
@@ -601,44 +699,89 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 #endif
 	//if(updateDisp) mpWeight0.setBounds(0.0,0.0);
 	IloNum weightObj0(0.0);
+try{
 	for (int wI = 0; wI < nVertices; wI++) {
 		//weightObjective[wI] = baseWeightObj[wI]/rho;
 		weightObjective[wI] = 0.0;
 		if(omega!=NULL){	
 		    for (int i = 0; i < n1; i++) {
-			weightObjective[wI] += xVertices[wI][i] * (c[i]+omega[i])/rho;
+			weightObjective[wI] += xVertices[wI][i] * (c[i]+omega[i]);
+		    }
+		}
+		else{
+		    for (int i = 0; i < n1; i++) {
+			weightObjective[wI] += xVertices[wI][i] * (c[i]);
 		    }
 		}
 		for (int j = 0; j < n2; j++) {
-		    weightObjective[wI] += yVertices[wI][j] * d[j]/rho;
+		    weightObjective[wI] += yVertices[wI][j] * d[j];
 		}
+		weightObjective[wI] /= rho;
 	}
 	if(omega!=NULL){	
 	    for (int i = 0; i < n1; i++) {
-		weightObj0 += x[i] * (c[i] + omega[i])/rho;
+		weightObj0 += x[i] * (c[i] + omega[i]);
 	    }
 	}
 	else{	
 	    for (int i = 0; i < n1; i++) {
-		weightObj0 += x[i] * (c[i])/rho;
+		weightObj0 += x[i] * (c[i]);
 	    }
 	}
 
 	for (int j = 0; j < n2; j++) {
-		weightObj0 += y[j] * d[j]/rho;
+		weightObj0 += y[j] * d[j];
 	}
+	weightObj0 /= rho;
+}
+catch(IloException &e){
+    cout << "MPSolveHistory error: " << e.getMessage() << endl;
+    cout << "Occurred while updating the objective function coefficients" << endl;	
+    exit(1);
+}
 
 	//mpObjective.setExpr(IloScalProd(mpWeightVariables, weightObjective) + weightObj0*mpWeight0 + quadraticTerm);
-	mpObjective.setLinearCoefs(mpWeightVariables, weightObjective);
+try{
+	for(int ww=0; ww<nVertices; ww++){mpObjective.setLinearCoef(mpWeightVariables[ww], weightObjective[ww]);}
 	mpObjective.setLinearCoef(mpWeight0, weightObj0);
+}
+catch(IloException &e){
+    cout << "MPSolveHistory error: " << e.getMessage() << endl;
+    cout << "Occurred while updating the linear part of the objective function" << endl;	
+    cout << nVertices << endl;
+    exit(1);
+}
+try{
 	for (int i = 0; i < n1; i++) {
 		mpObjective.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * scaling_vector[i]);
 	}
+}
+catch(IloException &e){
+    cout << "MPSolveHistory error: " << e.getMessage() << endl;
+    cout << "Occurred while updating the quadratic part of the objective function" << endl;	
+    cout << mpObjective << endl;
+    cout << mpAuxVariables << endl;
+    exit(1);
+}
 		
 	//modify vertex constraint
 	for (int i = 0; i < n1; i++) {
+	    try{
 		mpVertexConstraints[i].setBounds(z[i], z[i]);
+	    }
+	    catch(IloException &e){
+    		cout << "MPSolveHistory error: " << e.getMessage() << endl;
+    		cout << "Occurred while updating the z vertex constraint bounds" << endl;	
+    		exit(1);
+	    }
+	    try{
 		mpVertexConstraints[i].setLinearCoef(mpWeight0, x[i]);
+	    }
+	    catch(IloException &e){
+    		cout << "MPSolveHistory error: " << e.getMessage() << endl;
+    		cout << "Occurred while updating the column corresponding to the main solution" << endl;	
+    		exit(1);
+	    }
 	}
 
 	//cout << cplexQP.getModel() << endl;
@@ -648,6 +791,27 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		//cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
 	//cout << mpModel << endl;
 	//printVertices();
+        try{
+	    cplexMP.solve();
+	    cplexMP.getValues(weightSoln, mpWeightVariables);
+	    weight0 = cplexMP.getValue(mpWeight0);
+   	}
+   	catch(IloException& e){
+	    cout << "MPSolve error: " << e.getMessage() << endl;
+	    cout << "Number of vertices: " << getNVertices() << endl;
+	    cout << mpWeightVariables << endl;
+	    cout << weightObjective << endl;
+	    cout << mpAuxVariables << endl;
+	    cout << mpVertexConstraints << endl;
+	    cout << mpWeightConstraints << endl;
+	    cplexMP.exportModel("infeasModel.lp");
+	    cout << "Exception caught...Refreshing solution..." << endl;
+	    //refresh();
+	    refresh(omega,z,rho,scaling_vector);
+	    e.end();
+	    exit(1);
+   	}
+#if 0
 	if (!cplexMP.solve()) {
 		//cout << "Num vars: " << cplexQP.getNcols() << endl;
 		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
@@ -655,8 +819,6 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		//cout << mpModel << endl;
 		//cplexMP.refineConflict();
 		//cout << cplexMP.getConflict() << endl;
-		cout << "Number of vertices: " << getNVertices() << endl;
-		cplexMP.exportModel("infeasModel.lp");
 		cout << "Refreshing solution..." << endl;
 		refresh(omega,z,rho,scaling_vector);
 		//assert(false);
@@ -667,12 +829,11 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		//printVertices();
 		//printWeights();
 	}
+#endif
 
-	cplexMP.getValues(weightSoln, mpWeightVariables);
-	weight0 = cplexMP.getValue(mpWeight0);
 	
-	polishWeights(); //fix any unfortunate numerical quirks
 	// note: the final weight corresponds to the existing x
+try{
 	for (int i = 0; i < n1; i++) {
 		x[i] = weight0 * x[i];
 		//if(updateDisp){dispersions[i] = weight0*dispersions[i];}
@@ -691,16 +852,15 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 			y[j] += weightSoln[wI] * yVertices[wI][j];
 		}
 	}
+}
+catch(IloException &e){
+    cout << "MPSolveHistory error: " << e.getMessage() << endl;
+    cout << "Occurred while updating the final solution values" << endl;	
+    exit(1);
+}
 	
 	//if(updateDisp) mpWeight0.setBounds(0.0,1.0);
-   }
-   catch(IloException& e){
-	cout << "MPSolve error: " << e.getMessage() << endl;
-	cout << "Exception caught...Refreshing solution..." << endl;
-	//refresh();
-	refresh(omega,z,rho,scaling_vector);
-	e.end();
-   }
+   //polishWeights(); //fix any unfortunate numerical quirks
 }
 
 

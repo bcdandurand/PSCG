@@ -640,7 +640,9 @@ bool solveContinuousMPs(bool adjustPenalty){
 		    }
 		}
 #endif
-		if(subproblemSolvers[tS]->getNVertices()>0){subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);}
+		if(subproblemSolvers[tS]->getNVertices()>0){
+			subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
+		}
 		#ifdef KEEP_LOG
 		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 		#endif
@@ -649,7 +651,7 @@ bool solveContinuousMPs(bool adjustPenalty){
 	    // Update z_previous.
 	    updateZ();
 	    totalNoGSSteps++;
-	    for(int ii=0; ii<n1; ii++){zDiff=max(zDiff,fabs(z_current[ii]-z_old[ii]));}
+	    //for(int ii=0; ii<n1; ii++){zDiff=max(zDiff,fabs(z_current[ii]-z_old[ii]));}
 	}
 #if 1
 	innerLagrLB_Local = 0.0;

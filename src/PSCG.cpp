@@ -46,7 +46,7 @@ PSCG::PSCG(DecTssModel &model):smpsModel(model),env(),nNodeSPs(0),referenceLagrL
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),noGSIts(1),
-	baselineRho(1.0),rho(baselineRho),nThreads(1),nVerticesUsed(100),
+	baselineRho(1.0),rho(1.0),nThreads(1),nVerticesUsed(100),
 	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
 
 	//smpsModel.readSmps(par->filename.c_str());
@@ -74,7 +74,7 @@ PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),env(),nNodeSPs(0)
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),comm_(comm),mpiRank(0),mpiSize(1),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),noGSIts(1),
-	baselineRho(1.0),rho(baselineRho),nThreads(1),nVerticesUsed(100),
+	baselineRho(1.0),rho(1.0),nThreads(1),nVerticesUsed(100),
 	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
 
 	//smpsModel.readSmps(par->filename.c_str());
@@ -259,7 +259,7 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 		//omega_saved[tS][i] = 0.0; //omega will be initialised from the node.
 		omega_centre[tS][i] = 0.0; 
 	    }
-	    subproblemSolvers[tS]->setQuadraticTerm(rho,scaling_matrix[tS]);
+	    //subproblemSolvers[tS]->setQuadraticTerm(rho,scaling_matrix[tS]);
 	}
 	zeroOmega();
 cout << "End setting up solvers at process " << mpiRank << endl;
@@ -353,13 +353,20 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	// This is part of the initialisation - initial Lagrangian subproblem computations
         modelStatus_[Z_STATUS]=Z_UNKNOWN;
 	modelStatus_[SP_STATUS]=SP_ITER_LIM;
+try{
     	clearSPVertexHistory();
+}
+catch(std::exception &e){
+    std::cout << "exception caught while updating vertex history in initialIteration: " << e.what() << endl;
+    exit(1);
+}
     	noSeriousSteps=0;
     	noConseqNullSteps=0;
 	innerSSCVal = 0.5;
 	double LagrLB_Local = 0.0;
         //setPenalty(1.0);
-if(mpiRank==0){cout << "Rho is: " << rho << endl;}
+	rho=baselineRho;
+	if(mpiRank==0){cout << "Starting rho is: " << rho << endl;}
     	#ifdef KEEP_LOG
 	    for (int tS = 0; tS < nNodeSPs; tS++) {*(logFiles[tS]) << "Initial iteration: " << mpiRank << " scen " << tS << endl;}
     	#endif
@@ -391,6 +398,7 @@ if(mpiRank==0){cout << "Rho is: " << rho << endl;}
 		cerr << "Exception thrown during MIP solve phase." << endl;
 	   }
 
+try{
 	    subproblemSolvers[tS]->updateSolnInfo();
 	    subproblemSolvers[tS]->addVertex();
 	    subproblemSolvers[tS]->setXToVertex();
@@ -405,6 +413,11 @@ if(mpiRank==0){cout << "Rho is: " << rho << endl;}
 	    LagrLB_Local += pr[tS]*( subproblemSolvers[tS]->getLagrBd() );//obj;
 
 	    updateVertexHistory(tS);
+}
+catch(std::exception &e){
+    std::cout << "exception caught while updating vertex history in initialIteration: " << e.what() << endl;
+    exit(1);
+}
 #if 0
 	    for (int i = 0; i < n1; i++) {
 	    	omega_current[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
@@ -491,7 +504,7 @@ if(mpiRank==0){cout << "Rho is: " << rho << endl;}
       		//printStatus();
     	    }
 #else
-	    rho=baselineRho;
+	    //rho=baselineRho;
 #endif
 #endif
 	}

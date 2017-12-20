@@ -16,7 +16,8 @@ OPENMPIDIR = /usr/lib/openmpi/lib
 #MPIDIRDSP = /nfs2/b216449/mpich-install/lib
 #DSPDIR = /homes/bcdandurand/DSP
 #DSPDIR = $(LOCALDIRROOT)/DSP
-DSPDIR = $(LOCALDIRROOT)/DSP
+#DSPDIR = $(LOCALDIRROOT)/DSP-stable/DSP
+DSPDIR = $(LOCALDIRROOT)/DSP-Stable
 SRC = ./src
 OBJDIR = ./obj
 OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
@@ -62,7 +63,6 @@ INCL = $(INCLTCLAP) $(INCLDSP) $(INCLCPLEX)
 
 #DSPLIBS = -L$(DSPDIR)/build/lib -lDsp -D_GLIBCXX_USE_CXX11_ABI=0
 DSPLIBS = -L$(DSPDIR)/build/lib -lDsp 
-#DSPLIBS = -L$(DSPDIR)/build/lib -lSmi -lOsiCpx -lCoinUtils -lOsi 
 #DSPLIBS =  
 
 #COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi -lOsiClp -lOsiCommonTests  

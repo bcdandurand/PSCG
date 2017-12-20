@@ -456,7 +456,7 @@ catch(std::exception &e){
 	    //currentLagrLB=-ALPS_DBL_MAX;
 	    modelStatus_[SP_STATUS]=SP_OPT;
 	    updateZ();
-#if 1
+
 	    ALVal_Local = 0.0;
 	    localDiscrepNorm = 0.0;
 	    reduceBuffer[0]=0.0;
@@ -505,7 +505,6 @@ catch(std::exception &e){
     	    }
 #else
 	    //rho=baselineRho;
-#endif
 #endif
 	}
 	if(mpiRank==0){cerr << "End initialIteration()" << endl;}

@@ -62,7 +62,7 @@ INCL = $(INCLTCLAP) $(INCLDSP) $(INCLCPLEX)
 #INCL += $(ADDINCFLAGS)
 
 #DSPLIBS = -L$(DSPDIR)/build/lib -lDsp -D_GLIBCXX_USE_CXX11_ABI=0
-DSPLIBS = -L$(DSPDIR)/build/lib -lDsp 
+DSPLIBS = -L$(DSPDIR)/build/lib -lDsp-stable 
 #DSPLIBS =  
 
 #COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi -lOsiClp -lOsiCommonTests  

@@ -565,7 +565,7 @@ catch(IloException &e){
     exit(1);
 }
 
-	//weightObjective[iii]=0.0;//.add(0.0);
+	weightObjective[iii]=0.0;//.add(0.0);
 
 	bestVertexIndex=iii;
 	vecWeights[iii]=0.0;

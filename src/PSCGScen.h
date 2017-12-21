@@ -1,7 +1,7 @@
 #ifndef PSCGSCEN_H
 #define PSCGSCEN_H
 
-#include "StructureDefs.h"
+//#include "StructureDefs.h"
 #include <list>
 #include <iostream>
 #include <memory>
@@ -9,8 +9,7 @@
 #include <ilcplex/ilocplex.h>
 #include "DecTssModel.h"
 #include "OsiCpxSolverInterface.hpp"
-#include "PSCGParams.h"
-#include "ProblemDataBodur.h"
+//#include "PSCGParams.h"
 //#include "CoinUtils.h"
 
 #define ptrModel IloModel*
@@ -53,14 +52,26 @@ class PSCGScen{
 
 protected:
 
+IloEnv &env;
+IloCplex cplexMP;
+IloModel mpModel;
+IloObjective mpObjective;
+IloRangeArray mpWeightConstraints;
+IloRangeArray mpVertexConstraints;
+IloNumVarArray mpWeightVariables;
+IloNumVar mpWeight0;
+IloNumVarArray mpAuxVariables;
+IloNumArray weightSoln;//(env, nVertices);
+IloNumArray weightObjective;
+IloNum weight0;
+int nThreads;
+
 int n1;
 int n2;
 int nS;
 int tS; //scenario
 bool initialised;
 
-IloEnv &env;
-int nThreads;
 double pr;
 double *c;
 double *d;
@@ -94,19 +105,8 @@ vector< vector<double> > yVertices;
 vector<double> vecWeights;
 int bestVertexIndex;
 
-IloCplex cplexMP;
-IloModel mpModel;
-IloNum weight0;
-IloNumArray weightSoln;//(env, nVertices);
-IloNumArray weightObjective;
 //vector<double> baseWeightObj;
 //IloExpr quadraticTerm;
-IloObjective mpObjective;
-IloRangeArray mpWeightConstraints;
-IloRangeArray mpVertexConstraints;
-IloNumVar mpWeight0;
-IloNumVarArray mpWeightVariables;
-IloNumVarArray mpAuxVariables;
 
 double ALVal;
 double sqrNormDiscr;
@@ -114,22 +114,23 @@ int solverStatus_;
 
 
 public:
-PSCGScen(IloEnv &envarg, int nthreads=1):
-n1(0),n2(0),nS(0),tS(-1),initialised(false),env(envarg),nThreads(nthreads),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
-weightSoln(env),weightObjective(env),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
-mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),pr(0.0){;}
+PSCGScen(IloEnv &envarg, int nthreads=1):env(envarg),
+cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
+mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
+nThreads(nthreads),
+n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
+x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
+nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),pr(0.0){;}
 
 //copy constructor
-PSCGScen(const PSCGScen &other):
-n1(0),n2(0),nS(0),tS(-1),initialised(false),env(other.env),nThreads(other.nThreads),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),cplexMP(env),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
-weightSoln(env),weightObjective(env),nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),
-mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),pr(0.0){;}
+PSCGScen(const PSCGScen &other):env(other.env),
+cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
+mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
+nThreads(other.nThreads),
+n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
+x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
+nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),pr(0.0){;}
 
-//void initialiseBodur(ProblemDataBodur &pdBodur, SMIP_fileRequest* probSpecs, int scenario);
 //int initialiseSMPS(SMIP_fileRequest* probSpecs, int scenario);
 //int initialiseSMPS(SMIP_fileRequest* probSpecs, DecTssModel &smpsModel, int scenario);
 void finishInitialisation();
@@ -182,6 +183,7 @@ double* getD(){return d;}
 double* getDispersions(){return dispersions;}
 virtual double getMIPBestNodeVal(){
     cout << "getMIPBestNodeVal(): default implementation, does nothing" << endl;
+    return -COIN_DBL_MAX;
 }
 virtual void setMIPPrintLevel(int outputControl=0, int outputControlMIP=0, bool doReducePrint=true){
    cout << "setPrintLevel(): default implementation, does nothing" << endl;
@@ -205,9 +207,11 @@ cerr << "setBounds(): Default implementation does nothing." << endl;
 #endif
 virtual double getLB(const int ind){
 cerr << "getLB(): Default implementation does nothing." << endl;
+    return -COIN_DBL_MAX;
 }
 virtual double getUB(const int ind){
 cerr << "getUBound(): Default implementation does nothing." << endl;
+    return COIN_DBL_MAX;
 }
 virtual void setBound(const int ind, const double lb, const double ub, bool indNonRedundant=true){
 cerr << "setBound(): Default implementation does nothing." << endl;
@@ -511,7 +515,8 @@ bool replaceOldestVertex(){
     }
 //cout << "Oldest vertex index was: " << oldestVertexIndex;
     replaceVertexAtIndex(oldestVertexIndex);
-    oldestVertexIndex = (++oldestVertexIndex)%nVertices;
+    oldestVertexIndex++;
+    oldestVertexIndex %= nVertices;
 //cout << " ...but is now " << oldestVertexIndex << endl;
     return true;
 }
@@ -596,6 +601,7 @@ virtual void printYBounds(){
 }
 virtual bool printModifiedYBounds(){
     cout << "printModifiedYBounds() default: doing nothing..." << endl;
+    return false;
 }
 
 #if 0
@@ -1360,109 +1366,4 @@ OsiCpxSolverInterface *LagrMIPInterface_;
 
 };
 
-class PSCGScen_Bodur : public PSCGScen{
-public:
-PSCGScen_Bodur(IloEnv &envarg):PSCGScen(envarg),
-cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}
-PSCGScen_Bodur(const PSCGScen_Bodur &other):PSCGScen(other), 
-cplexMIP(env),xVariables(env),yVariables(env),slpModel(env),c_vec(env),d_vec(env),slpObjective(env){;}
-
-void initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario);
-
-virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
-
-//virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
-virtual int solveFeasibilityProblem();
-virtual void setSolverStatus(){
-    solverStatus_ = PSCG_OPTIMAL;
-}
-virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, double *origLBs, double *origUBs){
-   fixXToZ(z);
-
-   int solveStatus = solveLagrangianProblem(omega,true);
-
-   unfixX(origLBs, origUBs); 
-   return solveStatus;
-}
-#if 0
-virtual int solveFeasibilityProblemWithXFixedToZ(const double *z, const double *origLBs, const double *origUBs, const char *colTypes){
-   fixXToZ(z,colTypes);
-   int solveStatus = solveFeasibilityProblem();
-   unfixX(origLBs, origUBs); 
-   return solveStatus;
-}
-virtual void fixXToZ(const double *z){
-//TODO: set the xVariables to be continuous
-    for(int ii=0; ii<n1; ii++){
-	xVariables[ii].setBounds(z[ii],z[ii]);
-    }
-}
-#endif
-virtual void fixXToZ(const double *z){;
-//TODO: set the xVariables to be continuous
-    for(int ii=0; ii<n1; ii++){
-	xVariables[ii].setBounds(z[ii],z[ii]);
-    }
-}
-virtual void unfixX(const double* origLBs, const double* origUBs){
-    for(int ii=0; ii<n1; ii++){
-	xVariables[ii].setBounds(origLBs[ii],origUBs[ii]);
-    }
-}
-#if 0
-virtual void unfixX(const double* origLBs, const double* origUBs, const char* colTypes){
-//TODO: set the xVariables back to their original types
-    for(int ii=0; ii<n1; ii++){
-	xVariables[ii].setBounds(origLBs[ii],origUBs[ii]);
-    }
-}
-#endif
-
-
-
-virtual void upBranchOnVar(int varIndex, double bound){
-    if(varIndex >=0 && varIndex < n1){
-	xVariables[varIndex].setLB(bound);
-    }
-    else if(varIndex >= n1 && varIndex < n1+n2){
-	yVariables[varIndex-n1].setLB(bound);
-    }
-}
-
-virtual void downBranchOnVar(int varIndex, double bound){
-    if(varIndex >=0 && varIndex < n1){
-	xVariables[varIndex].setUB(bound);
-    }
-    else if(varIndex >= n1 && varIndex < n1+n2){
-	yVariables[varIndex-n1].setUB(bound);
-    }
-}
-
-virtual void updateSolnInfo(){
-    assert(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM);	
-    if(solverStatus_==PSCG_OPTIMAL || solverStatus_==PSCG_ITER_LIM){	
-	if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver indicated iteration limit reached." << endl;
-	for(int ii=0; ii<n1; ii++) x_vertex[ii] = cplexMIP.getValue(xVariables[ii]);
-	//for(int ii=0; ii<n1; ii++) cout << " (" << cplexMIP.getValue(xVariables[ii]) << ","<<x_vertex[ii] << ")";
-	//cout << endl;
-	for(int jj=0; jj<n2; jj++) y_vertex[jj] = cplexMIP.getValue(yVariables[jj]);
-	LagrBd = getMIPBestNodeVal();
-	//LagrBd = cplexMIP.getObjValue();
-    }
-    else{
-	cerr << "In updateSolnInfo(): Flagging: SMPS MIP solver indicated isProvenOptimal() == false." << endl;
-	assert(0);
-    }
-}
-
-
-private:
-IloCplex cplexMIP;
-IloNumVarArray xVariables;
-IloNumVarArray yVariables;
-IloModel slpModel;
-IloNumArray c_vec;
-IloNumArray d_vec;
-IloObjective slpObjective;
-};
 #endif

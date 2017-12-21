@@ -17,11 +17,11 @@ OPENMPIDIR = /usr/lib/openmpi/lib
 #DSPDIR = /homes/bcdandurand/DSP
 #DSPDIR = $(LOCALDIRROOT)/DSP
 #DSPDIR = $(LOCALDIRROOT)/DSP-stable/DSP
-DSPDIR = $(LOCALDIRROOT)/DSP-Stable
+DSPDIR = $(LOCALDIRROOT)/DSP
 SRC = ./src
 OBJDIR = ./obj
-OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
-OBJSLIB = $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o $(OBJDIR)/ProblemDataBodur.o 
+OBJS = $(OBJDIR)/PSCGMain.o $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o  
+OBJSLIB = $(OBJDIR)/$(ALG).o $(OBJDIR)/$(SOLVER).o 
 #OBJS_serial = $(OBJDIR)/PSCGMain_serial.o $(OBJDIR)/$(ALG)_serial.o $(OBJDIR)/$(SOLVER)_serial.o $(OBJDIR)/ProblemDataBodur_serial.o 
 LIBDIR = ./lib
 BIN = ./bin
@@ -38,7 +38,7 @@ CXX = mpicxx
 #GCCOPENMPI = g++
 
 # C++ Compiler options
-CXXFLAGS = -O3 -g -std=c++11 -fpic
+CXXFLAGS = -O3 -g -std=c++11 -fpic -Wall
 #CXXFLAGS = -g -O3 -pipe -DNDEBUG -pedantic-errors -Wparentheses -Wreturn-type -Wcast-qual -Wall -Wpointer-arith -Wwrite-strings -Wconversion -Wno-unknown-pragmas -Wno-long-long   -DBCPS_BUILD 
 #CXXFLAGS = -O3 
 
@@ -46,7 +46,8 @@ CXXFLAGS = -O3 -g -std=c++11 -fpic
 
 # additional C++ Compiler options for linking
 #CXXLINKFLAGS =  -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
-CXXLINKFLAGS =  -Wl,--rpath -Wl,$(DSPDIR)/build/lib -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
+#CXXLINKFLAGS =  -Wl,--rpath -Wl,$(DSPDIR)/build/lib -Wl,--rpath -Wl,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
+#CXXLINKFLAGS =  -Wl,-rpath,$(DSPDIR)/build/lib -Wl,-rpath,$(SMIDIR)/lib -Wl,--rpath -Wl,$(LIBDIR)
 #CCOPT = -m64 -O -fPIC -fno-strict-aliasing -fexceptions -DNDEBUG -DIL_STD -std=c++0x
 
 # Include directories (we use the CYGPATH_W variables to allow compilation with Windows compilers)
@@ -62,7 +63,7 @@ INCL = $(INCLTCLAP) $(INCLDSP) $(INCLCPLEX)
 #INCL += $(ADDINCFLAGS)
 
 #DSPLIBS = -L$(DSPDIR)/build/lib -lDsp -D_GLIBCXX_USE_CXX11_ABI=0
-DSPLIBS = -L$(DSPDIR)/build/lib -lDsp-stable 
+DSPLIBS = -Wl,-rpath,$(DSPDIR)/build/lib -L$(DSPDIR)/build/lib -lDsp
 #DSPLIBS =  
 
 #COINORLIBS = -L$(SMIDIR)/lib -lSmi -lOsiCpx -lClp -lClpSolver -lCoinUtils -lOsi -lOsiClp -lOsiCommonTests  
@@ -73,14 +74,14 @@ DSPLIBS = -L$(DSPDIR)/build/lib -lDsp-stable
 
 CPLEXLIBR = -DIL_STD $(CPPFLAGS) $(LDFLAGS) -L$(CPLEXDIR)/lib/$(SYSTEM)/$(LIBFORMAT) \
 	-lilocplex -lcplex -L$(CONCERTDIR)/lib/$(SYSTEM)/$(LIBFORMAT) -lconcert 
-PSCGLIBR = -L$(LIBDIR) -lPSCG
+PSCGLIBR = -Wl,-rpath,$(LIBDIR) -L$(LIBDIR) -lPSCG
 OTHERLIBS = -lstdc++ -lm -lpthread -lz -lbz2
 
 ALG = PSCG
 #mpicxx -o $(BIN)/$(ALG) $(OBJS) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
 SOLVER = PSCGScen
 
-SRCFILES = $(SRC)/PSCGMain.cpp $(SRC)/$(ALG).cpp $(SRC)/$(ALG).h $(SRC)/$(SOLVER).cpp $(SRC)/$(SOLVER).h $(SRC)/ProblemDataBodur.cpp $(SRC)/ProblemDataBodur.h 
+SRCFILES = $(SRC)/PSCGMain.cpp $(SRC)/$(ALG).cpp $(SRC)/$(ALG).h $(SRC)/$(SOLVER).cpp $(SRC)/$(SOLVER).h  
 	
 	
 all: all_parallel 
@@ -93,17 +94,15 @@ all_parallel: $(ALG)
 
 $(ALG): $(SRCFILES) 
 
-	$(CXX) -c -o $(OBJDIR)/PSCGMain.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+	$(CXX) -c -o $(OBJDIR)/PSCGMain.o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/PSCGMain.cpp $(DSPLIBS) $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) 
 	
-	$(CXX) -c -o $(OBJDIR)/$(ALG).o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/$(ALG).cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) 
+	$(CXX) -c -o $(OBJDIR)/$(ALG).o -D USING_MPI $(INCLMPI) $(INCL) $(SRC)/$(ALG).cpp $(DSPLIBS) $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) 
 	
 	$(CXX) -c -o $(OBJDIR)/$(SOLVER).o $(SRC)/$(SOLVER).cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL)
 	
-	$(CXX) -c -o $(OBJDIR)/ProblemDataBodur.o $(SRC)/ProblemDataBodur.cpp $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(INCL) 
-	
-	mpicxx -shared -o $(LIBDIR)/lib$(ALG).so $(OBJSLIB) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
-	
-	mpicxx -o $(BIN)/$(ALG) $(OBJDIR)/PSCGMain.o $(PSCGLIBR) $(CPLEXLIBR) $(COINORLIBS) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
+	mpicxx -shared -o $(LIBDIR)/lib$(ALG).so $(OBJSLIB) $(DSPLIBS) $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
+
+	mpicxx -o $(BIN)/$(ALG) $(OBJDIR)/PSCGMain.o $(PSCGLIBR) $(DSPLIBS) $(CPLEXLIBR) $(OTHERLIBS) $(CXXFLAGS) $(CXXLINKFLAGS) -D USING_MPI 
 	
 #$(ALG)_Serial: $(SRCFILES)
 #	$(CXX) -c -o $(OBJDIR)/PSCGMain_serial.o $(SRC)/PSCGMain.cpp $(CPLEXLIBR) $(DSPLIBS) $(OTHERLIBS) $(CXXFLAGS) $(INCL)

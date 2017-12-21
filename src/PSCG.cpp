@@ -4,9 +4,8 @@ integer program using a Frank-Wolfe-based Method of Multipliers approach.
 */
 
 #include "PSCG.h"
-#include "ProblemDataBodur.h"
-#include "tclap/CmdLine.h"
-#include "StructureDefs.h"
+//#include "tclap/CmdLine.h"
+//#include "StructureDefs.h"
 
 
 
@@ -70,9 +69,9 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 	setupSolvers();
 }
 #ifdef USING_MPI
-PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
+PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),env(),comm_(comm),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
-	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),comm_(comm),mpiRank(0),mpiSize(1),
+	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),noGSIts(1),
 	baselineRho(1.0),rho(1.0),nThreads(1),nVerticesUsed(100),
 	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
@@ -353,6 +352,7 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
 	// This is part of the initialisation - initial Lagrangian subproblem computations
         modelStatus_[Z_STATUS]=Z_UNKNOWN;
 	modelStatus_[SP_STATUS]=SP_ITER_LIM;
+	cumNoInnerSolves=0;
 try{
     	clearSPVertexHistory();
 }
@@ -550,6 +550,7 @@ if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << o
 }
 
 int PSCG::performColGenStep(){	
+//{cout << "Proc: " << mpiRank << " Begin performColGenStep(): "  << endl;}
 //if(true){cerr << "Proc: " << mpiRank << " Begin performColGenStep(): "  << endl;}
 	LagrLB_Local = 0.0;
 	ALVal_Local = 0.0;
@@ -594,7 +595,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 	    	    break;
 		}
 
-	double LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 #ifdef KEEP_LOG
     	    *(logFiles[tS]) << "old LagrLB_ts: " << LagrLB_tS << "\tnew LagrLB_ts" << subproblemSolvers[tS]->getLagrBd() << "\tALVal_ts: " << ALVal_tS << "\tsqrDiscrNorm: " << sqrDiscrNorm_tS << endl;
     	    *(logFiles[tS]) << "Testing whether vertex is redundant: " << -(LagrLB_tS - subproblemSolvers[tS]->getLagrBd()) << endl;;

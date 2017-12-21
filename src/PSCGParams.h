@@ -17,7 +17,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include "tclap/CmdLine.h"
-#include "StructureDefs.h"
+//#include "StructureDefs.h"
 
 
 #define SSTR( x ) dynamic_cast< std::ostringstream & >( \

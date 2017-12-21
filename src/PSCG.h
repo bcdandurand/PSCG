@@ -18,7 +18,7 @@
 #include <algorithm>
 #include <time.h>
 #include <sys/time.h>
-#include "PSCGParams.h"
+//#include "PSCGParams.h"
 #include <utility>
 #include "DecTssModel.h"
 #include "PSCGScen.h"
@@ -50,6 +50,27 @@ enum COL_TYPE{
 CONTINUOUS=0,
 BINARY,
 INTEGER
+};
+enum Statuses{
+    SP_STATUS=0,
+    Z_STATUS
+};
+
+enum SPStatuses{
+    SP_UNKNOWN=-1,
+    SP_OPT=0, //PSCG termination criteria met
+    SP_ITER_LIM, //otherwise feasible
+    SP_INFEAS //at least one subproblem is infeasible
+};
+
+enum Z_Statuses{
+    Z_OPT=0, //z is not only feasible, but optimal (PSCG meets termination criteria)
+    Z_FEAS, //z is feasible (has both recourse and integer feas)
+    Z_REC_INFEAS, //z has recourse (but its integer feas unknown)
+    Z_INT_INFEAS, //z is integer feas (but its recourse is unknown)
+    Z_INFEAS, //z is infeasible by both feasibility qualities
+    Z_BOUNDED, //indicates status of z is irrelevant due to fathoming by bound
+    Z_UNKNOWN
 };
 
 typedef struct{
@@ -128,6 +149,10 @@ public:
 //PSCGParams *par;
 DecTssModel &smpsModel;
 IloEnv env;
+#ifdef USING_MPI
+MPI_Comm comm_;
+#endif
+
 int algorithm;
 vector<int> scenariosToThisModel;
 vector<PSCGScen*> subproblemSolvers;
@@ -141,6 +166,7 @@ int n2;
 int nNodeSPs;
 int currentIter_;
 int noInnerSolves;
+int cumNoInnerSolves;
 int noConseqNullSteps;
 int noSeriousSteps;
 int phase;
@@ -236,9 +262,6 @@ bool dataPathOverride;
 int ftype;
 int mpiRank;
 int mpiSize;
-#ifdef USING_MPI
-MPI_Comm comm_;
-#endif
 
 int infeasIndex_;
 int nIntInfeas_;
@@ -256,9 +279,9 @@ double *currentVarUB_;
 int totalNoGSSteps;
 //char zOptFile[128];
 
-ProblemDataBodur pdBodur;
+//ProblemDataBodur pdBodur;
 
-PSCG(PSCGParams *p);
+//PSCG(PSCGParams *p);
 PSCG(DecTssModel &model);
 #ifdef USING_MPI
 PSCG(DecTssModel &model, MPI_Comm comm);
@@ -629,7 +652,7 @@ bool solveContinuousMPs(bool adjustPenalty){
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		//*************************** Quadratic subproblem ***********************************
 			    
-#if 0
+#if 1
 		if(subproblemSolvers[tS]->getNVertices()>0){
 		    for(int iii=0; iii<10; iii++){
 	    		for (int i = 0; i < n1; i++) {
@@ -639,10 +662,11 @@ bool solveContinuousMPs(bool adjustPenalty){
 		    	subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
 		    }
 		}
-#endif
+#else
 		if(subproblemSolvers[tS]->getNVertices()>0){
 			subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
 		}
+#endif
 		#ifdef KEEP_LOG
 		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
 		#endif
@@ -660,7 +684,7 @@ bool solveContinuousMPs(bool adjustPenalty){
 	reduceBuffer[0]=0.0;
 	reduceBuffer[1]=0.0;
 	reduceBuffer[2]=0.0;
-	double refVal, LagrLB_tS, ALVal_tS,sqrDiscrNorm_tS;
+	double LagrLB_tS, ALVal_tS,sqrDiscrNorm_tS;
     	for (int tS = 0; tS < nNodeSPs; tS++) {
 		#ifdef KEEP_LOG
 		    //subproblemSolvers[tS]->printWeights(logFiles[tS]);
@@ -668,17 +692,12 @@ bool solveContinuousMPs(bool adjustPenalty){
 		for (int i = 0; i < n1; i++) {
 		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
 		}
-		refVal = subproblemSolvers[tS]->evaluateSolution(omega_tilde[tS]);
 		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 		innerLagrLB_Local += pr[tS]*LagrLB_tS;
 	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
 		ALVal_Local += pr[tS]*ALVal_tS;
 		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
 		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
-		#ifdef KEEP_LOG
-		//	*(logFiles[tS]) << "  gap val (master problem): " << LagrLB_tS - refVal;
-		//*(logFiles[tS]) << endl;
-		#endif
 	}
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
@@ -712,6 +731,7 @@ if(mpiRank==0) cout << "innerSSCVal computation: Denominator is close to zero (a
 
 int regularIteration(bool adjustPenalty=false, bool SSC=true){
 //if(mpiRank==0) cout << "Begin regularIteration()" << endl;
+//cout << "Begin regularIteration() at rank: " << mpiRank << endl;
 
 	int SPStatus=performColGenStep();
 	assert(SPStatus!=SP_INFEAS); //subproblem infeasibility should be caught in initialIteration()
@@ -734,6 +754,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
 	    continueInner=solveContinuousMPs(adjustPenalty);
 	    //if(mpiRank==0) cout << "***************************************Need to continue with solveMP..." << endl;
 	    noInnerSolves++;
+	    cumNoInnerSolves++;
 	  }while(continueInner);
 	}
 //if(mpiRank==0) cout << "End regularIteration()" << endl;
@@ -1633,7 +1654,7 @@ void printStatus(){
 	//cout << setfill( ' ' );
 	//cout << "Iter " << currentIter_ << setw(wid) << setprecision(10) << "LagrLB " << currentLagrLB << setw(wid) << "ALVal " << ALVal << setw(wid) << setprecision(5) << "primDiscr " << discrepNorm
 	//	<< setw(wid) << "SSCVal " << SSCVal << setw(wid) << "innSSCVal " << innerSSCVal << setw(wid) << "MP iters: " << noInnerSolves << endl;
-	printf("Iter %6d: LagrLB: %-10.8gALVal: %-10.8gbestPr: %-10.8gpDisc: %-8.3gSSCVal: %-8.3ginnSSCVal: %-8.3gtcrit: %-8.3gnoInnerMP: %-5d\n", currentIter_, currentLagrLB, ALVal, incumbentVal,discrepNorm, SSCVal, innerSSCVal, tCritVal, noInnerSolves);
+	printf("Iter %6d: LagrLB: %-10.8gALVal: %-10.8gbestPr: %-10.8gpDisc: %-8.3gSSCVal: %-8.3ginnSSCVal: %-8.3gtcrit: %-8.3gnoInnerMP: %-5d\n", currentIter_, currentLagrLB, ALVal, incumbentVal,discrepNorm, SSCVal, innerSSCVal, tCritVal, cumNoInnerSolves);
 //	printf("Best node: %0.14g, Incumbent value: %0.14g\n", getBestNodeQuality(), getIncumbentVal());
 	//printf("Aug. Lagrangian value: %0.9g\n", ALVal);
 	//printf("Norm of primal discrepancy: %0.6g\n", discrepNorm);

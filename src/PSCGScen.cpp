@@ -16,63 +16,12 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include "ProblemDataBodur.h"
 
 #include "CoinPragma.hpp"
 #include "SmiScnModel.hpp"
 #include "SmiScnData.hpp"
 //#include "OsiClpSolverInterface.hpp"
 #include "OsiCpxSolverInterface.hpp"
-
-// Initialises the problem data, reading it in from a file.
-void PSCGScen_Bodur::initialiseBodur(PSCGParams *par, ProblemDataBodur &pdBodur, int scenario){
-	n1 = pdBodur.get_n1();
-	n2 = pdBodur.get_n2();
-	nS = pdBodur.get_nS();
-
-	tS = scenario;
-	nThreads = par->threads;
-
-	c = new double[n1];
-	d = new double[n2];
-	for (int i = 0; i < n1; i++) {
-		c[i] = (pdBodur.get_c())[i];
-	}
-	for (int j = 0; j < n2; j++) {
-		d[j] = (pdBodur.get_d(tS))[j];
-	}
-		
-	pr = pdBodur.getProbabilities()[tS];
-
-	for(int i=0; i<n1; i++){ xVariables.add(IloNumVar(env,0,1,ILOINT));}
-	for(int i=0; i<n2; i++){ yVariables.add(IloNumVar(env,0.0,IloInfinity));}
-	
-	
-	for (int i = 0; i < pdBodur.get_A().getSize(); i++) {
-		slpModel.add(IloScalProd(xVariables, (pdBodur.get_A())[i]) >= (pdBodur.get_b())[i]);
-	}
-	
-	for (int i = 0; i < (pdBodur.get_T(tS)).getSize(); i++) {
-		slpModel.add(IloScalProd(xVariables, pdBodur.get_T(tS)[i]) + IloScalProd(yVariables, (pdBodur.get_W(tS))[i]) >= (pdBodur.get_h(tS))[i]) ;
-	}
-	
-	for (int i = 0; i < n1; i++) {
-	    c_vec.add(c[i]);
-	}
-	for (int j = 0; j < n2; j++) {
-	    d_vec.add(d[j]);
-	}
-	slpObjective.setSense(IloObjective::Minimize);
-	slpObjective.setExpr( IloScalProd(xVariables, c_vec) + IloScalProd(yVariables,d_vec) ); 
-	slpModel.add(slpObjective);
-
-	if (nThreads >= 0) { cplexMIP.setParam(IloCplex::Threads, nThreads); }
-	cplexMIP.setParam(IloCplex::EpGap, 1e-6);
-	cplexMIP.setOut(env.getNullStream());
-	//cplexMIP.setParam();
-	cplexMIP.extract(slpModel);
-	//if(tS==0){cout << slpModel << endl;}
-}
 
 //Initialise SIPLIB
 //int CPLEXsolverSCG::initialiseSMPS(SMIP_fileRequest *request, int scenario) {
@@ -202,64 +151,6 @@ void PSCGScen::finishInitialisation() {
 	initialised = true;
 }
 
-#if 1
-
-int PSCGScen_Bodur::solveLagrangianProblem(const double *omega, bool doInitialSolve) {
-
-	if(omega!=NULL){
-	  for (int i = 0; i < n1; i++) {
-	        slpObjective.setLinearCoef(xVariables[i], c_vec[i]+omega[i]);
-	  }
-	}
-	else{
-	  for (int i = 0; i < n1; i++) {
-	        slpObjective.setLinearCoef(xVariables[i], c_vec[i]);
-	  }
-	}
-		
-	if (!cplexMIP.solve()) {
-		env.error() << "Failed to optimize in solveInitial" << endl;
-		throw(-1);
-	}
-
-	
-	return 0;
-}
-#endif
-#if 0
-int PSCGScen_Bodur::solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal){
-//TODO
-    return solveLagrangianProblem(omega);
-}
-#endif
-int PSCGScen_Bodur::solveFeasibilityProblem(){
-	
-	for (int i = 0; i < n1; i++) {
-		//omega[i] = omega[i];
-	        slpObjective.setLinearCoef(xVariables[i], 0.0);
-	}
-	for (int i = 0; i < n2; i++) {
-		//omega[i] = omega[i];
-	        slpObjective.setLinearCoef(yVariables[i], 0.0);
-	}
-		
-	if (!cplexMIP.solve()) {
-		env.error() << "Failed to optimize in solveInitial" << endl;
-		throw(-1);
-	}
-
-	//for(int ii=0; ii<n1; ii++) cplexMIP.getValue(xVariables[ii], x_vertex[ii]);
-	//for(int jj=0; jj<n2; jj++) cplexMIP.getValue(yVariables[jj], y_vertex[jj]);
-	
-	//LagrBd = cplexMIP.getObjValue();
-	for (int i = 0; i < n2; i++) {
-		//omega[i] = omega[i];
-	        slpObjective.setLinearCoef(yVariables[i], d_vec[i]);
-	}
-	
-	return 0;
-}
-
 int PSCGScen_SMPS::initialLPSolve(const double* omega) {
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
@@ -276,7 +167,8 @@ int PSCGScen_SMPS::initialLPSolve(const double* omega) {
 	  }
 	}
 	osi->initialSolve();
-	return 0;
+	setSolverStatus();
+	return solverStatus_;
 }
 	//setSolverStatus();
 // Given a scenario index and a dual variable, find the anticipative solution for first and second stage variables.

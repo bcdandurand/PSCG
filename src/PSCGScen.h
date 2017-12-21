@@ -76,9 +76,11 @@ double pr;
 double *c;
 double *d;
 
+#if 0
 vector<int> branchIndices;
 vector<double> restoreLBs;
 vector<double> restoreUBs;
+#endif
 //vector<double> branchLBs;
 //vector<double> branchUBs;
 double *origLBs_;
@@ -996,6 +998,7 @@ virtual double getUB(const int ind){
 }
 virtual void setBound(const int ind, const double lb, const double ub, bool indNonRedundant){
     //Save the current bound, if it is not already saved
+#if 0
     if(!indNonRedundant){
         int ii;
         for(ii=0; ii<branchIndices.size(); ii++){
@@ -1012,6 +1015,7 @@ virtual void setBound(const int ind, const double lb, const double ub, bool indN
 	    restoreLBs.push_back(getLB(ind));
 	    restoreUBs.push_back(getUB(ind));
     }
+#endif
     LagrMIPInterface_->setColLower(ind,lb);
     LagrMIPInterface_->setColUpper(ind,ub);
 
@@ -1045,7 +1049,6 @@ virtual void restoreBounds(){
 vector<int> branchIndices;
 vector<double> restoreLBs;
 vector<double> restoreUBs;
-#endif
     for(int ii=0; ii<branchIndices.size(); ii++){
 	LagrMIPInterface_->setColLower(branchIndices[ii],restoreLBs[ii]);
 	LagrMIPInterface_->setColUpper(branchIndices[ii],restoreUBs[ii]);
@@ -1053,6 +1056,7 @@ vector<double> restoreUBs;
     restoreLBs.clear();
     restoreUBs.clear();
     branchIndices.clear();
+#endif
     for(int iii=0; iii<n1+n2; iii++){
 	LagrMIPInterface_->setColLower(iii,origLBs_[iii]);
 	LagrMIPInterface_->setColUpper(iii,origUBs_[iii]);
@@ -1150,12 +1154,14 @@ cout << "Printing subproblem bounds: " << endl;
 }
 virtual bool printModifiedYBounds(){
     bool found=false;
+#if 0
     for(int ii=0; ii<branchIndices.size(); ii++){
 	if(branchIndices[ii]>n1){
 	    found=true;
       	    cout << " (" << branchIndices[ii] << "," << LagrMIPInterface_->getColLower()[branchIndices[ii]] << "," << LagrMIPInterface_->getColUpper()[branchIndices[ii]] << ")";
 	}
     }
+#endif
     return found;
 }
 virtual void printLinCoeffs(){

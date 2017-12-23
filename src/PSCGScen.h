@@ -183,6 +183,7 @@ virtual const char* getColTypes(){
 cout << "getColTypes(): Default implementation: doing nothing" << endl;
     return NULL;
 }
+virtual bool varIsInt(int index){return false;}
 double* getC(){return c;}
 double* getD(){return d;}
 double* getDispersions(){return dispersions;}
@@ -1078,9 +1079,12 @@ vector<double> restoreUBs;
     }
 }
 
+//Elements are 'C', 'I', 'B'
 virtual const char* getColTypes(){
-    return LagrMIPInterface_->getColType();
+    return LagrMIPInterface_->getCtype();
 } 
+
+virtual bool varIsInt(int index){return LagrMIPInterface_->getCtype()[index]!='C';}
 
 virtual int getCPLEXErrorStatus(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
@@ -1292,7 +1296,7 @@ virtual void fixXToZ(const double *z){
 virtual void fixXToZ(const double *z){
    for(int ii=0; ii<n1; ii++){
       //LagrMIPInterface_->setContinuous(ii);
-      if(getColTypes()[ii]!=0){
+      if(getColTypes()[ii]!='C'){
       //if(colTypes[ii]=='I' || colTypes[ii]=='B'){
           LagrMIPInterface_->setColBounds(ii,round(z[ii]),round(z[ii]));
       }

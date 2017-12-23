@@ -1135,7 +1135,7 @@ BranchingVarInfo findBranchingIndex(){
 	    localBranchInfo.index = ii;
 	    localBranchInfo.disp = z_dispersions[ii];
 	    localBranchInfo.brVal = z_current[ii];
-	    if(subproblemSolvers[0]->getColTypes()[ii]==0){
+	    if(!subproblemSolvers[0]->varIsInt(ii)){
 	        localBranchInfo.brLBUp = localBranchInfo.brVal;
 	        localBranchInfo.brUBUp = currentVarUB_[ii];
 	        localBranchInfo.brLBDn = currentVarLB_[ii];
@@ -1179,7 +1179,7 @@ BranchingVarInfo findBranchingIndex(){
 		localBranchInfo.scen = tS;
 	        localBranchInfo.brVal = subproblemSolvers[tS]->getY()[ii-n1];
 //		}
-	    if(subproblemSolvers[tS]->getColTypes()[ii]==0){
+	    if(!subproblemSolvers[tS]->varIsInt(ii)){
 	        localBranchInfo.brLBUp = localBranchInfo.brVal;
 	        localBranchInfo.brUBUp = subproblemSolvers[tS]->getUB(ii);
 	        localBranchInfo.brLBDn = subproblemSolvers[tS]->getLB(ii);
@@ -1327,7 +1327,7 @@ bool firstStageIndexIsInt(int ii){
     const char *cTypes = subproblemSolvers[0]->getColTypes();  //Using only first-stage, so it doesn't matter which scenario is chosen.
     assert(ii>=0);
     assert(ii < n1);
-    if(cTypes[ii]!=0){
+    if(cTypes[ii]!='C'){
 	return true;
     }
     else{
@@ -1354,7 +1354,7 @@ void roundCurrentZ(double *z=NULL){
     memcpy(z_rounded,z,n1*sizeof(double));
     double roundingDisc = 0.0;
     for(int ii=0; ii<n1; ii++) {
-	if(cTypes[ii]!=0) {
+	if(cTypes[ii]!='C') {
 	    z_rounded[ii] = round(z[ii]);
     	    roundingDisc += fabs(z_rounded[ii]-z[ii]);
 	}
@@ -1690,7 +1690,7 @@ void printIntegralityViolations(){
   const char *cTypes = subproblemSolvers[0]->getColTypes(); //Using only first-stage, so it doesn't matter which scenario is chosen.
   if(mpiRank==0){
     for(int ii=0; ii<n1; ii++){
-      if(cTypes[ii]!=0){
+      if(cTypes[ii]!='C'){
 	if(!checkInteger(z_current[ii])){
 	    cout << " (" << ii << "," << z_current[ii] << ")";
 	}

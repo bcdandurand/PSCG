@@ -53,6 +53,7 @@ class PSCGScen{
 protected:
 
 IloEnv &env;
+#if 0
 IloCplex cplexMP;
 IloModel mpModel;
 IloObjective mpObjective;
@@ -64,6 +65,7 @@ IloNumVarArray mpAuxVariables;
 IloNumArray weightSoln;//(env, nVertices);
 IloNumArray weightObjective;
 IloNum weight0;
+#endif
 int nThreads;
 
 int n1;
@@ -117,8 +119,8 @@ int solverStatus_;
 
 public:
 PSCGScen(IloEnv &envarg, int nthreads=1):env(envarg),
-cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
+//cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
+//mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
 nThreads(nthreads),
 n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
@@ -126,8 +128,8 @@ nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),pr(0.0)
 
 //copy constructor
 PSCGScen(const PSCGScen &other):env(other.env),
-cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
+//cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
+//mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
 nThreads(other.nThreads),
 n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
@@ -148,7 +150,7 @@ void finishInitialisation();
   delete [] y_vertex;
   delete [] origLBs_;
   delete [] origUBs_;
-
+#if 0
   mpModel.end();
   mpObjective.end();
   mpWeightConstraints.end();
@@ -158,6 +160,7 @@ void finishInitialisation();
   mpAuxVariables.end();
   cplexMP.end();
   weightSoln.end();
+#endif
 }
 virtual void setInitialSolution(const int *indices, const double *startSol){
     cout << "setInitialSolution(): default implementation, does nothing." << endl;
@@ -383,23 +386,26 @@ bool roundIfClose(double &toBeRounded){
 }
 #endif
 
-double getWeight0(){return weight0;}
+//double getWeight0(){return weight0;}
 //double getWeight(int vv){return weightSoln[vv];}
 double getWeight(int vv){return vecWeights[vv];}
 
 
 void printWeights(){
   cout << "Printing weight solutions in continuous MP: " << endl;
-try{
+//try{
+#if 0
   cout << weight0 << " ";
   for(int ii=0; ii<nVertices; ii++){
     cout << "  " << weightSoln[ii];
   }
   cout << endl;
+#endif
   for(int ii=0; ii<nVertices; ii++){
     cout << "  " << vecWeights[ii];
   }
   cout << endl;
+#if 0
 }
 catch(IloException& e){
   cout << "printWeights() error: " << e.getMessage() << endl;
@@ -407,11 +413,12 @@ catch(IloException& e){
   //refresh();
   e.end();
 }
+#endif
 
 }
 void printWeights(shared_ptr<ofstream> outStream){
   *(outStream) << "Printing weight solutions in continuous MP: " << endl;
-try{
+//try{
 #if 0
   *(outStream) << weight0 << " ";
   for(int ii=0; ii<nVertices; ii++){
@@ -424,7 +431,8 @@ try{
   }
   *(outStream) << endl;
 }
-catch(IloException& e){
+#if 0
+//catch(IloException& e){
   *(outStream) << "printWeights() error: " << e.getMessage() << endl;
   //*(outStream) << "Exception caught...Refreshing solution..." << endl;
   //refresh();
@@ -432,6 +440,7 @@ catch(IloException& e){
 }
 
 }
+#endif
 
 //x,y,x_vertex, and y_vertex should all be set to something meaningful
 double updateGapVal(const double *omega){
@@ -532,6 +541,7 @@ void zeroOutVertexAtIndex(int iii){
 	//baseWeightObj[iii]=0.0; //.push_back(0.0);
 	//weightSoln.add(0.0);
 	//weightObjective[iii]=0.0//.add(0.0);
+#if 0
     try{
 	weightObjective[iii] = 0.0;
 	mpWeightVariables[iii].setBounds(0.0,0.0);
@@ -541,6 +551,7 @@ void zeroOutVertexAtIndex(int iii){
         cout << "zeroOutVertexAtIndex error: " << e.getMessage() << endl;
         exit(1);
     }
+#endif
 }
 
 void clearVertexHistory(){
@@ -777,6 +788,7 @@ virtual void polishSolution(){
 cerr << "polishSolution(): Doing nothing." << endl;
 }
 
+#if 0
 void polishWeights(){
 #if 0
 cout << "PolishWeights(): before" << endl;
@@ -828,6 +840,7 @@ for(int wI=0; wI<nVertices; wI++){weightSum+= weightSoln[wI];}
 cout << "PolishWeights(): sum: " << weightSum << endl;
 #endif
 }
+#endif
 
 double getLagrBd(){return LagrBd;}
 double getProbabilities(){return pr;}

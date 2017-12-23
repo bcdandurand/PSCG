@@ -108,6 +108,8 @@ void PSCGScen::finishInitialisation() {
 		
 		
 	//add objective
+	//
+#if 0
 	try{
 
 	mpObjective.setSense( IloObjective::Minimize );
@@ -125,8 +127,6 @@ void PSCGScen::finishInitialisation() {
 	}
 	mpModel.add(mpVertexConstraints);
 
-	//We use dual simplex due to the nature of the problem
-	//cplexMP.setParam(IloCplex::RootAlg, IloCplex::Dual);
 	cplexMP.setParam(IloCplex::RootAlg, IloCplex::Primal);
 	//cplexMP.setParam(IloCplex::RootAlg, CPX_ALG_BARRIER);
         //cplexMP.setParam(IloCplex::Param::SolutionType, CPX_BASIC_SOLN);
@@ -146,6 +146,7 @@ void PSCGScen::finishInitialisation() {
 	//refresh();
 		e.end();
    	}
+#endif
 		
 	//cout << "Finish Initialisation: Total memory use for " << tS << ": " << env.getTotalMemoryUsage() << endl;
 	initialised = true;
@@ -382,7 +383,7 @@ bool PSCGScen::addVertex(){
 	   yVertices[nVertices-1][i] = y_vertex[i];
 	}
 	bestVertexIndex=nVertices-1;
-
+#if 0
 try{
 	mpWeightVariables.add(IloNumVar(mpWeightConstraints[0](1.0)));
 	//mpWeightVariables.add(IloNumVar());
@@ -402,6 +403,7 @@ catch(IloException &e){
     cout << "Occurred while updating vertex constraint info" << endl;	
     exit(1);
 }
+#endif
 
 #if 0
 	for (int i = 0; i < n1; i++) {
@@ -431,6 +433,7 @@ bool PSCGScen::replaceVertexAtIndex(int iii){
 	//mpWeightVariables[nVertices].setBounds(0.0,1.0);
 	assert(iii>=0);
 	assert(iii<maxNVertices);
+#if 0
 try{
 	mpWeightVariables[iii].setBounds(0.0,IloInfinity);
 }
@@ -439,13 +442,14 @@ catch(IloException &e){
     cout << "Occurred while updating weight var bounds." << endl;	
     exit(1);
 }
+#endif
 	for(int i=0; i<n1; i++) {
 	   xVertices[iii][i] = x_vertex[i];
 	}
 	for(int i=0; i<n2; i++) { 
 	   yVertices[iii][i] = y_vertex[i];
 	}
-
+#if 0
 try{
 	for(int i=0; i<n1; i++) {
 	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], x_vertex[i]);
@@ -458,6 +462,7 @@ catch(IloException &e){
 }
 
 	weightObjective[iii]=0.0;//.add(0.0);
+#endif
 
 	bestVertexIndex=iii;
 	vecWeights[iii]=0.0;
@@ -582,34 +587,21 @@ void PSCGScen::computeWeightsForCurrentSoln(const double *z) {
 
 void PSCGScen::solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double rho, const double *scaling_vector, bool updateDisp) {
-   double direction=1.0;
-#if 0
-	for(int i=0; i<n1; i++){
-	    mpAuxVariables[i].setLB(zLBs[i]-z[i]);
-	    mpAuxVariables[i].setUB(zUBs[i]-z[i]);
-	}
-#endif
-	//if(updateDisp) mpWeight0.setBounds(0.0,0.0);
-	IloNum weightObj0(0.0);
-try{
-	for (int wI = 0; wI < nVertices; wI++) {
-		//weightObjective[wI] = baseWeightObj[wI]/rho;
-		weightObjective[wI] = 0.0;
-		if(omega!=NULL){	
-		    for (int i = 0; i < n1; i++) {
-			weightObjective[wI] += xVertices[wI][i] * (c[i]+omega[i]);
-		    }
-		}
-		else{
-		    for (int i = 0; i < n1; i++) {
-			weightObjective[wI] += xVertices[wI][i] * (c[i]);
-		    }
-		}
-		for (int j = 0; j < n2; j++) {
-		    weightObjective[wI] += yVertices[wI][j] * d[j];
-		}
-		weightObjective[wI] /= rho;
-	}
+
+   IloEnv   env;
+   try {
+      IloModel model(env);
+      IloNumVar a0(env);
+      IloNumVarArray a(env);
+      a.add(nVertices,IloNumVar(env));
+      IloNumVarArray zeta(env);
+      zeta.add(n1,IloNumVar(env,-IloInfinity,IloInfinity));
+      IloRangeArray con(env);
+      IloNumArray linCoeff(env);
+      IloNumArray ones(env);
+
+      //Populate the model.
+      IloNum weightObj0(0.0);
 	if(omega!=NULL){	
 	    for (int i = 0; i < n1; i++) {
 		weightObj0 += x[i] * (c[i] + omega[i]);
@@ -625,107 +617,71 @@ try{
 		weightObj0 += y[j] * d[j];
 	}
 	weightObj0 /= rho;
-}
-catch(IloException &e){
-    cout << "MPSolveHistory error: " << e.getMessage() << endl;
-    cout << "Occurred while updating the objective function coefficients" << endl;	
-    exit(1);
-}
+      for (int wI = 0; wI < nVertices; wI++) {
+		//weightObjective[wI] = baseWeightObj[wI]/rho;
+		linCoeff.add(0.0);
+		ones.add(1.0);
+		if(omega!=NULL){	
+		    for (int i = 0; i < n1; i++) {
+			linCoeff[wI] += xVertices[wI][i] * (c[i]+omega[i]);
+		    }
+		}
+		else{
+		    for (int i = 0; i < n1; i++) {
+			linCoeff[wI] += xVertices[wI][i] * (c[i]);
+		    }
+		}
+		for (int j = 0; j < n2; j++) {
+		    linCoeff[wI] += yVertices[wI][j] * d[j];
+		}
+		linCoeff[wI] /= rho;
 
-	//mpObjective.setExpr(IloScalProd(mpWeightVariables, weightObjective) + weightObj0*mpWeight0 + quadraticTerm);
-try{
-	for(int ww=0; ww<nVertices; ww++){mpObjective.setLinearCoef(mpWeightVariables[ww], weightObjective[ww]);}
-	mpObjective.setLinearCoef(mpWeight0, weightObj0);
-}
-catch(IloException &e){
-    cout << "MPSolveHistory error: " << e.getMessage() << endl;
-    cout << "Occurred while updating the linear part of the objective function" << endl;	
-    cout << nVertices << endl;
-    exit(1);
-}
-try{
-	for (int i = 0; i < n1; i++) {
-		mpObjective.setQuadCoef(mpAuxVariables[i], mpAuxVariables[i], 0.5 * scaling_vector[i]);
-	}
-}
-catch(IloException &e){
-    cout << "MPSolveHistory error: " << e.getMessage() << endl;
-    cout << "Occurred while updating the quadratic part of the objective function" << endl;	
-    cout << mpObjective << endl;
-    cout << mpAuxVariables << endl;
-    exit(1);
-}
 		
-	//modify vertex constraint
-	for (int i = 0; i < n1; i++) {
-	    try{
-		mpVertexConstraints[i].setBounds(z[i], z[i]);
-	    }
-	    catch(IloException &e){
-    		cout << "MPSolveHistory error: " << e.getMessage() << endl;
-    		cout << "Occurred while updating the z vertex constraint bounds" << endl;	
-    		exit(1);
-	    }
-	    try{
-		mpVertexConstraints[i].setLinearCoef(mpWeight0, x[i]);
-	    }
-	    catch(IloException &e){
-    		cout << "MPSolveHistory error: " << e.getMessage() << endl;
-    		cout << "Occurred while updating the column corresponding to the main solution" << endl;	
-    		exit(1);
-	    }
-	}
+      }
+   //Setup objective function expression
+   IloExpr objExpr(env);
+   objExpr += weightObj0*a0;
+   for (int wI = 0; wI < nVertices; ++wI) {
+      objExpr += linCoeff[wI]*a[wI];
+   }
+   for (int ii = 0; ii < n1; ++ii) {
+         objExpr += 0.5*scaling_vector[ii]*zeta[ii]*zeta[ii];
+   }
+   IloObjective obj = IloMinimize(env, objExpr);
+   model.add(obj);
+   objExpr.end();
+   con.add(1.0*a0 + IloScalProd(ones,a) == 1.0);
+   for(int ii=0; ii<n1; ii++){
+	IloExpr vertConstrExpr(env);
+	vertConstrExpr += x[ii]*a0;
+	for(int wI=0; wI<nVertices; wI++){
+	    vertConstrExpr += xVertices[wI][ii] * a[ii];
+	}	
+	vertConstrExpr += -1.0*zeta[ii];
+	con.add(vertConstrExpr == z[ii]);
+	vertConstrExpr.end();
+   }
+   model.add(con);
 
-	//cout << cplexQP.getModel() << endl;
-	//cplexQP.exportModel("mymodel.lp");
-	//cplexMP.presolve(IloCplex::Dual);
-	//cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
-		//cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
-	//cout << mpModel << endl;
-	//printVertices();
-        try{
-	    cplexMP.solve();
-	    cplexMP.getValues(weightSoln, mpWeightVariables);
-	    weight0 = cplexMP.getValue(mpWeight0);
-   	}
-   	catch(IloException& e){
-	    cout << "MPSolve error: " << e.getMessage() << endl;
-	    cout << "Number of vertices: " << getNVertices() << endl;
-	    cout << mpWeightVariables << endl;
-	    cout << weightObjective << endl;
-	    cout << mpAuxVariables << endl;
-	    cout << mpVertexConstraints << endl;
-	    cout << mpWeightConstraints << endl;
-	    cplexMP.exportModel("infeasModel.lp");
-	    cout << "Exception caught...Refreshing solution..." << endl;
-	    //refresh();
-	    refresh(omega,z,rho,scaling_vector);
-	    e.end();
-	    exit(1);
-   	}
-#if 0
-	if (!cplexMP.solve()) {
-		//cout << "Num vars: " << cplexQP.getNcols() << endl;
-		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
-		env.error() << "Failed to optimize in update step" << endl;
-		//cout << mpModel << endl;
-		//cplexMP.refineConflict();
-		//cout << cplexMP.getConflict() << endl;
-		cout << "Refreshing solution..." << endl;
-		refresh(omega,z,rho,scaling_vector);
-		//assert(false);
-		//throw(-1);
-	}
-	if(cplexMP.getCplexStatus()!=IloCplex::Optimal) {
-		cout << "MP Subproblem CPLEX status: " << cplexMP.getCplexStatus() << endl;
-		//printVertices();
-		//printWeights();
-	}
-#endif
+   
 
+      IloCplex cplex(model);
+	cplex.setParam(IloCplex::RootAlg, IloCplex::Primal);
+	//cplexMP.setParam(IloCplex::RootAlg, CPX_ALG_BARRIER);
+        //cplexMP.setParam(IloCplex::Param::SolutionType, CPX_BASIC_SOLN);
+	//cplexMP.setParam(IloCplex::RootAlg, 0);
+	cplex.setParam(IloCplex::OptimalityTarget, 1);
+	cplex.setParam(IloCplex::Param::Simplex::Tolerances::Optimality, 1e-9);
+        cplex.setParam(IloCplex::Param::Simplex::Tolerances::Feasibility, 1e-9);
 	
-	// note: the final weight corresponds to the existing x
-try{
+	if (nThreads >= 0) { cplex.setParam(IloCplex::Threads, nThreads); }
+
+      // Optimize the problem and obtain solution.
+      if ( !cplex.solve() ) {
+         env.error() << "Failed to optimize" << endl;
+         throw(-1);
+      }
+      IloNum weight0 = cplex.getValue(a0);
 	for (int i = 0; i < n1; i++) {
 		x[i] = weight0 * x[i];
 		//if(updateDisp){dispersions[i] = weight0*dispersions[i];}
@@ -735,24 +691,26 @@ try{
 		y[j] = weight0 * y[j];
 	}
 	for(int wI=0; wI<nVertices; wI++) {
-		vecWeights[wI] = weight0*vecWeights[wI] + weightSoln[wI];
+		vecWeights[wI] = weight0*vecWeights[wI] + cplex.getValue(a[wI]);
 		for (int i = 0; i < n1; i++) {
-			x[i] += weightSoln[wI] * xVertices[wI][i];
+			x[i] += cplex.getValue(a[wI]) * xVertices[wI][i];
 		}
 		
 		for (int j = 0; j < n2; j++) {
-			y[j] += weightSoln[wI] * yVertices[wI][j];
+			y[j] += cplex.getValue(a[wI]) * yVertices[wI][j];
 		}
 	}
-}
-catch(IloException &e){
-    cout << "MPSolveHistory error: " << e.getMessage() << endl;
-    cout << "Occurred while updating the final solution values" << endl;	
-    exit(1);
-}
-	
-	//if(updateDisp) mpWeight0.setBounds(0.0,1.0);
-   //polishWeights(); //fix any unfortunate numerical quirks
+//}
+
+   }
+   catch (IloException& e) {
+      cerr << "Concert exception caught: " << e << endl;
+   }
+   catch (...) {
+      cerr << "Unknown exception caught" << endl;
+   }
+
+   env.end();
 }
 
 

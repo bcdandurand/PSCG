@@ -346,6 +346,45 @@ void PSCG::installSubproblem(double lb, vector<double*> &omega, const vector<int
     readOmegaIntoModel(omega);
 }
 #endif
+void PSCG::restoreOriginalVarBounds(){
+    clearBranchingBounds();
+    for(int tS=0; tS<nNodeSPs; tS++){
+	subproblemSolvers[tS]->restoreBounds();//unfixX(origVarLB_,origVarUB_);
+    }
+    memcpy(currentVarLB_,origVarLB_,n1*sizeof(double));
+    memcpy(currentVarUB_,origVarUB_,n1*sizeof(double));
+}
+void PSCG::addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double br_ub){
+    branchingBDs_.ranks.push_back(br_rank);
+    branchingBDs_.sps.push_back(br_SP);
+    branchingBDs_.inds.push_back(br_index);
+    branchingBDs_.lbs.push_back(br_lb);
+    branchingBDs_.ubs.push_back(br_ub);
+    if(br_index >=0){
+        if(br_rank < 0 && br_SP < 0){
+	  setBdAllSPs(br_index, br_lb, br_ub);
+        }
+        else if(br_rank==mpiRank && br_SP>=0 && br_SP < nNodeSPs){
+//cout <<br_SP <<"*"<<br_index<<"*"<<br_lb<<"*"<<br_ub<<endl;
+	    setBdForSP(br_SP, br_index, br_lb, br_ub);
+        }
+	//else this processor and/or subproblem does nothing
+    }
+    else{
+	cout << "No branch found, this node should be solved to optimality." << endl;
+    }
+
+}
+void PSCG::setBdForSP(const int sp, const int ind, const double lb, const double ub){
+    subproblemSolvers[sp]->setBound(ind, lb, ub);
+    //currentVarLB_[ind]=lb;
+    //currentVarUB_[ind]=ub;
+}
+void PSCG::setBdAllSPs(const int ind, const double lb, const double ub){
+    for(int tS=0; tS<nNodeSPs; tS++){
+	setBdForSP(tS,ind,lb,ub);	
+    }
+}
 
 int PSCG::initialIteration(){
 if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
@@ -376,16 +415,18 @@ catch(std::exception &e){
 
 	   subproblemSolvers[tS]->resetDispersionsToZero();
     	   try{
+#if 0
 	    spSolverStatuses_[tS] = subproblemSolvers[tS]->initialLPSolve(omega_centre[tS]);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = COIN_DBL_MAX;
-		    cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 
+		    cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc with initialLPSolve" << mpiRank; 
 		    cerr << " with CPLEX status: " << subproblemSolvers[tS]->getCPLEXErrorStatus() << endl;
 	    	    continue;
 
 	    }
+#endif
 
-	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_centre[tS]);
+	    spSolverStatuses_[tS] = subproblemSolvers[tS]->solveLagrangianProblem(omega_centre[tS],true);
             if(spSolverStatuses_[tS]==PSCG_PRIMAL_INF || spSolverStatuses_[tS]==PSCG_DUAL_INF){
 	    	    LagrLB_Local = COIN_DBL_MAX;
 		    cerr << "initialIteration(): Subproblem " << tS << " infeasible on proc " << mpiRank; 

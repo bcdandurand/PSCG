@@ -98,6 +98,7 @@ void PSCGScen::finishInitialisation() {
 	y_vertex = new double[n2];
 	x = new double[n1];
 	dispersions = new double[n1+n2];
+	intDiscVec_ = new double[n1+n2];
 	for(int ii=0; ii<n1+n2; ii++){ dispersions[ii]=0.0;}
 	y = new double[n2];
 	//x_vertex.add(n1,0.0);
@@ -152,6 +153,7 @@ void PSCGScen::finishInitialisation() {
 	initialised = true;
 }
 
+#if 0
 int PSCGScen_SMPS::initialLPSolve(const double* omega) {
 	
 	OsiCpxSolverInterface* osi = LagrMIPInterface_;
@@ -171,6 +173,7 @@ int PSCGScen_SMPS::initialLPSolve(const double* omega) {
 	setSolverStatus();
 	return solverStatus_;
 }
+#endif
 	//setSolverStatus();
 // Given a scenario index and a dual variable, find the anticipative solution for first and second stage variables.
 int PSCGScen_SMPS::solveLagrangianProblem(const double* omega, bool doInitialSolve) {
@@ -207,6 +210,16 @@ int PSCGScen_SMPS::solveLagrangianProblem(const double* omega, bool doInitialSol
 	}
 	else{osi->resolve();}
 
+#if 0
+	setSolverStatus();
+        if(solverStatus_==PSCG_PRIMAL_INF){ 
+	    LagrBd =  COIN_DBL_MAX*osi->getObjSense();
+	    cout << "Infeasible at initial LP solve for scenario " << tS << endl;
+	}
+    else
+#endif
+	{
+
 	osi->branchAndBound();
 #if 0
 if(omega==NULL){ 
@@ -224,7 +237,8 @@ if(omega==NULL){
         //if(tS==0) printYBounds();
         if(solverStatus_==PSCG_PRIMAL_INF){ 
 	    LagrBd =  COIN_DBL_MAX*osi->getObjSense();
-	    //osi->unmarkHotStart();
+	    //printOrigBDs();
+	    //printColBds();
 	}
 	else{
 	    //osi->markHotStart();
@@ -253,6 +267,7 @@ if(omega==NULL){
 #endif
 	
 	//delete [] startSol;
+    }//else initial LP solve was feasible
 	
 	return solverStatus_;
 }

@@ -94,6 +94,7 @@ double gapVal;
 
 double *x;
 double *dispersions;
+double *intDiscVec_;
 double *y;
 
 int nVertices;
@@ -142,6 +143,7 @@ void finishInitialisation();
 ~PSCGScen(){
   delete [] x;
   delete [] dispersions;
+  delete [] intDiscVec_;
   delete [] y;
   delete [] c;
   delete [] d;
@@ -166,10 +168,12 @@ virtual void setInitialSolution(const int *indices, const double *startSol){
     cout << "setInitialSolution(): default implementation, does nothing." << endl;
 }
 
+#if 0
 virtual int initialLPSolve(const double* omega=NULL){
 cerr << "initialLPSolve(): default implementation does nothing" << endl;
 return 0;
 }
+#endif
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false)=0;
 
 //virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal)=0;
@@ -342,15 +346,36 @@ double getXVertexEntry(int entry, int vertex){
   return xVertices[vertex][entry];
 }
 
+double*  computeIntegralityDiscrVec(){
+    for(int ii=0; ii<n1; ii++){
+	if(getColTypes()[ii]!='C'){
+	    intDiscVec_[ii] = fabs(x[ii]-round(x[ii]));
+	}
+	else{
+	    intDiscVec_[ii] = 0.0;
+	}
+    }
+    for(int ii=0; ii<n2; ii++){
+	if(getColTypes()[n1+ii]!='C'){
+	    intDiscVec_[n1+ii]= fabs(y[ii]-round(y[ii]));
+	}
+	else{
+	    intDiscVec_[n1+ii] = 0.0;
+	}
+    }
+    return intDiscVec_;
+    
+}
+
 double computeIntegralityDiscr(){
     double retval=0.0;
     for(int ii=0; ii<n1; ii++){
-	if(getColTypes()[ii]!=0){
+	if(getColTypes()[ii]!='C'){
 	    retval+= fabs(x[ii]-round(x[ii]));
 	}
     }
     for(int ii=0; ii<n2; ii++){
-	if(getColTypes()[n1+ii]!=0){
+	if(getColTypes()[n1+ii]!='C'){
 	    retval+= fabs(y[ii]-round(y[ii]));
 	}
     }
@@ -363,6 +388,13 @@ void compareLagrBds(const double* omega){
 }
 virtual void printColTypesFirstStage(){;}
 virtual void printColBds(){;}
+void printOrigBDs(){
+cout << "Printing original bounds:" <<endl;
+    for(int ii=0; ii<n1+n2; ii++){
+	cout << " ("<<origLBs_[ii] <<","<< origUBs_[ii] << ")";
+    }
+    cout << endl;
+}
 void printC(){
 cout << "Printing c: " << endl;
  for(int ii=0; ii<n1; ii++){
@@ -887,7 +919,7 @@ virtual void fixVarAt(int index, double fixVal){
 }
 
 
-virtual int initialLPSolve(const double* omega=NULL);
+//virtual int initialLPSolve(const double* omega=NULL);
 virtual int solveLagrangianProblem(const double* omega=NULL, bool doInitialSolve=false);
 
 //virtual int solveAugmentedLagrangianMIP(const double* omega, const double* z, const double rho, const double* scal);
@@ -903,7 +935,7 @@ cerr << "polishSolution(): Flagging" << endl;
 	//x_vertex[ii] = LagrMIPInterface_->getColUpper()[ii];
       }
       //if(x_vertex[ii]==-0) x_vertex[ii]=0.0;
-      if(getColTypes()[ii]!=0)  x_vertex[ii]=round(x_vertex[ii]);
+      if(getColTypes()[ii]!='C')  x_vertex[ii]=round(x_vertex[ii]);
   }
   for(int ii=0; ii<n2; ii++){
       if(LagrMIPInterface_->getColLower()[n1+ii] > y_vertex[ii]){
@@ -915,7 +947,7 @@ cerr << "polishSolution(): Flagging" << endl;
 	//y_vertex[ii] = LagrMIPInterface_->getColUpper()[n1+ii];
       }
       //if(y_vertex[ii]==-0) y_vertex[ii]=0.0;
-      if(getColTypes()[n1+ii]!=0)  y_vertex[ii]=round(y_vertex[ii]);
+      if(getColTypes()[n1+ii]!='C')  y_vertex[ii]=round(y_vertex[ii]);
   }
 }
 virtual void setSolverStatus(){
@@ -1242,18 +1274,18 @@ virtual void printColTypesFirstStage(){
     cout << endl;
 }
 virtual void printColTypeFirstStage(int i){
-	if(getColTypes()[i]==0)
+	if(getColTypes()[i]=='C')
 	    cout << " C";
-	else if(getColTypes()[i]==1)
+	else if(getColTypes()[i]=='B')
 	    cout << " B";
-	else if(getColTypes()[i]==2)
+	else if(getColTypes()[i]=='I')
 	    cout << " I";
 }
 virtual void printColumnBound(int i){
 	cout << " (" << LagrMIPInterface_->getColLower()[i] << "," << LagrMIPInterface_->getColUpper()[i] << ")";
 }
 virtual void printColBds(){
-	for(int i=0; i<n1; i++) printColumnBound(i);
+	for(int i=0; i<n1+n2; i++) printColumnBound(i);
 	cout << endl;
 }
 

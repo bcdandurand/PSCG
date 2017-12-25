@@ -346,16 +346,8 @@ void setUBsAllSPs(const double *ubs){
     memcpy(currentVarUB_,ubs,n1*sizeof(double));		
 }
 #endif
-void setBdForSP(const int sp, const int ind, const double lb, const double ub){
-    subproblemSolvers[sp]->setBound(ind, lb, ub);
-    currentVarLB_[ind]=lb;
-    currentVarUB_[ind]=ub;
-}
-void setBdAllSPs(const int ind, const double lb, const double ub){
-    for(int tS=0; tS<nNodeSPs; tS++){
-	setBdForSP(tS,ind,lb,ub);	
-    }
-}
+void setBdForSP(const int sp, const int ind, const double lb, const double ub);
+void setBdAllSPs(const int ind, const double lb, const double ub);
 
 void setCutoffLagrBD(double val){cutoffLagrLB = val;}
 #if 0
@@ -377,40 +369,14 @@ void clearBranchingBounds(){
     branchingBDs_.lbs.clear();
     branchingBDs_.ubs.clear();
 }
-void restoreOriginalVarBounds(){
-    clearBranchingBounds();
-    for(int tS=0; tS<nNodeSPs; tS++){
-	subproblemSolvers[tS]->restoreBounds();//unfixX(origVarLB_,origVarUB_);
-    }
-    memcpy(currentVarLB_,origVarLB_,n1*sizeof(double));
-    memcpy(currentVarUB_,origVarUB_,n1*sizeof(double));
-}
+void restoreOriginalVarBounds();
 void clearSPVertexHistory(){
     for(int tS=0; tS<nNodeSPs; tS++){
 	subproblemSolvers[tS]->clearVertexHistory();
     }
 }
 
-void addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double br_ub){
-    branchingBDs_.ranks.push_back(br_rank);
-    branchingBDs_.sps.push_back(br_SP);
-    branchingBDs_.inds.push_back(br_index);
-    branchingBDs_.lbs.push_back(br_lb);
-    branchingBDs_.ubs.push_back(br_ub);
-    if(br_index >=0){
-        if(br_rank < 0 && br_SP < 0){
-	  setBdAllSPs(br_index, br_lb, br_ub);
-        }
-        else if(br_rank==mpiRank && br_SP>=0 && br_SP < nNodeSPs){
-	    setBdForSP(br_SP, br_index, br_lb, br_ub);
-        }
-	//else this processor and/or subproblem does nothing
-    }
-    else{
-	cout << "No branch found, this node should be solved to optimality." << endl;
-    }
-
-}
+void addBranchVarBd(int br_rank, int br_SP, int br_index, double br_lb, double br_ub);
 
 void installSubproblem(double lb, vector<double*> &omega, const double *zLBs, const double *zUBs);
 void installSubproblem(double lb, vector<double*> &omega, const vector<int> &indices, const vector<double> &zLBs, const vector<double> &zUBs);
@@ -1125,6 +1091,7 @@ BranchingVarInfo findBranchingIndex(){
     }
 
     double *dispVec;
+    double *intDiscVec;
     BranchingVarInfo localBranchInfo={-1.0,-1.0,-1.0,0.0,0.0,0.0,0.0,0.0,0.0};
     dispOfAllXVertices(); //sets z_dispersions
     localBranchInfo.index=-1;
@@ -1152,8 +1119,9 @@ BranchingVarInfo findBranchingIndex(){
 #endif
     
     for(int tS=0; tS<nNodeSPs; tS++){
-	integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
-	if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
+	//integrDiscr_[tS] = subproblemSolvers[tS]->computeIntegralityDiscr();  
+	intDiscVec = subproblemSolvers[tS]->computeIntegralityDiscrVec();
+	//if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
 	    dispVec = subproblemSolvers[tS]->computeDispersions();
 #if 0
 	    for(int ii=0; ii<n1; ii++){

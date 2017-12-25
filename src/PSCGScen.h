@@ -52,20 +52,6 @@ class PSCGScen{
 
 protected:
 
-IloEnv &env;
-#if 0
-IloCplex cplexMP;
-IloModel mpModel;
-IloObjective mpObjective;
-IloRangeArray mpWeightConstraints;
-IloRangeArray mpVertexConstraints;
-IloNumVarArray mpWeightVariables;
-IloNumVar mpWeight0;
-IloNumVarArray mpAuxVariables;
-IloNumArray weightSoln;//(env, nVertices);
-IloNumArray weightObjective;
-IloNum weight0;
-#endif
 int nThreads;
 
 int n1;
@@ -119,18 +105,14 @@ int solverStatus_;
 
 
 public:
-PSCGScen(IloEnv &envarg, int nthreads=1):env(envarg),
-//cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-//mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
+PSCGScen(int nthreads=1):
 nThreads(nthreads),
 n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),pr(0.0){;}
 
 //copy constructor
-PSCGScen(const PSCGScen &other):env(other.env),
-//cplexMP(env),mpModel(env),mpObjective(env),mpWeightConstraints(env),mpVertexConstraints(env),
-//mpWeightVariables(env),mpWeight0(env),mpAuxVariables(env),weightSoln(env),weightObjective(env),
+PSCGScen(const PSCGScen &other):
 nThreads(other.nThreads),
 n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
 x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
@@ -565,30 +547,8 @@ bool replaceOldestVertex(){
     return true;
 }
 
-void zeroOutVertexAtIndex(int iii){
-#if 0
-	for(int i=0; i<n1; i++) {
-	    mpVertexConstraints[i].setLinearCoef(mpWeightVariables[iii], 0.0);
-	}
-#endif
-	//baseWeightObj[iii]=0.0; //.push_back(0.0);
-	//weightSoln.add(0.0);
-	//weightObjective[iii]=0.0//.add(0.0);
-#if 0
-    try{
-	weightObjective[iii] = 0.0;
-	mpWeightVariables[iii].setBounds(0.0,0.0);
-        weightSoln[iii]=0.0;//(env, nVertices);
-    }
-    catch(IloException &e){
-        cout << "zeroOutVertexAtIndex error: " << e.getMessage() << endl;
-        exit(1);
-    }
-#endif
-}
 
 void clearVertexHistory(){
-  for(int v=0; v<maxNVertices; v++) zeroOutVertexAtIndex(v);
   oldestVertexIndex=-1;
   nVertices=0;
   resetDispersionsToZero();
@@ -788,33 +748,11 @@ void setXToVertex(){
 //void setYToVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex[i];}
 void setYToVertex(){for(int i=0;i<n2;i++) y[i]=yVertices[bestVertexIndex][i];}
 
-#if 0
-void refresh(){
-    clearVertexHistory();
-    memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
-    memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
-    addVertex();
-    
-    setXToOptVertex();
-    setYToOptVertex();
-    weightSoln[0]=1.0;//(env, nVertices);
-    for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
-}
-#endif
 void refresh(const double *omega, const double *z, const double rho, const double *scaling_vector){
     
-    //setXToOptVertex();
-    //setYToOptVertex();
     optimiseLagrOverVertexHistory(omega); //prepares next call of solveMPLineSearch(omega,z,rho,scaling_vector)
     solveMPLineSearch(omega, z, rho, scaling_vector);
 
-    //clearVertexHistory();
-    //memcpy(x_vertex,x_vertex_opt,n1*sizeof(double));
-    //memcpy(y_vertex,y_vertex_opt,n2*sizeof(double));
-    //addVertex();
-
-    //weightSoln[0]=1.0;//(env, nVertices);
-    //for(int ii=1; ii<maxNVertices; ii++){weightSoln[ii]=0.0;}
 }
 
 virtual void polishSolution(){
@@ -907,7 +845,7 @@ printColTypesFirstStage();
 
 class PSCGScen_SMPS : public PSCGScen{
 public:
-PSCGScen_SMPS(IloEnv &envarg):PSCGScen(envarg),LagrMIPInterface_(NULL){;}
+PSCGScen_SMPS(int nThreads=1):PSCGScen(nThreads),LagrMIPInterface_(NULL){;}
 
 //copy constructor
 PSCGScen_SMPS(const PSCGScen_SMPS &other):PSCGScen(other),LagrMIPInterface_(NULL){;}

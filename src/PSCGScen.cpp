@@ -608,12 +608,11 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
       IloModel model(env);
       IloNumVar a0(env);
       IloNumVarArray a(env);
-      a.add(nVertices,IloNumVar(env));
       IloNumVarArray zeta(env);
-      zeta.add(n1,IloNumVar(env,-IloInfinity,IloInfinity));
       IloRangeArray con(env);
       IloNumArray linCoeff(env);
       IloNumArray ones(env);
+       IloExpr objExpr(env);
 
       //Populate the model.
       IloNum weightObj0(0.0);
@@ -632,10 +631,12 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		weightObj0 += y[j] * d[j];
 	}
 	weightObj0 /= rho;
+        objExpr += weightObj0*a0;
       for (int wI = 0; wI < nVertices; wI++) {
 		//weightObjective[wI] = baseWeightObj[wI]/rho;
 		linCoeff.add(0.0);
 		ones.add(1.0);
+		a.add(IloNumVar(env));
 		if(omega!=NULL){	
 		    for (int i = 0; i < n1; i++) {
 			linCoeff[wI] += xVertices[wI][i] * (c[i]+omega[i]);
@@ -652,14 +653,10 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		linCoeff[wI] /= rho;
 
 		
+      	objExpr += linCoeff[wI]*a[wI];
       }
-   //Setup objective function expression
-   IloExpr objExpr(env);
-   objExpr += weightObj0*a0;
-   for (int wI = 0; wI < nVertices; ++wI) {
-      objExpr += linCoeff[wI]*a[wI];
-   }
    for (int ii = 0; ii < n1; ++ii) {
+	 zeta.add(IloNumVar(env,-IloInfinity,IloInfinity));
          objExpr += 0.5*scaling_vector[ii]*zeta[ii]*zeta[ii];
    }
    IloObjective obj = IloMinimize(env, objExpr);
@@ -670,7 +667,7 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	IloExpr vertConstrExpr(env);
 	vertConstrExpr += x[ii]*a0;
 	for(int wI=0; wI<nVertices; wI++){
-	    vertConstrExpr += xVertices[wI][ii] * a[ii];
+	    vertConstrExpr += xVertices[wI][ii] * a[wI];
 	}	
 	vertConstrExpr += -1.0*zeta[ii];
 	con.add(vertConstrExpr == z[ii]);
@@ -679,7 +676,6 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
    model.add(con);
 
    
-
       IloCplex cplex(model);
 	cplex.setParam(IloCplex::RootAlg, IloCplex::Primal);
 	//cplexMP.setParam(IloCplex::RootAlg, CPX_ALG_BARRIER);
@@ -688,6 +684,8 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	cplex.setParam(IloCplex::OptimalityTarget, 1);
 	cplex.setParam(IloCplex::Param::Simplex::Tolerances::Optimality, 1e-9);
         cplex.setParam(IloCplex::Param::Simplex::Tolerances::Feasibility, 1e-9);
+	cplex.setOut(env.getNullStream());
+	cplex.setWarning(env.getNullStream());
 	
 	if (nThreads >= 0) { cplex.setParam(IloCplex::Threads, nThreads); }
 

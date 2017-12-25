@@ -148,7 +148,6 @@ class PSCG {
 public:
 //PSCGParams *par;
 DecTssModel &smpsModel;
-IloEnv env;
 #ifdef USING_MPI
 MPI_Comm comm_;
 #endif
@@ -299,7 +298,6 @@ int getN2(){return n2;}
 int getNS(){return nS;}
 
 void assignSubproblems();
-IloEnv& getEnv(){return env;}
 
 void initialiseParameters();
 
@@ -594,106 +592,12 @@ void preSolveMP(){
 
 }
 
-bool solveContinuousMPs(bool adjustPenalty){
-	bool isLastGSIt;
-	bool needToContinue = false;
-	double zDiff;
-        //for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
-	//double integrDiscr;
-	assert(currentIter_ >= 0);
-	//int maxNoGSIts = 20+currentIter_;
-	//int maxNoGSIts = 100 + 10*currentIter_;//max(20,currentIter_/2);
-	//int maxNoGSIts = min(100*currentIter_,10000000);//max(20,currentIter_/2);
-#if 0
-    	for (int tS = 0; tS < nNodeSPs; tS++) {
-	    for (int i = 0; i < n1; i++) {
-	        omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
-	    }
-	    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
-	}
-#endif
-	for(int itGS=0; itGS < noGSIts; itGS++) { //The inner loop has a fixed number of occurences
-	    memcpy(z_old,z_current, n1*sizeof(double));
-	    zDiff=0.0;
-    	    for (int tS = 0; tS < nNodeSPs; tS++) {
-		//*************************** Quadratic subproblem ***********************************
-			    
-#if 1
-		if(subproblemSolvers[tS]->getNVertices()>0){
-		    for(int iii=0; iii<10; iii++){
-	    		for (int i = 0; i < n1; i++) {
-	        	    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
-	    		}
-	    	    	subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
-		    	subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
-		    }
-		}
-#else
-		if(subproblemSolvers[tS]->getNVertices()>0){
-			subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
-		}
-#endif
-		#ifdef KEEP_LOG
-		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
-		#endif
-	    }
-	    					
-	    // Update z_previous.
-	    updateZ();
-	    totalNoGSSteps++;
-	    //for(int ii=0; ii<n1; ii++){zDiff=max(zDiff,fabs(z_current[ii]-z_old[ii]));}
-	}
-#if 1
-	innerLagrLB_Local = 0.0;
-	ALVal_Local = 0.0;
-	localDiscrepNorm = 0.0;
-	reduceBuffer[0]=0.0;
-	reduceBuffer[1]=0.0;
-	reduceBuffer[2]=0.0;
-	double LagrLB_tS, ALVal_tS,sqrDiscrNorm_tS;
-    	for (int tS = 0; tS < nNodeSPs; tS++) {
-		#ifdef KEEP_LOG
-		    //subproblemSolvers[tS]->printWeights(logFiles[tS]);
-		#endif
-		for (int i = 0; i < n1; i++) {
-		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
-		}
-		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
-		innerLagrLB_Local += pr[tS]*LagrLB_tS;
-	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
-		ALVal_Local += pr[tS]*ALVal_tS;
-		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
-		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
-	}
-	#ifdef USING_MPI
-	if (mpiSize > 1) {
-		localReduceBuffer[0]=innerLagrLB_Local;
-		localReduceBuffer[1]=ALVal_Local;
-		localReduceBuffer[2]=localDiscrepNorm;
-		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, comm_);
-		innerLagrLB = reduceBuffer[0];
-		ALVal = reduceBuffer[1];
-		discrepNorm = reduceBuffer[2];
-	}
-	#endif
-	if (mpiSize == 1) {
-		innerLagrLB = innerLagrLB_Local;
-		ALVal = ALVal_Local;
-		discrepNorm = localDiscrepNorm;
-	}
-    	if( (ALVal + 0.5*discrepNorm  - centreLagrLB > SSC_DEN_TOL) ){
-	    innerSSCVal =    (innerLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB);
-	    needToContinue = innerSSCVal < innerSSCParam;
-	}
-        else{
-if(mpiRank==0) cout << "innerSSCVal computation: Denominator is close to zero (algorithm should terminate with optimal status)." << endl;
-	    needToContinue=false;
-	}
-#endif
-//if(mpiRank==0){cout << "solveContinuousMPs(): max zDiff is: " << zDiff << endl;}
+bool solveContinuousMPs(bool adjustPenalty);
 
-    return needToContinue;
-}
+
+
+
+
 
 int regularIteration(bool adjustPenalty=false, bool SSC=true){
 //if(mpiRank==0) cout << "Begin regularIteration()" << endl;

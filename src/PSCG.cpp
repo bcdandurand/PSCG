@@ -41,7 +41,7 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 }
 #endif
 
-PSCG::PSCG(DecTssModel &model):smpsModel(model),env(),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
+PSCG::PSCG(DecTssModel &model):smpsModel(model),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),noGSIts(1),
@@ -69,7 +69,7 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 	setupSolvers();
 }
 #ifdef USING_MPI
-PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),env(),comm_(comm),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
+PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),comm_(comm),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
 	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),noGSIts(1),
@@ -138,7 +138,6 @@ PSCG::~PSCG(){
 	delete [] recordKeeping;
 	delete [] weights_;
 	delete [] integrDiscr_;
-	env.end();
 }
 
 #if 0
@@ -229,7 +228,7 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 #endif
 		      	break;
 		    case 2: //SIPLIB problems
-			subproblemSolvers.push_back( new PSCGScen_SMPS(env) );
+			subproblemSolvers.push_back( new PSCGScen_SMPS() );
 		      	dynamic_cast<PSCGScen_SMPS*>(subproblemSolvers[tS])->initialiseSMPS(smpsModel,scenariosToThisModel[tS]); 
 			//subproblemSolvers[tS]->setNThreads(par->threads);
 			subproblemSolvers[tS]->setNThreads(nThreads);
@@ -550,6 +549,88 @@ catch(std::exception &e){
 	}
 	if(mpiRank==0){cerr << "End initialIteration()" << endl;}
 	return modelStatus_[SP_STATUS];
+}
+
+bool PSCG::solveContinuousMPs(bool adjustPenalty){
+	bool isLastGSIt;
+	bool needToContinue = false;
+	assert(currentIter_ >= 0);
+	for(int itGS=0; itGS < noGSIts; itGS++) { //The inner loop has a fixed number of occurences
+    	    for (int tS = 0; tS < nNodeSPs; tS++) {
+		//*************************** Quadratic subproblem ***********************************
+			    
+#if 0
+		if(subproblemSolvers[tS]->getNVertices()>0){
+		    for(int iii=0; iii<10; iii++){
+	    		for (int i = 0; i < n1; i++) {
+	        	    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    		}
+	    	    	subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		    	subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
+		    }
+		}
+#else
+		if(subproblemSolvers[tS]->getNVertices()>0){
+			subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
+		}
+#endif
+		#ifdef KEEP_LOG
+		    //if(itGS==0){subproblemSolvers[tS]->printWeights(logFiles[tS]);}
+		#endif
+	    }
+	    					
+	    // Update z_previous.
+	    updateZ();
+	    totalNoGSSteps++;
+	}
+#if 1
+	innerLagrLB_Local = 0.0;
+	ALVal_Local = 0.0;
+	localDiscrepNorm = 0.0;
+	reduceBuffer[0]=0.0;
+	reduceBuffer[1]=0.0;
+	reduceBuffer[2]=0.0;
+	double LagrLB_tS, ALVal_tS,sqrDiscrNorm_tS;
+    	for (int tS = 0; tS < nNodeSPs; tS++) {
+		#ifdef KEEP_LOG
+		    //subproblemSolvers[tS]->printWeights(logFiles[tS]);
+		#endif
+		for (int i = 0; i < n1; i++) {
+		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		}
+		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
+		innerLagrLB_Local += pr[tS]*LagrLB_tS;
+	        ALVal_tS = subproblemSolvers[tS]->updateALValues(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
+		ALVal_Local += pr[tS]*ALVal_tS;
+		sqrDiscrNorm_tS = subproblemSolvers[tS]->getSqrNormDiscr();
+		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
+	}
+	#ifdef USING_MPI
+	if (mpiSize > 1) {
+		localReduceBuffer[0]=innerLagrLB_Local;
+		localReduceBuffer[1]=ALVal_Local;
+		localReduceBuffer[2]=localDiscrepNorm;
+		MPI_Allreduce(localReduceBuffer, reduceBuffer, 3, MPI_DOUBLE, MPI_SUM, comm_);
+		innerLagrLB = reduceBuffer[0];
+		ALVal = reduceBuffer[1];
+		discrepNorm = reduceBuffer[2];
+	}
+	#endif
+	if (mpiSize == 1) {
+		innerLagrLB = innerLagrLB_Local;
+		ALVal = ALVal_Local;
+		discrepNorm = localDiscrepNorm;
+	}
+    	if( (ALVal + 0.5*discrepNorm  - centreLagrLB > SSC_DEN_TOL) ){
+	    innerSSCVal =    (innerLagrLB-centreLagrLB)/(ALVal + 0.5*discrepNorm - centreLagrLB);
+	    needToContinue = innerSSCVal < innerSSCParam;
+	}
+        else{
+if(mpiRank==0) cout << "innerSSCVal computation: Denominator is close to zero (algorithm should terminate with optimal status)." << endl;
+	    needToContinue=false;
+	}
+#endif
+    return needToContinue;
 }
 
 bool PSCG::solveRecourseProblemGivenFixedZ(){	

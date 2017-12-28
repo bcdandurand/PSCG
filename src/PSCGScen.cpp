@@ -687,7 +687,7 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	cplex.setOut(env.getNullStream());
 	cplex.setWarning(env.getNullStream());
 	
-	if (nThreads >= 0) { cplex.setParam(IloCplex::Threads, nThreads); }
+	cplex.setParam(IloCplex::Threads, nThreads); 
 
       // Optimize the problem and obtain solution.
       if ( !cplex.solve() ) {

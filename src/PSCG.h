@@ -614,7 +614,7 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
     //printStatus();
 	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
 	updateOmega(SSC);
-	if(adjustPenalty) updatePenalty();
+	if(adjustPenalty && phase!=2) updatePenalty();
 
 	bool continueInner=true;
 	if(phase==2) preSolveMP();
@@ -701,8 +701,8 @@ double processBound(){
     objVal=findPrimalFeasSolnWith(z_current);
     brVarInfo = findBranchingIndex();
     //if(mpiRank==0) cout << "Deciding whether to proceed to solve current node to higher precision..." << endl;
-    while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-6 && currentIter_<5000){
-      //setPhase(2);
+    while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-4 && currentIter_<5000){
+      setPhase(2);
       if(mpiRank==0) cout << "No branching, proceeding to solve current node to higher precision..." << endl;
       for(int kk=0; kk<100; kk++){
 	regularIteration(updatePenalty,false);
@@ -710,7 +710,7 @@ double processBound(){
       }
       objVal=findPrimalFeasSolnWith(z_current);
       brVarInfo = findBranchingIndex();
-      //setPhase(0);
+      setPhase(0);
     }
 #if 0
     if(mpiRank==0){
@@ -915,8 +915,8 @@ void dispOfAllXVertices(double *retVec=NULL){
     for(int tS=0; tS<nNodeSPs; tS++){
 	dispVec = subproblemSolvers[tS]->computeDispersions(z_current);
         for(int ii=0; ii<n1; ii++){
-    	     z_local[ii] += scaling_matrix[tS][ii]*dispVec[ii];
-	     penSumLocal[ii] = scaling_matrix[tS][ii];
+    	     z_local[ii] += pr[tS]*scaling_matrix[tS][ii]*dispVec[ii];
+	     penSumLocal[ii] = pr[tS]*scaling_matrix[tS][ii];
 	}
     }
     #ifdef USING_MPI
@@ -925,14 +925,14 @@ void dispOfAllXVertices(double *retVec=NULL){
         MPI_Allreduce(penSumLocal, penSum, n1, MPI_DOUBLE, MPI_SUM, comm_);
         for(int i=0; i<n1; i++){ 
 	    retVec[i] /= penSum[i];
-	    retVec[i] *= totalIntDiscr;
+	    retVec[i] *= nS;
 	}
     }
     #endif
     if(mpiSize==1){
 	for (int i=0; i<n1; i++){
 	    retVec[i] = z_local[i]/penSumLocal[i];
-	    retVec[i] *= totalIntDiscr;
+	    retVec[i] *= nS;
 	}
     }
     //computeAverageAcrossProcs(z_local, retVec, weightSum, n1);

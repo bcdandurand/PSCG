@@ -612,26 +612,26 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
       IloRangeArray con(env);
       IloNumArray linCoeff(env);
       IloNumArray ones(env);
-       IloExpr objExpr(env);
+      IloExpr objExpr(env);
 
       //Populate the model.
       IloNum weightObj0(0.0);
-	if(omega!=NULL){	
-	    for (int i = 0; i < n1; i++) {
-		weightObj0 += x[i] * (c[i] + omega[i]);
-	    }
-	}
-	else{	
-	    for (int i = 0; i < n1; i++) {
-		weightObj0 += x[i] * (c[i]);
-	    }
-	}
+      if(omega!=NULL){	
+	 for (int i = 0; i < n1; i++) {
+	   weightObj0 += x[i] * (c[i] + omega[i]);
+	 }
+      }
+      else{	
+	 for (int i = 0; i < n1; i++) {
+	   weightObj0 += x[i] * (c[i]);
+         }
+      }
 
-	for (int j = 0; j < n2; j++) {
-		weightObj0 += y[j] * d[j];
-	}
-	weightObj0 /= rho;
-        objExpr += weightObj0*a0;
+      for (int j = 0; j < n2; j++) {
+	weightObj0 += y[j] * d[j];
+      }
+      weightObj0 /= rho;
+      objExpr += weightObj0*a0;
       for (int wI = 0; wI < nVertices; wI++) {
 		//weightObjective[wI] = baseWeightObj[wI]/rho;
 		linCoeff.add(0.0);
@@ -726,6 +726,137 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
    env.end();
 }
 
+void PSCGScen::solveMPHistory2Norm(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+	const double rho, const double *scaling_vector, bool updateDisp) {
+
+   IloEnv   env;
+   try {
+      IloModel model(env);
+      IloNumVar a0(env);
+      IloNumVarArray a(env);
+      IloNumVar eta(env);
+      IloNumVarArray zeta(env);
+      IloRangeArray con(env);
+      IloNumArray linCoeff(env);
+      IloNumArray ones(env);
+      IloExpr objExpr(env);
+
+      //Populate the model.
+      IloNum weightObj0(0.0);
+	if(omega!=NULL){	
+	    for (int i = 0; i < n1; i++) {
+		weightObj0 += x[i] * (c[i] + omega[i]);
+	    }
+	}
+	else{	
+	    for (int i = 0; i < n1; i++) {
+		weightObj0 += x[i] * (c[i]);
+	    }
+	}
+
+	for (int j = 0; j < n2; j++) {
+		weightObj0 += y[j] * d[j];
+	}
+      weightObj0 /= rho;
+      objExpr += weightObj0*a0;
+      for (int wI = 0; wI < nVertices; wI++) {
+		//weightObjective[wI] = baseWeightObj[wI]/rho;
+		linCoeff.add(0.0);
+		ones.add(1.0);
+		a.add(IloNumVar(env));
+		if(omega!=NULL){	
+		    for (int i = 0; i < n1; i++) {
+			linCoeff[wI] += xVertices[wI][i] * (c[i]+omega[i]);
+		    }
+		}
+		else{
+		    for (int i = 0; i < n1; i++) {
+			linCoeff[wI] += xVertices[wI][i] * (c[i]);
+		    }
+		}
+		for (int j = 0; j < n2; j++) {
+		    linCoeff[wI] += yVertices[wI][j] * d[j];
+		}
+		linCoeff[wI] /= rho;
+
+		
+      	objExpr += linCoeff[wI]*a[wI];
+      }
+      objExpr += eta;
+      for (int ii = 0; ii < n1; ++ii) {
+	 zeta.add(IloNumVar(env,-IloInfinity,IloInfinity));
+         //objExpr += 0.5*scaling_vector[ii]*zeta[ii]*zeta[ii];
+      }
+   IloObjective obj = IloMinimize(env, objExpr);
+   model.add(obj);
+   objExpr.end();
+   con.add(1.0*a0 + IloScalProd(ones,a) == 1.0);
+   IloExpr etaBound(env);
+   for(int ii=0; ii<n1; ii++){
+	IloExpr vertConstrExpr(env);
+	vertConstrExpr += x[ii]*a0;
+	for(int wI=0; wI<nVertices; wI++){
+	    vertConstrExpr += xVertices[wI][ii] * a[wI];
+	}	
+	vertConstrExpr += -1.0*zeta[ii];
+	con.add(vertConstrExpr == z[ii]);
+	vertConstrExpr.end();
+        etaBound += scaling_vector[ii]*zeta[ii]*zeta[ii];
+   }
+   con.add(etaBound - eta*eta <= 0.0);
+   etaBound.end();
+   model.add(con);
+
+   IloCplex cplex(model);
+   //cplex.setParam(IloCplex::RootAlg, IloCplex::Primal);
+	cplex.setParam(IloCplex::RootAlg, CPX_ALG_BARRIER);
+        //cplexMP.setParam(IloCplex::Param::SolutionType, CPX_BASIC_SOLN);
+	//cplexMP.setParam(IloCplex::RootAlg, 0);
+	//cplex.setParam(IloCplex::OptimalityTarget, 1);
+	//cplex.setParam(IloCplex::Param::Simplex::Tolerances::Optimality, 1e-9);
+        //cplex.setParam(IloCplex::Param::Simplex::Tolerances::Feasibility, 1e-9);
+	cplex.setOut(env.getNullStream());
+	cplex.setWarning(env.getNullStream());
+	
+	cplex.setParam(IloCplex::Threads, nThreads); 
+
+      // Optimize the problem and obtain solution.
+      if ( !cplex.solve() ) {
+         env.error() << "Failed to optimize" << endl;
+         throw(-1);
+      }
+      IloNum weight0 = cplex.getValue(a0);
+	for (int i = 0; i < n1; i++) {
+		x[i] = weight0 * x[i];
+		//if(updateDisp){dispersions[i] = weight0*dispersions[i];}
+	}
+
+	for (int j = 0; j < n2; j++) {
+		y[j] = weight0 * y[j];
+	}
+	for(int wI=0; wI<nVertices; wI++) {
+		vecWeights[wI] = weight0*vecWeights[wI] + cplex.getValue(a[wI]);
+		for (int i = 0; i < n1; i++) {
+			x[i] += cplex.getValue(a[wI]) * xVertices[wI][i];
+		}
+		
+		for (int j = 0; j < n2; j++) {
+			y[j] += cplex.getValue(a[wI]) * yVertices[wI][j];
+		}
+	}
+//}
+
+
+   }//try
+   catch (IloException& e) {
+      cerr << "Concert exception caught: " << e << endl;
+   }
+   catch (...) {
+      cerr << "Unknown exception caught" << endl;
+   }
+
+   env.end();
+}
 
 double PSCGScen::getDefaultPenaltyParameter() {
 

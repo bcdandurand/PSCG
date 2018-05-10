@@ -45,6 +45,7 @@ using namespace std;
 // Parameters for newConvergenceCriterion
 
 #define BG_BETA 0.05
+//#define EUCLIDNORM
 
 enum COL_TYPE{
 CONTINUOUS=0,
@@ -569,6 +570,7 @@ void setMaxNoConseqNullSteps(int noNullSteps){maxNoConseqNullSteps=noNullSteps;}
 void setSSCParam(double ssc){SSCParam=ssc;}
 void setTCritParam(double tcrit){tCritParam=tcrit;}
 void setPhase(int ph){phase=ph;}
+void setRho(double rhoVal){rho=rhoVal;}
 
 void preSolveMP(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
@@ -584,7 +586,13 @@ void preSolveMP(){
 	updateZ();
     	for (int tS = 0; tS < nNodeSPs; tS++) {
 	    for (int i = 0; i < n1; i++) {
-		omega_tilde[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		#ifdef EUCLIDNORM
+		  if(discrepNorm > 1e-20){
+		    omega_tilde[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i])/sqrt(discrepNorm);
+		  }
+		#else
+		    omega_tilde[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		#endif
 	    }
       	    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
 	}
@@ -613,8 +621,10 @@ int regularIteration(bool adjustPenalty=false, bool SSC=true){
     //verifyOmegaDualFeas();
     //printStatus();
 	//cout << "ALVal: " << ALVal << " discrepNorm: " << discrepNorm << " currentLagrLB " << currentLagrLB << endl;
+	#ifndef EUCLIDNORM
 	updateOmega(SSC);
 	if(adjustPenalty && phase!=2) updatePenalty();
+	#endif
 
 	bool continueInner=true;
 	if(phase==2) preSolveMP();
@@ -813,6 +823,21 @@ void updateZ(){
         #else
         for (int i=0; i<n1; i++) z_current[i] = z_local[i]/penSumLocal[i]; //Only one node, trivially set z_local = z_current
         #endif
+
+	#ifdef EUCLIDNORM
+	  double sumSqrNorms=0.0;
+          for (int tS = 0; tS < nNodeSPs; tS++){
+	    for(int i=0; i<n1; i++){
+	      sumSqrNorms += (x_current[tS][i] - z_current[i])*scaling_matrix[tS][i]*(x_current[tS][i]-z_current[i]);
+	    }
+	  }
+          #ifdef USING_MPI
+            MPI_Allreduce(&sumSqrNorms, &discrepNorm, 1, MPI_DOUBLE, MPI_SUM, comm_);
+          #else
+	    discrepNorm = sumSqrNorms;
+          #endif
+
+	#endif
 }
 
 #if 1

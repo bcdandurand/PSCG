@@ -2,7 +2,7 @@
 
 #LOCALDIRROOT = /lustre/pRMIT0153/infrastructure/SMI_Stuff
 #LOCALDIRROOT = /short/ka3/comp_infrastructure
-LOCALDIRROOT = /home/bdandurand/comp_infrastructure
+LOCALDIRROOT = /homes/bcdandurand/comp_infrastructure
 #SMIDIR = $(LOCALDIRROOT)/CoinSMI
 SYSTEM     = x86-64_linux
 LIBFORMAT  = static_pic

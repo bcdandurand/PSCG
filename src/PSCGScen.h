@@ -696,6 +696,8 @@ void setQuadraticTerm(const double rho, const double *scaling_vector) {
 void solveMPLineSearch(const double *omega, const double *z, const double rho, const double *scaling_vector, int vertIndex=-1, double *z_average=NULL); 
 void solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double rho, const double *scaling_vector, bool updateDisp=false);
+void solveMPHistory2Norm(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+	const double rho, const double *scaling_vector, bool updateDisp=false);
 void solveMPVertices(const double *omega, const double *z, const double rho, const double *scaling_vector);
 //void computeWeightsForCurrentSoln(const double *z); 
 

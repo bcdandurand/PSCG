@@ -509,7 +509,13 @@ catch(std::exception &e){
 		localDiscrepNorm += pr[tS]*sqrDiscrNorm_tS;
 		localDiscrepNorm += 0.5*pr[tS]*subproblemSolvers[tS]->getSqrNormDiscr();
 		for (int i = 0; i < n1; i++) {
+		   #ifdef EUCLIDNORM
+		    if(discrepNorm > 1e-20){
+		      omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i])/sqrt(discrepNorm);
+		    }
+		   #else
 		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		   #endif
 		}
 	    }
 	    #ifdef USING_MPI
@@ -556,6 +562,7 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 	bool needToContinue = false;
 	assert(currentIter_ >= 0);
 	for(int itGS=0; itGS < noGSIts; itGS++) { //The inner loop has a fixed number of occurences
+	//for(int itGS=0; itGS < 5; itGS++) { //The inner loop has a fixed number of occurences
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		//*************************** Quadratic subproblem ***********************************
 			    
@@ -571,7 +578,12 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 		}
 #else
 		if(subproblemSolvers[tS]->getNVertices()>0){
+		    #ifdef EUCLIDNORM
+			subproblemSolvers[tS]->solveMPHistory2Norm(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
+		    #else
 			subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
+		    #endif
+//cout << "Done solving subproblem: " << tS << endl;
 		}
 #endif
 		#ifdef KEEP_LOG
@@ -596,7 +608,13 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 		    //subproblemSolvers[tS]->printWeights(logFiles[tS]);
 		#endif
 		for (int i = 0; i < n1; i++) {
+		  #ifdef EUCLIDNORM
+		    if(discrepNorm > 1e-20){
+		      omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i])/sqrt(discrepNorm);
+		    }
+		  #else
 		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		  #endif
 		}
 		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 		innerLagrLB_Local += pr[tS]*LagrLB_tS;
@@ -629,6 +647,9 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 if(mpiRank==0) cout << "innerSSCVal computation: Denominator is close to zero (algorithm should terminate with optimal status)." << endl;
 	    needToContinue=false;
 	}
+#endif
+#ifdef EUCLIDNORM
+    needToContinue=false;
 #endif
     return needToContinue;
 }

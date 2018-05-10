@@ -1,3 +1,10 @@
+/*
+Author: Brian C. Dandurand (2017-2018)
+Based on and modified from code developed by Jeffrey Christiansen, Brian Dandurand, and Fabricio Oliveira
+at RMIT in Melbourne Australia with funding under project ARC DP 140100985 during 2015-2017.
+CIs of that projects were Prof. Andrew Eberhard, Prof. Natashia Boland, and PI Prof. Jeffrey Linderoth.
+*/
+
 /**
 *
 *

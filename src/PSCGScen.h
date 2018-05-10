@@ -90,6 +90,11 @@ double *dispersions;
 double *intDiscVec_;
 double *y;
 
+double *aggrXY0;
+double *aggrXY1;
+double aggrA0;
+double aggrA1;
+
 int nVertices;
 int maxNVertices;
 int oldestVertexIndex;
@@ -141,6 +146,8 @@ void finishInitialisation();
   delete [] y_vertex;
   delete [] origLBs_;
   delete [] origUBs_;
+  delete [] aggrXY0;
+  delete [] aggrXY1;
 #if 0
   mpModel.end();
   mpObjective.end();
@@ -371,6 +378,110 @@ double computeIntegralityDiscr(){
     return retval;
 }
 
+void resetAggrInfo(){
+    for(int ii=0; ii<n1+n2; ii++){ 
+	aggrXY0[ii]=0.0;
+	aggrXY1[ii]=0.0;
+    }
+    aggrA0=0;
+    aggrA1=0;
+}
+
+//Precondition: Index ii variable is binary, current var val violates its integrality
+void computeAggrXYAt(int kk){
+    resetAggrInfo();
+    for(int wI=0; wI<nVertices; wI++) {
+	if(kk<n1){
+	  if(fabs(xVertices[wI][kk] - 1) < 1e-6){
+	    aggrA1 += vecWeights[wI];
+	    for(int ii=0; ii<n1; ii++){
+	      aggrXY1[ii] += vecWeights[wI]*xVertices[wI][ii];
+	    }
+	    for(int ii=n1; ii<n1+n2; ii++){
+	      aggrXY1[ii] += vecWeights[wI]*yVertices[wI][ii-n1];  
+	    }
+	  }
+	  else if(fabs(xVertices[wI][kk]) < 1e-6){
+	    aggrA0 += vecWeights[wI];
+	    for(int ii=0; ii<n1; ii++){
+	      aggrXY0[ii] += vecWeights[wI]*xVertices[wI][ii];
+	    }
+	    for(int ii=n1; ii<n1+n2; ii++){
+	      aggrXY0[ii] += vecWeights[wI]*yVertices[wI][ii-n1];
+	    }
+	  }
+	  else{
+	     cerr << "computeAggrXYAt(): xVertices[wI][kk] is not binary." << endl;
+	  }
+	}
+	else if(kk >=n1 && kk<n1+n2){
+	  if(fabs(yVertices[wI][kk-n1] - 1) < 1e-6){
+	    aggrA1 += vecWeights[wI];
+	    for(int ii=0; ii<n1; ii++){
+	      aggrXY1[ii] += vecWeights[wI]*xVertices[wI][ii];
+	    }
+	    for(int ii=n1; ii<n1+n2; ii++){
+	      aggrXY1[ii] += vecWeights[wI]*yVertices[wI][ii-n1];
+	    }
+	  }
+	  else if(fabs(yVertices[wI][kk-n1]) < 1e-6){
+	    aggrA0 += vecWeights[wI];
+	    for(int ii=0; ii<n1; ii++){
+	      aggrXY0[ii] += vecWeights[wI]*xVertices[wI][ii];
+	    }
+	    for(int ii=n1; ii<n1+n2; ii++){
+	      aggrXY0[ii] += vecWeights[wI]*yVertices[wI][ii-n1];
+	    }
+	  }
+	  else{
+	     cerr << "computeAggrXYAt(): xVertices[wI][kk] is not binary." << endl;
+	  }
+
+	}
+	else{
+	  cerr << "computeAggrXYAt(): kk is out of index range:" << kk << endl;
+	}
+
+    }
+    for(int ii=0; ii<n1+n2; ii++){
+	aggrXY0[ii] /= aggrA0;
+	aggrXY1[ii] /= aggrA1;
+    } 
+}
+
+double* computeDispBasedOnIntDisc(){
+    resetDispersionsToZero();
+    for(int kk=0; kk<n1; kk++){
+	if(getColTypes()[kk]!='C'){
+	    if(fabs(x[kk]-round(x[kk])) > 1e-6){
+	        computeAggrXYAt(kk);
+		for(int ii=0; ii<n1; ii++){
+		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-x[ii]) + aggrA1*fabs(aggrXY1[ii]-x[ii]);
+		}
+		for(int ii=n1; ii<n1+n2; ii++){
+		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-y[ii-n1]) + aggrA1*fabs(aggrXY1[ii]-y[ii-n1]);
+		}
+	    }
+	    //add to dispersions based on profile of violation of integrality
+	}
+    }
+    for(int kk=0; kk<n2; kk++){
+	if(getColTypes()[n1+kk]!='C'){
+	    if(fabs(y[kk]-round(y[kk])) > 1e-6){
+	        computeAggrXYAt(kk+n1);
+		for(int ii=0; ii<n1; ii++){
+		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-x[ii]) + aggrA1*fabs(aggrXY1[ii]-x[ii]);
+		}
+		for(int ii=n1; ii<n1+n2; ii++){
+		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-y[ii-n1]) + aggrA1*fabs(aggrXY1[ii]-y[ii-n1]);
+		}
+	    }
+	}
+    }
+    //printDispersions();
+    return dispersions;
+}
+
 
 void compareLagrBds(const double* omega){
    cout << LagrBd << " ***versus*** " << evaluateVertexSolution(omega) << endl;
@@ -561,9 +672,6 @@ void clearVertexHistory(){
   resetDispersionsToZero();
 }
 
-void resetDispersionsToZero(){
-    for(int ii=0; ii<n1+n2; ii++){ dispersions[ii]=0.0;}
-}
 
 virtual void printLinCoeffs(){
 return;
@@ -708,6 +816,9 @@ void solveMPHistory2Norm(const double *omega, const double *z, const double *zLB
 void solveMPVertices(const double *omega, const double *z, const double rho, const double *scaling_vector);
 //void computeWeightsForCurrentSoln(const double *z); 
 
+void resetDispersionsToZero(){
+    for(int ii=0; ii<n1+n2; ii++){ dispersions[ii]=0.0;}
+}
 double* computeDispersions(double *z=NULL){
     resetDispersionsToZero();
     if(z==NULL) z=x;

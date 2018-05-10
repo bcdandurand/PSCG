@@ -42,6 +42,8 @@ int PSCGScen_SMPS::initialiseSMPS(DecTssModel &smpsModel, int scenario) {
 	//nThreads = par->threads;
 	origLBs_ = new double[n1+n2];
 	origUBs_ = new double[n1+n2];
+	aggrXY0 = new double[n1+n2];
+	aggrXY1 = new double[n1+n2];
 
 	c = new double[n1];
 	d = new double[n2];

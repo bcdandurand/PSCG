@@ -98,13 +98,12 @@ double aggrA1;
 int nVertices;
 int maxNVertices;
 int oldestVertexIndex;
-double* solVertex;
 double* x_vertex;
 double* y_vertex;
 //double* x_vertex_opt;
 //double* y_vertex_opt;
-vector< vector<double> > xVertices; //row ordered
-vector< vector<double> > yVertices;
+vector< vector<double> > xyVertices; //row ordered
+//vector< vector<double> > yVertices;
 vector<double> vecWeights;
 int bestVertexIndex;
 
@@ -120,14 +119,14 @@ public:
 PSCGScen(int nthreads=1):
 nThreads(nthreads),
 n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
+x(NULL),y(NULL),c(NULL),d(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),pr(0.0){;}
 
 //copy constructor
 PSCGScen(const PSCGScen &other):
 nThreads(other.nThreads),
 n1(0),n2(0),nS(0),tS(-1),initialised(false),solverStatus_(0),
-x(NULL),y(NULL),c(NULL),d(NULL),solVertex(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
+x(NULL),y(NULL),c(NULL),d(NULL),x_vertex(NULL),y_vertex(NULL),oldestVertexIndex(-1),bestVertexIndex(-1),
 nVertices(0),maxNVertices(0),LagrBd(-COIN_DBL_MAX),objVal(-COIN_DBL_MAX),pr(0.0){;}
 
 //int initialiseSMPS(SMIP_fileRequest* probSpecs, int scenario);
@@ -138,12 +137,11 @@ void finishInitialisation();
   delete [] x;
   delete [] dispersions;
   delete [] intDiscVec_;
-  delete [] y;
+  //delete [] y;
   delete [] c;
-  delete [] d;
-  delete [] solVertex;
+  //delete [] d;
   delete [] x_vertex;
-  delete [] y_vertex;
+  //delete [] y_vertex;
   delete [] origLBs_;
   delete [] origUBs_;
   delete [] aggrXY0;
@@ -269,9 +267,10 @@ void evaluateVertexHistory(const double *omega){
     double retVal;
     for(int vv=0; vv<nVertices; vv++){
     	retVal=0.0;
-    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[vv][ii];}
-    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
-    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xyVertices[vv][ii];}
+    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xyVertices[vv][ii];}
+    	//for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
+    	for(int jj=n1; jj<n1+n2; jj++) retVal+= c[jj]*xyVertices[vv][jj];
 	cout << "\tVertex " << vv << " results in a value of " << retVal << endl;
     }
 }
@@ -279,9 +278,10 @@ void evaluateVertexHistory(const double *omega, shared_ptr<ofstream> outStream){
     double retVal;
     for(int vv=0; vv<nVertices; vv++){
     	retVal=0.0;
-    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xVertices[vv][ii];}
-    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
-    	for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) retVal+= (c[ii])*xyVertices[vv][ii];}
+    	else{for(int ii=0; ii<n1; ii++) retVal+= (c[ii]+omega[ii])*xyVertices[vv][ii];}
+    	//for(int jj=0; jj<n2; jj++) retVal+= d[jj]*yVertices[vv][jj];
+    	for(int jj=n1; jj<n1+n2; jj++) retVal+= c[jj]*xyVertices[vv][jj];
 	*(outStream) << "\tVertex " << vv << " results in a value of " << retVal << endl;
     }
 }
@@ -293,9 +293,10 @@ double optimiseLagrOverVertexHistory(const double *omega){
     int optIndex = -1;
     for(int vv=0; vv<nVertices; vv++){
     	vertexVal=0.0;
-    	if(omega==NULL){for(int ii=0; ii<n1; ii++) vertexVal+= (c[ii])*xVertices[vv][ii];}
-    	else{for(int ii=0; ii<n1; ii++) vertexVal+= (c[ii]+omega[ii])*xVertices[vv][ii];}
-    	for(int jj=0; jj<n2; jj++) vertexVal+= d[jj]*yVertices[vv][jj];
+    	if(omega==NULL){for(int ii=0; ii<n1; ii++) vertexVal+= (c[ii])*xyVertices[vv][ii];}
+    	else{for(int ii=0; ii<n1; ii++) vertexVal+= (c[ii]+omega[ii])*xyVertices[vv][ii];}
+    	//for(int jj=0; jj<n2; jj++) vertexVal+= d[jj]*yVertices[vv][jj];
+    	for(int jj=n1; jj<n1+n2; jj++) vertexVal+= c[jj]*xyVertices[vv][jj];
 	//cout << "\tVertex " << vv << " results in a value of " << retVal << endl;
 	if(vertexVal < retVal){
 	    //LagrBd = retVal;
@@ -325,21 +326,23 @@ bool checkWhetherVertexIsRedundant(){
 }
 
 bool checkPairOfVerticesForEquality(int vv){
-      for(int ii=0; ii<n1; ii++){
-	if(fabs(xVertices[vv][ii]-x_vertex[ii]) > 1e-10){
+      for(int ii=0; ii<n1+n2; ii++){
+	if(fabs(xyVertices[vv][ii]-x_vertex[ii]) > 1e-10){
 	    return false;
 	}
       }
+#if 0
       for(int jj=0; jj<n2; jj++){
 	if(fabs(yVertices[vv][jj]-y_vertex[jj]) > 1e-10){
 	    return false;
 	}
       }
+#endif
       return true;
 }
 
 double getXVertexEntry(int entry, int vertex){
-  return xVertices[vertex][entry];
+  return xyVertices[vertex][entry];
 }
 
 double*  computeIntegralityDiscrVec(){
@@ -391,52 +394,23 @@ void resetAggrInfo(){
 void computeAggrXYAt(int kk){
     resetAggrInfo();
     for(int wI=0; wI<nVertices; wI++) {
-	if(kk<n1){
-	  if(fabs(xVertices[wI][kk] - 1) < 1e-6){
+	if(kk >=0 && kk<n1+n2){
+	  if(fabs(xyVertices[wI][kk] - 1) < MIP_TOL){
 	    aggrA1 += vecWeights[wI];
-	    for(int ii=0; ii<n1; ii++){
-	      aggrXY1[ii] += vecWeights[wI]*xVertices[wI][ii];
-	    }
-	    for(int ii=n1; ii<n1+n2; ii++){
-	      aggrXY1[ii] += vecWeights[wI]*yVertices[wI][ii-n1];  
+	    for(int ii=0; ii<n1+n2; ii++){
+	      aggrXY1[ii] += vecWeights[wI]*xyVertices[wI][ii];
 	    }
 	  }
-	  else if(fabs(xVertices[wI][kk]) < 1e-6){
+	  else if(fabs(xyVertices[wI][kk]) < MIP_TOL){
 	    aggrA0 += vecWeights[wI];
-	    for(int ii=0; ii<n1; ii++){
-	      aggrXY0[ii] += vecWeights[wI]*xVertices[wI][ii];
-	    }
-	    for(int ii=n1; ii<n1+n2; ii++){
-	      aggrXY0[ii] += vecWeights[wI]*yVertices[wI][ii-n1];
+	    for(int ii=0; ii<n1+n2; ii++){
+	      aggrXY0[ii] += vecWeights[wI]*xyVertices[wI][ii];
 	    }
 	  }
 	  else{
-	     cerr << "computeAggrXYAt(): xVertices[wI][kk] is not binary." << endl;
+	     cerr << "computeAggrXYAt(): xyVertices[wI][kk] is not binary." << endl;
+	     exit(1);
 	  }
-	}
-	else if(kk >=n1 && kk<n1+n2){
-	  if(fabs(yVertices[wI][kk-n1] - 1) < 1e-6){
-	    aggrA1 += vecWeights[wI];
-	    for(int ii=0; ii<n1; ii++){
-	      aggrXY1[ii] += vecWeights[wI]*xVertices[wI][ii];
-	    }
-	    for(int ii=n1; ii<n1+n2; ii++){
-	      aggrXY1[ii] += vecWeights[wI]*yVertices[wI][ii-n1];
-	    }
-	  }
-	  else if(fabs(yVertices[wI][kk-n1]) < 1e-6){
-	    aggrA0 += vecWeights[wI];
-	    for(int ii=0; ii<n1; ii++){
-	      aggrXY0[ii] += vecWeights[wI]*xVertices[wI][ii];
-	    }
-	    for(int ii=n1; ii<n1+n2; ii++){
-	      aggrXY0[ii] += vecWeights[wI]*yVertices[wI][ii-n1];
-	    }
-	  }
-	  else{
-	     cerr << "computeAggrXYAt(): xVertices[wI][kk] is not binary." << endl;
-	  }
-
 	}
 	else{
 	  cerr << "computeAggrXYAt(): kk is out of index range:" << kk << endl;
@@ -447,35 +421,26 @@ void computeAggrXYAt(int kk){
 	aggrXY0[ii] /= aggrA0;
 	aggrXY1[ii] /= aggrA1;
     } 
+#if 0
+    cout << kk << ": aggrA0 and aggrA1: " << aggrA0 << " " << aggrA1 << "\t";
+    cout  << x[kk] << endl;
+#endif
 }
 
 double* computeDispBasedOnIntDisc(){
     resetDispersionsToZero();
-    for(int kk=0; kk<n1; kk++){
+    for(int kk=0; kk<n1+n2; kk++){
 	if(getColTypes()[kk]!='C'){
-	    if(fabs(x[kk]-round(x[kk])) > 1e-6){
+	    //cout << kk <<": ";
+	    if(fabs(x[kk]-round(x[kk])) > MIP_TOL){
 	        computeAggrXYAt(kk);
-		for(int ii=0; ii<n1; ii++){
+		for(int ii=0; ii<n1+n2; ii++){
 		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-x[ii]) + aggrA1*fabs(aggrXY1[ii]-x[ii]);
-		}
-		for(int ii=n1; ii<n1+n2; ii++){
-		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-y[ii-n1]) + aggrA1*fabs(aggrXY1[ii]-y[ii-n1]);
+	 	    //cout << " (" << ii << "," << dispersions[ii] << ")";
 		}
 	    }
 	    //add to dispersions based on profile of violation of integrality
-	}
-    }
-    for(int kk=0; kk<n2; kk++){
-	if(getColTypes()[n1+kk]!='C'){
-	    if(fabs(y[kk]-round(y[kk])) > 1e-6){
-	        computeAggrXYAt(kk+n1);
-		for(int ii=0; ii<n1; ii++){
-		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-x[ii]) + aggrA1*fabs(aggrXY1[ii]-x[ii]);
-		}
-		for(int ii=n1; ii<n1+n2; ii++){
-		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-y[ii-n1]) + aggrA1*fabs(aggrXY1[ii]-y[ii-n1]);
-		}
-	    }
+	    //cout << endl;
 	}
     }
     //printDispersions();
@@ -682,7 +647,7 @@ void printVertices(){
 cout << "Printing Vertices: " << endl;
   for(int ii=0; ii<n1; ii++){
       for(int vv=0; vv<nVertices; vv++){
-	cout << " " << xVertices[vv][ii];
+	cout << " " << xyVertices[vv][ii];
       }
       cout << endl;
   }
@@ -692,7 +657,7 @@ void printVertices(shared_ptr<ofstream> outStream){
 *(outStream) << "Printing Vertices: " << endl;
   for(int ii=0; ii<n1; ii++){
       for(int vv=0; vv<nVertices; vv++){
-	*(outStream) << " " << xVertices[vv][ii];
+	*(outStream) << " " << xyVertices[vv][ii];
       }
       *(outStream) << endl;
   }
@@ -824,10 +789,10 @@ double* computeDispersions(double *z=NULL){
     if(z==NULL) z=x;
     for(int wI=0; wI<nVertices; wI++) {
         for(int ii=0; ii<n1; ii++){
-	   dispersions[ii] += vecWeights[wI]*fabs(xVertices[wI][ii] - z[ii]);
+	   dispersions[ii] += vecWeights[wI]*fabs(xyVertices[wI][ii] - z[ii]);
         }
         for(int jj=n1; jj<n1+n2; jj++){
-	   dispersions[jj] += vecWeights[wI]*fabs(yVertices[wI][jj-n1] - y[jj-n1]);
+	   dispersions[jj] += vecWeights[wI]*fabs(xyVertices[wI][jj] - x[jj]);
         }
     }
     return dispersions;
@@ -863,10 +828,10 @@ double * getYVertex(){return y_vertex;}
 void setXToVertex(){
     resetDispersionsToZero();
     //for(int i=0;i<n1;i++) x[i]=x_vertex[i];
-    for(int i=0;i<n1;i++) x[i]=xVertices[bestVertexIndex][i];
+    for(int i=0;i<n1;i++) x[i]=xyVertices[bestVertexIndex][i];
 }
 //void setYToVertex(){for(int i=0;i<n2;i++) y[i]=y_vertex[i];}
-void setYToVertex(){for(int i=0;i<n2;i++) y[i]=yVertices[bestVertexIndex][i];}
+void setYToVertex(){for(int i=n1;i<n1+n2;i++) x[i]=xyVertices[bestVertexIndex][i];}
 
 void refresh(const double *omega, const double *z, const double rho, const double *scaling_vector){
     
@@ -1306,6 +1271,7 @@ double computeMIPVal(const double *omega){
   return retVal;
 }
 
+#if 0
 int changeFromMIQPToMILP(){
 	OsiCpxSolverInterface *osi = LagrMIPInterface_;
         if(CPXgetprobtype(osi->getEnvironmentPtr(),osi->getLpPtr()) == CPXPROB_MIQP){
@@ -1323,6 +1289,7 @@ int changeFromMILPToMIQP(){
 	    return 0;
 	}
 }
+#endif
 
 
 virtual void printColTypesFirstStage(){
@@ -1460,8 +1427,8 @@ virtual void updateSolnInfo(){
 		if(solverStatus_==PSCG_ITER_LIM) cerr << "Flagging: SMPS MIP solver iteration limit reached." << endl;
 		const double* solution = osi->getColSolution();
 		//LagrBd = osi->getObjValue()*osi->getObjSense();
-		memcpy(x_vertex,solution,n1*sizeof(double));
-		memcpy(y_vertex,solution+n1,n2*sizeof(double));
+		memcpy(x_vertex,solution,(n1+n2)*sizeof(double));
+		//memcpy(y_vertex,solution+n1,n2*sizeof(double));
 		//for(int ii=0; ii<n1; ii++){ (x_vertex[ii]);}
 		//for(int ii=0; ii<n2; ii++){ (y_vertex[ii]);}
 		//polishSolution();

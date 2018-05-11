@@ -45,8 +45,8 @@ int PSCGScen_SMPS::initialiseSMPS(DecTssModel &smpsModel, int scenario) {
 	aggrXY0 = new double[n1+n2];
 	aggrXY1 = new double[n1+n2];
 
-	c = new double[n1];
-	d = new double[n2];
+	c = new double[n1+n2];
+	d = c+n1;
 	CoinPackedMatrix * mat = new CoinPackedMatrix();
 	double *clbd,*cubd,*obj,*rlbd,*rubd;
 	char *ctype;
@@ -103,13 +103,15 @@ void PSCGScen::finishInitialisation() {
 	     cerr << "PSCGScen::finishInitialisation(): n1==0 and n2==0, returning...." << endl;
 	     return;
 	}
-	x_vertex = new double[n1];
-	y_vertex = new double[n2];
-	x = new double[n1];
+	x_vertex = new double[n1+n2];
+	//y_vertex = new double[n2];
+	y_vertex = x_vertex+n1;
+	x = new double[n1+n2];
 	dispersions = new double[n1+n2];
 	intDiscVec_ = new double[n1+n2];
 	for(int ii=0; ii<n1+n2; ii++){ dispersions[ii]=0.0;}
-	y = new double[n2];
+	//y = new double[n2];
+	y = x+n1;
 	//x_vertex.add(n1,0.0);
 	//y_vertex.add(n2,0.0);
 		
@@ -396,16 +398,18 @@ bool PSCGScen::addVertex(){
     if(nVertices==maxNVertices){
 	if(vecWeights.size()==0){vecWeights.push_back(1.0);}
 	else{vecWeights.push_back(0.0);}
-	xVertices.push_back(vector<double>(n1));
-	yVertices.push_back(vector<double>(n2));
+	xyVertices.push_back(vector<double>(n1+n2));
+	//yVertices.push_back(vector<double>(n2));
 	nVertices++;
 	maxNVertices++;
-	for(int i=0; i<n1; i++) {
-	   xVertices[nVertices-1][i] = x_vertex[i];
+	for(int i=0; i<n1+n2; i++) {
+	   xyVertices[nVertices-1][i] = x_vertex[i];
 	}
+#if 0
 	for(int i=0; i<n2; i++) { 
 	   yVertices[nVertices-1][i] = y_vertex[i];
 	}
+#endif
 	bestVertexIndex=nVertices-1;
 #if 0
 try{
@@ -467,12 +471,14 @@ catch(IloException &e){
     exit(1);
 }
 #endif
-	for(int i=0; i<n1; i++) {
-	   xVertices[iii][i] = x_vertex[i];
+	for(int i=0; i<n1+n2; i++) {
+	   xyVertices[iii][i] = x_vertex[i];
 	}
+#if 0
 	for(int i=0; i<n2; i++) { 
 	   yVertices[iii][i] = y_vertex[i];
 	}
+#endif
 #if 0
 try{
 	for(int i=0; i<n1; i++) {
@@ -503,8 +509,9 @@ void PSCGScen::solveMPLineSearch(const double *omega, const double *z, const dou
 	if(vertexIndex==-1){
 	    vertexIndex=bestVertexIndex;
 	}
-	vertX = &(xVertices[vertexIndex][0]);
-	vertY = &(yVertices[vertexIndex][0]);
+	vertX = &(xyVertices[vertexIndex][0]);
+	//vertY = &(yVertices[vertexIndex][0]);
+	vertY = vertX+n1;
 	
 	for (int i = 0; i < n1; i++) {
 		if(omega==NULL){numerator -= (c[i]/rho + scaling_vector[i] * (x[i] - z[i])) * (vertX[i] - x[i]);}
@@ -648,16 +655,16 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 		a.add(IloNumVar(env));
 		if(omega!=NULL){	
 		    for (int i = 0; i < n1; i++) {
-			linCoeff[wI] += xVertices[wI][i] * (c[i]+omega[i]);
+			linCoeff[wI] += xyVertices[wI][i] * (c[i]+omega[i]);
 		    }
 		}
 		else{
 		    for (int i = 0; i < n1; i++) {
-			linCoeff[wI] += xVertices[wI][i] * (c[i]);
+			linCoeff[wI] += xyVertices[wI][i] * (c[i]);
 		    }
 		}
-		for (int j = 0; j < n2; j++) {
-		    linCoeff[wI] += yVertices[wI][j] * d[j];
+		for (int j = n1; j < n1+n2; j++) {
+		    linCoeff[wI] += xyVertices[wI][j] * c[j];
 		}
 		linCoeff[wI] /= rho;
 
@@ -676,7 +683,7 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
 	IloExpr vertConstrExpr(env);
 	vertConstrExpr += x[ii]*a0;
 	for(int wI=0; wI<nVertices; wI++){
-	    vertConstrExpr += xVertices[wI][ii] * a[wI];
+	    vertConstrExpr += xyVertices[wI][ii] * a[wI];
 	}	
 	vertConstrExpr += -1.0*zeta[ii];
 	con.add(vertConstrExpr == z[ii]);
@@ -704,23 +711,26 @@ void PSCGScen::solveMPHistory(const double *omega, const double *z, const double
          throw(-1);
       }
       IloNum weight0 = cplex.getValue(a0);
-	for (int i = 0; i < n1; i++) {
+	for (int i = 0; i < n1+n2; i++) {
 		x[i] = weight0 * x[i];
 		//if(updateDisp){dispersions[i] = weight0*dispersions[i];}
 	}
 
+#if 0
 	for (int j = 0; j < n2; j++) {
 		y[j] = weight0 * y[j];
 	}
+#endif
 	for(int wI=0; wI<nVertices; wI++) {
 		vecWeights[wI] = weight0*vecWeights[wI] + cplex.getValue(a[wI]);
-		for (int i = 0; i < n1; i++) {
-			x[i] += cplex.getValue(a[wI]) * xVertices[wI][i];
+		for (int i = 0; i < n1+n2; i++) {
+			x[i] += cplex.getValue(a[wI]) * xyVertices[wI][i];
 		}
-		
+	#if 0	
 		for (int j = 0; j < n2; j++) {
 			y[j] += cplex.getValue(a[wI]) * yVertices[wI][j];
 		}
+	#endif
 	}
 //}
 
@@ -775,16 +785,16 @@ void PSCGScen::solveMPHistory2Norm(const double *omega, const double *z, const d
 		a.add(IloNumVar(env));
 		if(omega!=NULL){	
 		    for (int i = 0; i < n1; i++) {
-			linCoeff[wI] += xVertices[wI][i] * (c[i]+omega[i]);
+			linCoeff[wI] += xyVertices[wI][i] * (c[i]+omega[i]);
 		    }
 		}
 		else{
 		    for (int i = 0; i < n1; i++) {
-			linCoeff[wI] += xVertices[wI][i] * (c[i]);
+			linCoeff[wI] += xyVertices[wI][i] * (c[i]);
 		    }
 		}
-		for (int j = 0; j < n2; j++) {
-		    linCoeff[wI] += yVertices[wI][j] * d[j];
+		for (int j = n1; j < n1+n2; j++) {
+		    linCoeff[wI] += xyVertices[wI][j] * c[j];
 		}
 		linCoeff[wI] /= rho;
 
@@ -805,7 +815,7 @@ void PSCGScen::solveMPHistory2Norm(const double *omega, const double *z, const d
 	IloExpr vertConstrExpr(env);
 	vertConstrExpr += x[ii]*a0;
 	for(int wI=0; wI<nVertices; wI++){
-	    vertConstrExpr += xVertices[wI][ii] * a[wI];
+	    vertConstrExpr += xyVertices[wI][ii] * a[wI];
 	}	
 	vertConstrExpr += -1.0*zeta[ii];
 	con.add(vertConstrExpr == z[ii]);
@@ -835,23 +845,27 @@ void PSCGScen::solveMPHistory2Norm(const double *omega, const double *z, const d
          throw(-1);
       }
       IloNum weight0 = cplex.getValue(a0);
-	for (int i = 0; i < n1; i++) {
+	for (int i = 0; i < n1+n2; i++) {
 		x[i] = weight0 * x[i];
 		//if(updateDisp){dispersions[i] = weight0*dispersions[i];}
 	}
 
+#if 0
 	for (int j = 0; j < n2; j++) {
 		y[j] = weight0 * y[j];
 	}
+#endif
 	for(int wI=0; wI<nVertices; wI++) {
 		vecWeights[wI] = weight0*vecWeights[wI] + cplex.getValue(a[wI]);
-		for (int i = 0; i < n1; i++) {
-			x[i] += cplex.getValue(a[wI]) * xVertices[wI][i];
+		for (int i = 0; i < n1+n2; i++) {
+			x[i] += cplex.getValue(a[wI]) * xyVertices[wI][i];
 		}
 		
+#if 0
 		for (int j = 0; j < n2; j++) {
 			y[j] += cplex.getValue(a[wI]) * yVertices[wI][j];
 		}
+#endif
 	}
 //}
 

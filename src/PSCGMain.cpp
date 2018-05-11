@@ -74,8 +74,10 @@ int main(int argc, char **argv) {
 	 PSCG model(smpsModel);
 	#endif
 	model.setPhase(0);
-	model.setRho(100);
+	model.setRho(1);
+	model.setBaselineRho(1);
         model.setMaxNoSteps(100);
+        model.setMaxNoGSSteps(20);
         model.setMaxNoInnerSteps(5);
 	model.computeBound();
 	//double *z = new double[model.n1];

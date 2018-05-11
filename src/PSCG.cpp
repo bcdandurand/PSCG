@@ -51,9 +51,9 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 PSCG::PSCG(DecTssModel &model):smpsModel(model),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),mpiRank(0),mpiSize(1),
-	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(1),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),noGSIts(1),
+	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(10),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),
 	baselineRho(1.0),rho(1.0),nThreads(1),nVerticesUsed(100),
-	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
+	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.9),phase(0),tCritVal(1e10),tCritParam(1e-10){
 
 	//smpsModel.readSmps(par->filename.c_str());
 	
@@ -79,9 +79,9 @@ LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_
 PSCG::PSCG(DecTssModel &model, MPI_Comm comm):smpsModel(model),comm_(comm),nNodeSPs(0),referenceLagrLB(-COIN_DBL_MAX),cutoffLagrLB(COIN_DBL_MAX),currentLagrLB(-COIN_DBL_MAX),centreLagrLB(-COIN_DBL_MAX),trialLagrLB(-COIN_DBL_MAX),
 LagrLB_Local(0.0),ALVal_Local(COIN_DBL_MAX),ALVal(COIN_DBL_MAX),objVal(COIN_DBL_MAX),
 	incumbentVal(COIN_DBL_MAX),localDiscrepNorm(1e9),discrepNorm(1e9),
-	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(10),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),noGSIts(1),
+	totalNoGSSteps(0),infeasIndex_(-1),maxNoSteps(1000000),maxNoGSSteps(10),maxNoInnerSteps(MAX_NO_INNERSTEPS),maxNoConseqNullSteps(1e6),
 	baselineRho(1.0),rho(1.0),nThreads(1),nVerticesUsed(100),
-	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.5),phase(0),tCritVal(1e10),tCritParam(1e-10){
+	nS(-1),ftype(2),omegaUpdated_(false),SSCParam(0.1),innerSSCParam(0.9),phase(0),tCritVal(1e10),tCritParam(1e-10){
 
 	//smpsModel.readSmps(par->filename.c_str());
 	
@@ -247,8 +247,8 @@ cout << "Begin setting up " << nNodeSPs << " solvers at process " << mpiRank << 
 #endif
 	    subproblemSolvers[tS]->finishInitialisation(); 
 	    
-	    x_current.push_back(subproblemSolvers[tS]->getX());
-	    y_current.push_back(subproblemSolvers[tS]->getY());
+	    xy_current.push_back(subproblemSolvers[tS]->getX());
+	    //y_current.push_back(subproblemSolvers[tS]->getY());
 	    pr.push_back(subproblemSolvers[tS]->getProbabilities());
 	    scaling_matrix.push_back(new double[n1]);
 	    omega_tilde.push_back(new double[n1]);
@@ -467,7 +467,7 @@ catch(std::exception &e){
 }
 #if 0
 	    for (int i = 0; i < n1; i++) {
-	    	omega_current[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    	omega_current[tS][i] += rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i]);
 	    }
 #endif
 	}//for tS
@@ -475,7 +475,7 @@ catch(std::exception &e){
 	
 //if(mpiRank==0){cout << "After z: " << endl;}
 //printZ();
-	//weightedAverage(x_current, pr, z_local, z_current, nNodeSPs, n1, mpiRank);
+	//weightedAverage(xy_current, pr, z_local, z_current, nNodeSPs, n1, mpiRank);
 
 	#ifdef USING_MPI
 	if (mpiSize > 1) {
@@ -518,10 +518,10 @@ catch(std::exception &e){
 		for (int i = 0; i < n1; i++) {
 		   #ifdef EUCLIDNORM
 		    if(discrepNorm > 1e-20){
-		      omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i])/sqrt(discrepNorm);
+		      omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i])/sqrt(discrepNorm);
 		    }
 		   #else
-		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i]);
 		   #endif
 		}
 	    }
@@ -568,7 +568,7 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 	bool isLastGSIt;
 	bool needToContinue = false;
 	assert(currentIter_ >= 0);
-	for(int itGS=0; itGS < noGSIts; itGS++) { //The inner loop has a fixed number of occurences
+	for(int itGS=0; itGS < maxNoGSSteps; itGS++) { //The inner loop has a fixed number of occurences
 	//for(int itGS=0; itGS < 5; itGS++) { //The inner loop has a fixed number of occurences
     	    for (int tS = 0; tS < nNodeSPs; tS++) {
 		//*************************** Quadratic subproblem ***********************************
@@ -577,7 +577,7 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 		if(subproblemSolvers[tS]->getNVertices()>0){
 		    for(int iii=0; iii<10; iii++){
 	    		for (int i = 0; i < n1; i++) {
-	        	    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	        	    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i]);
 	    		}
 	    	    	subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
 		    	subproblemSolvers[tS]->solveMPVertices(omega_centre[tS],z_current,rho,scaling_matrix[tS]);
@@ -617,10 +617,10 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 		for (int i = 0; i < n1; i++) {
 		  #ifdef EUCLIDNORM
 		    if(discrepNorm > 1e-20){
-		      omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i])/sqrt(discrepNorm);
+		      omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i])/sqrt(discrepNorm);
 		    }
 		  #else
-		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		    omega_tilde[tS][i] = omega_centre[tS][i] + rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i]);
 		  #endif
 		}
 		LagrLB_tS = subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]);
@@ -769,7 +769,7 @@ cerr << "performColGenStep(): Subproblem " << tS << " infeasible on proc " << mp
 		*(logFiles[tS]) << "Printing penalities: ";
 #endif
 		for(int ii=0; ii<n1; ii++){
-		    lhsCritVal += rho*scaling_matrix[tS][ii]*z_current[ii]*(x_current[tS][ii]-z_current[ii]);
+		    lhsCritVal += rho*scaling_matrix[tS][ii]*z_current[ii]*(xy_current[tS][ii]-z_current[ii]);
 #ifdef KEEP_LOG
 		    *(logFiles[tS]) << " " << rho*scaling_matrix[tS][ii];
 #endif
@@ -954,8 +954,8 @@ void PSCG::displayParameters(){
 	std::cout << "Maximum outer step: " << maxNoSteps << std::endl;
 	std::cout << "Maximum seconds spent on main updates: " << maxSeconds << std::endl;
 
-	if (noGSIts > 0) {
-		std::cout << "Number of inner loop iterations: " << noGSIts << std::endl;
+	if (maxNoGSSteps > 0) {
+		std::cout << "Number of inner loop iterations: " << maxNoGSSteps << std::endl;
 	}
 	else {
 		std::cout << "Number of inner loop iterations: " << "1" << std::endl;

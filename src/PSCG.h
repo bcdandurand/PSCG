@@ -196,8 +196,7 @@ double tCritVal;
 double tCritParam;
 //double *scaleVec_;
 
-vector<double*> x_current;
-vector<double*> y_current;
+vector<double*> xy_current;
 
 double* z_current;// = new double[n1];
 double* z_old;// = new double[n1];
@@ -251,7 +250,6 @@ int maxNoSteps;
 int maxNoInnerSteps;
 int maxNoGSSteps;
 int maxNoConseqNullSteps;
-int noGSIts;
 int maxSeconds;
 int nVerticesUsed;
 int nThreads;
@@ -403,6 +401,7 @@ double* getOrigVarUbds(){return origVarUB_;}
 double* getCurrentVarLbds(){return currentVarLB_;}
 double* getCurrentVarUbds(){return currentVarUB_;}
 
+#if 0
 void cloneCurrentVarBds(double*& lbs, double*& ubs){
 printCurrentVarBds();
     lbs = new double[n1];
@@ -418,6 +417,7 @@ void writeCurrentVarBds(double *lbs, double *ubs){
     memcpy(lbs,currentVarLB_,n1*sizeof(double));
     memcpy(ubs,currentVarUB_,n1*sizeof(double));
 }
+#endif
 
 void printOriginalVarBds(){
   if(mpiRank==0){
@@ -523,7 +523,9 @@ void updatePenalty(){
     //computeKiwielPenaltyUpdate();
     //double penaltyScale = 1.05;
     //computeScalingPenaltyUpdate(penaltyScale);
-    setPenalty(rho+baselineRho);
+    if(innerSSCVal >= innerSSCParam) setPenalty(rho+baselineRho);
+    else if(innerSSCVal < innerSSCParam/2.0) setPenalty(max(baselineRho,rho-baselineRho));
+    //else if(innerSSCVal < innerSSCParam/2.0) setPenalty(max(baselineRho,0.618*rho));
     //computeKiwielPenaltyUpdate();
     //}
 #if 0
@@ -575,9 +577,11 @@ void setMaxNoGSSteps(int noSteps){maxNoGSSteps=noSteps;}
 void setMaxNoInnerSteps(int noSteps){maxNoInnerSteps=noSteps;}
 void setMaxNoConseqNullSteps(int noNullSteps){maxNoConseqNullSteps=noNullSteps;}
 void setSSCParam(double ssc){SSCParam=ssc;}
+void setInnerSSCParam(double ssc){innerSSCParam=ssc;}
 void setTCritParam(double tcrit){tCritParam=tcrit;}
 void setPhase(int ph){phase=ph;}
 void setRho(double rhoVal){rho=rhoVal;}
+void setBaselineRho(double rhoVal){baselineRho=rhoVal;}
 
 void preSolveMP(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
@@ -595,10 +599,10 @@ void preSolveMP(){
 	    for (int i = 0; i < n1; i++) {
 		#ifdef EUCLIDNORM
 		  if(discrepNorm > 1e-20){
-		    omega_tilde[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i])/sqrt(discrepNorm);
+		    omega_tilde[tS][i] += rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i])/sqrt(discrepNorm);
 		  }
 		#else
-		    omega_tilde[tS][i] += rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+		    omega_tilde[tS][i] += rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i]);
 		#endif
 	    }
       	    subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_tilde[tS]); //prepares next call of solveMPLineSearch(omega,z,scaling_vector)
@@ -718,6 +722,7 @@ double processBound(){
     objVal=findPrimalFeasSolnWith(z_current);
     brVarInfo = findBranchingIndex();
     //if(mpiRank==0) cout << "Deciding whether to proceed to solve current node to higher precision..." << endl;
+    setRho(100);
     while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-4 && currentIter_<5000){
       setPhase(2);
       if(mpiRank==0) cout << "No branching, proceeding to solve current node to higher precision..." << endl;
@@ -819,7 +824,7 @@ void updateZ(){
             penSum[i]=0.0;
             for (int tS = 0; tS < nNodeSPs; tS++)
             {
-                z_local[i] += x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
+                z_local[i] += xy_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
                 penSumLocal[i]+= scaling_matrix[tS][i]*pr[tS];
             }
         }
@@ -835,7 +840,7 @@ void updateZ(){
 	  double sumSqrNorms=0.0;
           for (int tS = 0; tS < nNodeSPs; tS++){
 	    for(int i=0; i<n1; i++){
-	      sumSqrNorms += (x_current[tS][i] - z_current[i])*scaling_matrix[tS][i]*(x_current[tS][i]-z_current[i]);
+	      sumSqrNorms += (xy_current[tS][i] - z_current[i])*scaling_matrix[tS][i]*(xy_current[tS][i]-z_current[i]);
 	    }
 	  }
           #ifdef USING_MPI
@@ -857,7 +862,7 @@ void averageOfBestVertices(double *z=NULL, double *weightVec=NULL){
 	    z[i] = 0.0;
 	    for (int tS = 0; tS < nNodeSPs; tS++)
 	    {
-		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
+		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//xy_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
 	    }
 	}
 	if(weightVec!=NULL){
@@ -870,7 +875,7 @@ void averageOfBestVertices(double *z=NULL, double *weightVec=NULL){
 	    z[i] = 0.0;
 	    for (int tS = 0; tS < nNodeSPs; tS++)
 	    {
-		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
+		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//xy_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
 	    }
 	}
 	  for (int tS = 0; tS < nNodeSPs; tS++) weight += 1.0;
@@ -887,7 +892,7 @@ void averageOfAll(double *z=NULL, double *weightVec=NULL){
 	    z[i] = 0.0;
 	    for (int tS = 0; tS < nNodeSPs; tS++)
 	    {
-		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
+		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//xy_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
 	    }
 	}
 	if(weightVec!=NULL){
@@ -900,7 +905,7 @@ void averageOfAll(double *z=NULL, double *weightVec=NULL){
 	    z[i] = 0.0;
 	    for (int tS = 0; tS < nNodeSPs; tS++)
 	    {
-		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//x_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
+		z_local[i] += subproblemSolvers[tS]->getXVertex()[i];//xy_current[tS][i] * scaling_matrix[tS][i]*pr[tS];
 	    }
 	}
 	  for (int tS = 0; tS < nNodeSPs; tS++) weight += 1.0;
@@ -926,7 +931,7 @@ void dispOfBestXVertices(double *retVec=NULL, double *aveVec=NULL, double *weigh
     else{
       for(int tS=0; tS<nNodeSPs; tS++){
         for(int ii=0; ii<n1; ii++){
-    	     z_local[ii] += fabs(aveVec[ii] - x_current[tS][ii]);
+    	     z_local[ii] += fabs(aveVec[ii] - xy_current[tS][ii]);
 	}
 	weightSum += 1.0;
       }
@@ -1211,7 +1216,7 @@ void dispOfX(double *retVec, double *aveVec=NULL, double *weights=NULL){
     if(weights!=NULL){
       for(int tS=0; tS<nNodeSPs; tS++){
         for(int ii=0; ii<n1; ii++){
-    	     z_local[ii] += weights[tS]*fabs(aveVec[ii] - x_current[tS][ii]);
+    	     z_local[ii] += weights[tS]*fabs(aveVec[ii] - xy_current[tS][ii]);
 	}
 	weightSum += weights[tS];
       }
@@ -1219,7 +1224,7 @@ void dispOfX(double *retVec, double *aveVec=NULL, double *weights=NULL){
     else{
       for(int tS=0; tS<nNodeSPs; tS++){
         for(int ii=0; ii<n1; ii++){
-    	     z_local[ii] += fabs(aveVec[ii] - x_current[tS][ii]);
+    	     z_local[ii] += fabs(aveVec[ii] - xy_current[tS][ii]);
 	}
 	weightSum += 1.0;
       }
@@ -1350,11 +1355,11 @@ void setZStatus(int stat){modelStatus_[Z_STATUS]=stat;}
 //********************** Serious Step Condition (SSC) **********************
 double computeSSCVal(){
     if(ALVal - centreLagrLB < -SSC_DEN_TOL){
-        if(mpiRank==0){cout << " (ALVal,centreLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << centreLagrLB << ")" << endl;}
+        if(mpiRank==0){cerr << " (ALVal,centreLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << centreLagrLB << ")" << endl;}
     }
     if(ALVal + 0.5*discrepNorm  - trialLagrLB < -SSC_DEN_TOL){
-        if(mpiRank==0){cout << mpiRank << " (ALVal,trialLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << trialLagrLB << ")" << endl;	
-	cout << "regularIteration(): Something probably went wrong with the last computation of trialLagrLB, returning..." << endl;}
+        if(mpiRank==0){cerr << mpiRank << " (ALVal,trialLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << trialLagrLB << ")" << endl;	
+	cerr << "regularIteration(): Something probably went wrong with the last computation of trialLagrLB, returning..." << endl;}
     }
     tCritVal = ALVal + 0.5*discrepNorm  - centreLagrLB;
     shouldTerminate = (tCritVal<tCritParam);// && (discrepNorm < 1e-20);
@@ -1371,7 +1376,7 @@ bool updateOmega(bool useSSC){
 	//double centreLagrLBLocal = 0.0;
 	for (int tS = 0; tS < nNodeSPs; tS++) {
 	  for (int i = 0; i < n1; i++) {
-	    omega_centre[tS][i] += stepLength*rho*scaling_matrix[tS][i] * (x_current[tS][i] - z_current[i]);
+	    omega_centre[tS][i] += stepLength*rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i]);
 	  }
 	  //centreLagrLBLocal += pr[tS]*subproblemSolvers[tS]->optimiseLagrOverVertexHistory(omega_centre[tS]);
 	  recordKeeping[tS][1]=recordKeeping[tS][0];
@@ -1598,7 +1603,7 @@ void printStatus(){
 	//cout << setfill( ' ' );
 	//cout << "Iter " << currentIter_ << setw(wid) << setprecision(10) << "LagrLB " << currentLagrLB << setw(wid) << "ALVal " << ALVal << setw(wid) << setprecision(5) << "primDiscr " << discrepNorm
 	//	<< setw(wid) << "SSCVal " << SSCVal << setw(wid) << "innSSCVal " << innerSSCVal << setw(wid) << "MP iters: " << noInnerSolves << endl;
-	printf("Iter %6d: LagrLB: %-10.8gALVal: %-10.8gbestPr: %-10.8gpDisc: %-8.3gSSCVal: %-8.3ginnSSCVal: %-8.3gtcrit: %-8.3gnoInnerMP: %-5d\n", currentIter_, currentLagrLB, ALVal, incumbentVal,discrepNorm, SSCVal, innerSSCVal, tCritVal, cumNoInnerSolves);
+	printf("Iter %6d: LagrLB: %-10.8gALVal: %-10.8gbestPr: %-10.8gpDisc: %-8.3gSSCVal: %-8.3ginnSSCVal: %-8.3gtcrit: %-8.3gnoInnerMP: %-5drho: %-8.1f\n", currentIter_, currentLagrLB, ALVal, incumbentVal,discrepNorm, SSCVal, innerSSCVal, tCritVal, cumNoInnerSolves, rho);
 //	printf("Best node: %0.14g, Incumbent value: %0.14g\n", getBestNodeQuality(), getIncumbentVal());
 	//printf("Aug. Lagrangian value: %0.9g\n", ALVal);
 	//printf("Norm of primal discrepancy: %0.6g\n", discrepNorm);

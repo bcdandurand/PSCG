@@ -1,10 +1,10 @@
 # Parallel Stabilised Column Generation (PSCG) Algorithm
 
 
-**Author: Brian C. Dandurand (2017-2019)** 
-Postdoctoral Appointee 
-Division of Mathematics and Computer Science
-Argonne National Laboratory
+**Author: Brian C. Dandurand (2017-2019)**  
+Postdoctoral Appointee  
+Division of Mathematics and Computer Science 
+Argonne National Laboratory 
 
 This code is based on and modified from code developed by Jeffrey Christiansen, Brian Dandurand, and Fabricio Oliveira
 at RMIT in Melbourne Australia. The code implements the algorithm described in

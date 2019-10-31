@@ -427,15 +427,16 @@ void computeAggrXYAt(int kk){
 #endif
 }
 
-double* computeDispBasedOnIntDisc(){
+double* computeDispBasedOnIntDisc(const double* z=NULL){
     resetDispersionsToZero();
+    if(z==NULL) z=x;
     for(int kk=0; kk<n1+n2; kk++){
 	if(getColTypes()[kk]!='C'){
 	    //cout << kk <<": ";
 	    if(fabs(x[kk]-round(x[kk])) > MIP_TOL){
 	        computeAggrXYAt(kk);
 		for(int ii=0; ii<n1+n2; ii++){
-		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-x[ii]) + aggrA1*fabs(aggrXY1[ii]-x[ii]);
+		    dispersions[ii] += aggrA0*fabs(aggrXY0[ii]-z[ii]) + aggrA1*fabs(aggrXY1[ii]-z[ii]);
 	 	    //cout << " (" << ii << "," << dispersions[ii] << ")";
 		}
 	    }
@@ -775,6 +776,8 @@ void setQuadraticTerm(const double rho, const double *scaling_vector) {
 
 void solveMPLineSearch(const double *omega, const double *z, const double rho, const double *scaling_vector, int vertIndex=-1, double *z_average=NULL); 
 void solveMPHistory(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
+	const double rho, const double *scaling_vector, bool updateDisp=false);
+void solveMPHistoryTrustRegion(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double rho, const double *scaling_vector, bool updateDisp=false);
 void solveMPHistory2Norm(const double *omega, const double *z, const double *zLBs, const double *zUBs, 
 	const double rho, const double *scaling_vector, bool updateDisp=false);
@@ -1403,11 +1406,22 @@ virtual int solveLagrangianWithXFixedToZ(const double *z, const double *omega, d
    fixXToZ(z);
 //printColTypesFirstStage();
 //printColBds();
+   OsiCpxSolverInterface *osi = LagrMIPInterface_;
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_AbsMIPGap, MIP_TOL*1e3);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_MIPGap, MIP_TOL);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_Integrality, MIP_TOL*1e3);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Simplex_Tolerances_Optimality, MIP_TOL*1e3);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Simplex_Tolerances_Feasibility, MIP_TOL*1e3);
 
    solverStatus_ = solveLagrangianProblem(omega,true);
 
    //unfixX(origLBs, origUBs, colTypes); 
    unfixX(origLBs, origUBs); 
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_AbsMIPGap, MIP_TOL);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_MIPGap, MIP_TOL*1e-3);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_MIP_Tolerances_Integrality, MIP_TOL);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Simplex_Tolerances_Optimality, MIP_TOL);
+   CPXsetdblparam( osi->getEnvironmentPtr(), CPXPARAM_Simplex_Tolerances_Feasibility, MIP_TOL);
 //printColTypesFirstStage();
 //printColBds();
    return solverStatus_;

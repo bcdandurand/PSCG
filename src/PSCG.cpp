@@ -398,13 +398,13 @@ if(mpiRank==0){cerr << "Begin initialIteration()" << endl;}
         modelStatus_[Z_STATUS]=Z_UNKNOWN;
 	modelStatus_[SP_STATUS]=SP_ITER_LIM;
 	cumNoInnerSolves=0;
-try{
-    	clearSPVertexHistory();
-}
-catch(std::exception &e){
-    std::cout << "exception caught while updating vertex history in initialIteration: " << e.what() << endl;
-    exit(1);
-}
+	try{
+    	  clearSPVertexHistory();
+	}
+	catch(std::exception &e){
+	  std::cout << "exception caught while updating vertex history in initialIteration: " << e.what() << endl;
+	  exit(1);
+	}
     	noSeriousSteps=0;
     	noConseqNullSteps=0;
 	innerSSCVal = 0.5;
@@ -445,7 +445,7 @@ catch(std::exception &e){
 		cerr << "Exception thrown during MIP solve phase." << endl;
 	   }
 
-try{
+	   try{
 	    subproblemSolvers[tS]->updateSolnInfo();
 	    subproblemSolvers[tS]->addVertex();
 	    subproblemSolvers[tS]->setXToVertex();
@@ -460,11 +460,11 @@ try{
 	    LagrLB_Local += pr[tS]*( subproblemSolvers[tS]->getLagrBd() );//obj;
 
 	    updateVertexHistory(tS);
-}
-catch(std::exception &e){
-    std::cout << "exception caught while updating vertex history in initialIteration: " << e.what() << endl;
-    exit(1);
-}
+	   }
+	   catch(std::exception &e){
+	    std::cout << "exception caught while updating vertex history in initialIteration: " << e.what() << endl;
+	    exit(1);
+	   }
 #if 0
 	    for (int i = 0; i < n1; i++) {
 	    	omega_current[tS][i] += rho*scaling_matrix[tS][i] * (xy_current[tS][i] - z_current[i]);
@@ -589,6 +589,7 @@ bool PSCG::solveContinuousMPs(bool adjustPenalty){
 			subproblemSolvers[tS]->solveMPHistory2Norm(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
 		    #else
 			subproblemSolvers[tS]->solveMPHistory(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
+			//subproblemSolvers[tS]->solveMPHistoryTrustRegion(omega_centre[tS],z_current,NULL,NULL,rho,scaling_matrix[tS],false);
 		    #endif
 //cout << "Done solving subproblem: " << tS << endl;
 		}
@@ -695,7 +696,7 @@ if(mpiRank==0){cout << "Begin solveRecourseProblemGivenFixedZ()" << endl;}
 	if (mpiSize == 1) {
 		objVal=localObjVal;
 	}
-if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << objVal << endl;}
+	if(mpiRank==0){cout << "End solveRecourseProblemGivenFixedZ() with value: " << objVal << endl;}
 	return isFeas;
 }
 

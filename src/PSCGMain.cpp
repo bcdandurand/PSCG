@@ -73,12 +73,13 @@ int main(int argc, char **argv) {
 	#else
 	 PSCG model(smpsModel);
 	#endif
-	model.setPhase(0);
-	model.setRho(1);
-	model.setBaselineRho(1);
-        model.setMaxNoSteps(100);
-        model.setMaxNoGSSteps(20);
-        model.setMaxNoInnerSteps(5);
+	model.setPhase(2);
+	model.setRho(50);
+	model.setBaselineRho(50);
+        model.setMaxNoSteps(400);
+        model.setMaxNoGSSteps(1);
+        model.setMaxNoInnerSteps(1);
+	model.setInnerSSCParam(0.5);
 	model.computeBound();
 	//double *z = new double[model.n1];
 	#if 0

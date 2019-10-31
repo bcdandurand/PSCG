@@ -582,6 +582,7 @@ void setTCritParam(double tcrit){tCritParam=tcrit;}
 void setPhase(int ph){phase=ph;}
 void setRho(double rhoVal){rho=rhoVal;}
 void setBaselineRho(double rhoVal){baselineRho=rhoVal;}
+void setMaxNoVertices(int noVertices){nVerticesUsed=noVertices;}
 
 void preSolveMP(){
     for(int tS=0; tS<nNodeSPs; tS++) memcpy(omega_tilde[tS],omega_centre[tS],n1*sizeof(double));
@@ -695,7 +696,7 @@ double computeBound(){
 
 double processBound(){
     bool updatePenalty=true;
-    setPhase(0);
+    //setPhase(0);
     for(currentIter_=0; shouldContinue; currentIter_++){
 	#ifdef KEEP_LOG
 	    for(int tS=0; tS<nNodeSPs; tS++){*(logFiles[tS]) << endl << "Regular iteration: " << currentIter_ << endl;}
@@ -722,17 +723,16 @@ double processBound(){
     objVal=findPrimalFeasSolnWith(z_current);
     brVarInfo = findBranchingIndex();
     //if(mpiRank==0) cout << "Deciding whether to proceed to solve current node to higher precision..." << endl;
-    setRho(100);
-    while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-4 && currentIter_<5000){
-      setPhase(2);
+    while(brVarInfo.index<0 && incumbentVal - currentLagrLB > 1e-4 && currentIter_<1000){
+      //setPhase(2);
       if(mpiRank==0) cout << "No branching, proceeding to solve current node to higher precision..." << endl;
-      for(int kk=0; kk<100; kk++){
+      for(int kk=0; kk<20; kk++){
 	regularIteration(updatePenalty,false);
 	currentIter_++;
       }
       objVal=findPrimalFeasSolnWith(z_current);
       brVarInfo = findBranchingIndex();
-      setPhase(0);
+      //setPhase(0);
     }
 #if 0
     if(mpiRank==0){
@@ -1067,7 +1067,7 @@ BranchingVarInfo findBranchingIndex(){
 	//intDiscVec = subproblemSolvers[tS]->computeIntegralityDiscrVec();
 	//if(integrDiscr_[tS] < 1e-10) integrDiscr_[tS]=0.0;
 	    //dispVec = subproblemSolvers[tS]->computeDispersions();
-	    dispVec = subproblemSolvers[tS]->computeDispBasedOnIntDisc();
+	    dispVec = subproblemSolvers[tS]->computeDispBasedOnIntDisc(z_current);
 	    for(int ii=0; ii<n1; ii++){
 		z_local[ii] += dispVec[ii];
 	    }
@@ -1355,10 +1355,10 @@ void setZStatus(int stat){modelStatus_[Z_STATUS]=stat;}
 //********************** Serious Step Condition (SSC) **********************
 double computeSSCVal(){
     if(ALVal - centreLagrLB < -SSC_DEN_TOL){
-        if(mpiRank==0){cerr << " (ALVal,centreLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << centreLagrLB << ")" << endl;}
+        if(mpiRank==0 && phase !=2){cerr << " (ALVal,centreLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << centreLagrLB << ")" << endl;}
     }
     if(ALVal + 0.5*discrepNorm  - trialLagrLB < -SSC_DEN_TOL){
-        if(mpiRank==0){cerr << mpiRank << " (ALVal,trialLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << trialLagrLB << ")" << endl;	
+        if(mpiRank==0 && phase !=2){cerr << mpiRank << " (ALVal,trialLagrLB) (" << setprecision(10) << ALVal << "," << setprecision(10) << trialLagrLB << ")" << endl;	
 	cerr << "regularIteration(): Something probably went wrong with the last computation of trialLagrLB, returning..." << endl;}
     }
     tCritVal = ALVal + 0.5*discrepNorm  - centreLagrLB;

@@ -1,18 +1,20 @@
 # Parallel Stabilised Column Generation (PSCG) Algorithm
 
 
-**Author: Brian C. Dandurand (2017-2019)**  
+Author: Brian C. Dandurand (2017-2019)  
 Postdoctoral Appointee  
-Division of Mathematics and Computer Science 
+Division of Mathematics and Computer Science  
 Argonne National Laboratory 
 
-This code is based on and modified from code developed by Jeffrey Christiansen, Brian Dandurand, and Fabricio Oliveira
-at RMIT in Melbourne Australia. The code implements the algorithm described in
+PSCG is a C++ implementation of the algorithm developed in
 
 Dandurand, B., Boland, N., Christiansen, J., Eberhard, A., Oliveira, F., 
-"A parallelizable augmented Lagrangian method applied to large-scale nonconvex-constrained optimization problems," *Mathematical Programming A*, 1–34, 2018
+"A parallelizable augmented Lagrangian method applied to large-scale nonconvex-constrained optimization problems," *Mathematical Programming A*, 1–34, 2018.
 
-The developments of the above citation was funded under the Australian Research Council Project ARC DP 140100985 during 2015-2016.
+It is based on C++ code originally developed by Jeffrey Christiansen, Brian Dandurand, and Fabricio Oliveira
+at RMIT in Melbourne Australia. 
+
+The developments in the above citation were funded under the Australian Research Council Project ARC DP 140100985 during 2015-2016.
 CIs of that projects were Prof. Andrew Eberhard (RMIT), Prof. Natashia Boland (Georgia Tech), and PI Prof. Jeffrey Linderoth (U. Wisconsin-Madison).
 
 Functionally, PSCG is similar to the alternating direction method of multipliers (ADMM) with the following two exceptions:
@@ -23,6 +25,8 @@ unlike ADMM, one of those block updates correspond to an iteration of the Frank-
 
 The proof of optimal convergence under mild assumptions is developed in the above citation.
 PSCG has been applied to finding the optimal solution to the Lagrangian dual of a two-stage stochastic
-integer program. Currently, the problem needs to be in SMPS format. 
+integer program. 
+
+Currently, the problem needs to be in SMPS format. 
 Furthermore, the current implementation uses a third party library DSP 
 developed by Kibaek Kim at Argonne National Laboratory to read the necessary subproblems from SMPS format.

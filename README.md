@@ -1,15 +1,18 @@
 # Parallel Stabilised Column Generation (PSCG) Algorithm
 
 
-Code Author: Brian C. Dandurand (2017-2019), Postdoctoral Appointee, Division of Mathematics and Computer Science, Argonne National Laboratory
+**Author: Brian C. Dandurand (2017-2019)** 
+Postdoctoral Appointee 
+Division of Mathematics and Computer Science
+Argonne National Laboratory
+
 This code is based on and modified from code developed by Jeffrey Christiansen, Brian Dandurand, and Fabricio Oliveira
 at RMIT in Melbourne Australia. The code implements the algorithm described in
 
 Dandurand, B., Boland, N., Christiansen, J., Eberhard, A., Oliveira, F., 
-``A parallelizable augmented Lagrangian method applied to large-scale nonconvex-constrained optimization problems," \emph{Mathematical
-Programming A}, 1–34, 2018
+"A parallelizable augmented Lagrangian method applied to large-scale nonconvex-constrained optimization problems," *Mathematical Programming A*, 1–34, 2018
 
-The development of the above citation was funded under the Australian Research Council Project ARC DP 140100985 during 2015-2016.
+The developments of the above citation was funded under the Australian Research Council Project ARC DP 140100985 during 2015-2016.
 CIs of that projects were Prof. Andrew Eberhard (RMIT), Prof. Natashia Boland (Georgia Tech), and PI Prof. Jeffrey Linderoth (U. Wisconsin-Madison).
 
 Functionally, PSCG is similar to the alternating direction method of multipliers (ADMM) with the following two exceptions:

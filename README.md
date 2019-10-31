@@ -33,5 +33,5 @@ PSCG is efficiently parallelizable using the scenario-wise decomposition of such
 Each iteration only requires the solution of small scenario-specific subproblems and two MPI communications of the reduce-sum type.
 
 Currently, PSCG can only be applied to mixed-integer stochastic optimization problems in SMPS format. 
-Furthermore, the current implementation uses a third party library DSP 
+The current implementation uses a third party library DSP 
 developed by Kibaek Kim at Argonne National Laboratory to read the necessary subproblems from SMPS format.

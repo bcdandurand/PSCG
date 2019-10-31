@@ -22,12 +22,13 @@ Functionally, PSCG is similar to the alternating direction method of multipliers
 
 1) Like ADMM, primal updates are performed via a two-block Gauss-Seidel iteration; 
 unlike ADMM, one of those block updates correspond to an iteration of the Frank-Wolf method applied to the block specific subproblem rather than computing an exact minimization;
-2) Dual updates are taken conditionally based on a serious step condition common with proximal bundle methods, rather than unconditionally in ADMM.
+2) Dual updates are taken conditionally based on a proximal bundle method serious step condition, rather than unconditionally as in ADMM.
 
-The proof of optimal convergence under mild assumptions is developed in the above citation.
+A proof of optimal convergence under mild assumptions is developed in the above citation.
 PSCG has been applied to finding the optimal solution to the Lagrangian dual of a two-stage stochastic
-integer program. 
+integer program. PSCG is efficiently parallelizable using the scenario-wise decomposition of such problems.
+Each iteration only requires the solution of small scenario-specific subproblems and two MPI communications of the reduce-sum type.
 
-Currently, the problem needs to be in SMPS format. 
+Currently, PSCG can only be applied to mixed-integer stochastic optimization problems in SMPS format. 
 Furthermore, the current implementation uses a third party library DSP 
 developed by Kibaek Kim at Argonne National Laboratory to read the necessary subproblems from SMPS format.

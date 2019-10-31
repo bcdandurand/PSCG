@@ -27,7 +27,8 @@ unlike ADMM, one of those block updates correspond to an iteration of the Frank-
 A proof of optimal convergence under mild assumptions is developed in the above citation.
 PSCG has been applied to finding the optimal solution to the Lagrangian dual of a two-stage stochastic 
 mixed-integer program (SMIP) due to the Lagrangian relaxation of the non-anticipativity constraints. 
-(In general, the optimal value computed is a lower bound to the optimal value of a SMIP assuming minimization.)
+(In general, the optimal value computed is a lower bound to the optimal value of a SMIP assuming minimization.
+This bound is stronger in general than the linear programming bound.)
 PSCG is efficiently parallelizable using the scenario-wise decomposition of such problems.
 Each iteration only requires the solution of small scenario-specific subproblems and two MPI communications of the reduce-sum type.
 

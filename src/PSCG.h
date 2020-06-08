@@ -25,7 +25,7 @@ CIs of that projects were Prof. Andrew Eberhard, Prof. Natashia Boland, and PI P
 #include <sys/time.h>
 //#include "PSCGParams.h"
 #include <utility>
-#include "DecTssModel.h"
+#include ".h"
 #include "PSCGScen.h"
 
 using namespace std;

@@ -20,9 +20,9 @@ EXE = $(EXNAME)
 # CHANGEME: Here is the name of all object files corresponding to the source
 #           code that you wrote in order to define the problem statement
 SRCDIR = src
-SRC = $(SRCDIR)/extract_sp.cpp
+SRC = $(SRCDIR)/PSCG.cpp 
 OBJDIR = obj
-OBJS = $(OBJDIR)/extract_sp.o
+OBJS = $(OBJDIR)/PSCG.o
 
 # CHANGEME: Additional libraries
 ADDLIBS = 
@@ -57,6 +57,7 @@ INCL = -I$(COINORPATH)/include/coin
 INCL += -I$(COINORPATH)/include/coin-or 
 CPLEXINC=$(CPLEXDIR)/include/ilcplex
 INCL += -I$(CPLEXINC)
+INCL += -I./include
 INCL += $(ADDINCFLAGS)
 
 # Linker flags
@@ -77,4 +78,4 @@ $(OBJS): $(SRC)
 	$(CXX) $(CXXFLAGS) $(INCL) -c $(SRC) -o $(OBJS)
 
 clean: 
-	rm -rf $(EXE) *.o
+	rm -rf $(EXE) $(OBJS)

@@ -10,15 +10,7 @@ Finds the optimal solution to the Lagrangian dual of a two-stage stochastic
 integer program using a Frank-Wolfe-based Method of Multipliers approach.
 */
 
-#include "PSCG.h"
-//#include "ProblemDataBodur.h"
-//#include "Stopwatch.h"
-#include "DecTssModel.h"
-
-//#define OUTER_LOOP_TERMINATION 1e-10
-//#define TIME_TYPES 2
-//#define DEFAULT_MAX_OUTER_LOOP 20 
-
+#include "PSCGScen.h"
 
 using namespace std;
 
@@ -28,16 +20,6 @@ int main(int argc, char **argv) {
 	//******************Wall Timing Setup****************
 
 	//Start timing. More refined timing is possible for debugging.
-#if 0
-	Stopwatch totalTimer;
-   	Stopwatch interpTimer;
-   	Stopwatch updateTimer;
-   	double totalTimeQP [TIME_TYPES] = {0,0};
-   	double totalTimeMIP [TIME_TYPES] = {0,0};
-
-   	totalTimer.start();
-   	double totalTimeAllStep [TIME_TYPES] = {0,0};
-#endif
 
 	//******************MPI Setup**********************
 	int mpiRank;
@@ -64,7 +46,6 @@ int main(int argc, char **argv) {
 	//par.readParameters(argc, argv);
 	//par.setMPIParams(mpiSize,mpiRank);
 	
-	DecTssModel smpsModel;
 	smpsModel.readSmps(argv[1]);	
 
 	//PSCG model(&par);

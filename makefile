@@ -42,10 +42,12 @@ CPLEXDIR = $(HOME)/CPLEX128/cplex
 ##########################################################################
 
 # C++ Compiler command
-CXX = g++
+#CXX = g++
+CXX = mpicxx 
 
 # C++ Compiler options
-CXXFLAGS = -O3 -pipe -DNDEBUG -Wparentheses -Wreturn-type -Wcast-qual -Wall -Wpointer-arith -Wwrite-strings -Wconversion -Wno-unknown-pragmas -Wno-long-long   -DSMI_BUILD
+CXXFLAGS = -O3 -pipe -DNDEBUG -Wparentheses -Wreturn-type -Wcast-qual -Wall -Wpointer-arith \
+	-Wwrite-strings -Wconversion -Wno-unknown-pragmas -Wno-long-long   -DSMI_BUILD -DUSING_MPI
 
 # Stochastic data directory
 # CXXFLAGS += -DDATASTOCHASTICDIR=/homes/bcdandurand/COIN-OR/Data/Stochastic
@@ -65,6 +67,7 @@ INCL += $(ADDINCFLAGS)
 LIBS = -L$(COINORPATH)/lib -lSmi -lOsiCpx -lOsiClp -lOsi -lClp -lCoinUtils 
 CPLEXLIB=$(CPLEXDIR)/bin/x86-64_linux
 LIBS += -L$(CPLEXLIB) -lcplex1280
+#OTHERLIBS = -lstdc++ -lm -lpthread -lz -lbz2
 
 
 all: $(EXE)

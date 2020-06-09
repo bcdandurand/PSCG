@@ -6,6 +6,7 @@ using namespace std;
 
 #include <cassert>
 #include <iostream>
+#include "time.h"
 
 #include "CoinPragma.hpp"
 #include "SmiScnModel.hpp"
@@ -26,120 +27,125 @@ using namespace std;
 
 //forward declarations
 
-void testingMessage(const char * const);
-void SmpsIO(const char* const);
 vector<vector<double> > getColSolutionsByStageForScn(SmiScnModel &smi, int ns);
-vector<vector<int> > extractScnSPColsByStage(SmiScnModel &smi, int ns);
-vector<vector<int> > extractScnSPRowsByStage(SmiScnModel &smi, int ns);
-vector<double> extractScnProbTrace(SmiScnModel &smi, int ns);
-void extractScnSubmatrix(OsiSolverInterface *smiOsi, CoinPackedMatrix &spMat, vector<vector<int> > &stg_cols, vector<vector<int> > &stg_rows);
-void constructScnSubmatrix(OsiSolverInterface *smiOsi, CoinPackedMatrix &spMat, vector<vector<int> > &stg_cols, vector<vector<int> > &stg_rows);
-vector<int> extractScnSP(SmiScnModel &smi, OsiSolverInterface *smiOsi, int ns, OsiSolverInterface *osi);
 
-int main()
-{
+int main(int argc, char **argv) {
 
-    testingMessage( "Model generation using SMPS files for Cambridge-Watson problems.\n" );
-    SmpsIO(DATASTOCHASTICDIR"/SSLP/sslp_5_25_50");
+    int mpiRank;
+    int mpiSize;
+    bool mpiHead;
+    bool parallel;
+    
+    time_t start_t, end_t;
+   //identifying whether the code is going to run in  parallel or not
+    #ifdef USING_MPI
+        MPI_Init(&argc, &argv);
+        MPI_Comm_rank(MPI_COMM_WORLD, &mpiRank);
+        MPI_Comm_size(MPI_COMM_WORLD, &mpiSize);
+        parallel = (mpiSize > 1);
+    #else
+        mpiRank = 0;
+        mpiSize = 1;
+        parallel = false;
+    #endif
+    //Flag for the head node recognise itself as such
+    mpiHead = (mpiRank == 0);
+    if(mpiHead){
+        time(&start_t);
+        cout << "Number of processors: " << mpiSize << endl;
+    }
 
-    testingMessage( "*** Done! *** \n");
+    SmiScnModel smi;
+    char p_name[256] = DATASTOCHASTICDIR;
+    //strcat(p_name,"/SSLP/sslp_5_25_50");
+    strcat(p_name,"/SSLP/sslp_10_50_100");
+    smi.readSmps(p_name);
+
+    if(mpiHead){
+        cout << "Model generation using SMPS files for "<< p_name << " problems." << endl ;
+    }
+
+    // generate OSI solver object
+    OsiCpxSolverInterface *smi_osi = new OsiCpxSolverInterface();
+
+    // set solver object for SmiScnModel
+    smi.setOsiSolverHandle(*smi_osi);
+
+    // load solver data
+    //  this step generates the deterministic equivalent
+    //  and returns an OsiSolver object
+    OsiSolverInterface *smi_osi_loaded = smi.loadOsiSolverData();
+
+
+    // solve
+    //if(mpiHead){
+    if(false){
+        // set some nice Hints to the OSI solver
+        smi_osi_loaded->setHintParam(OsiDoPresolveInInitial,true);
+        smi_osi_loaded->setHintParam(OsiDoScale,true);
+        smi_osi_loaded->setHintParam(OsiDoCrash,true);
+        smi_osi_loaded->messageHandler()->setLogLevel(0); //Nice hack to suppress all output
+        smi_osi_loaded->initialSolve();
+        smi_osi_loaded->branchAndBound();
+
+        // print results
+        cout << "Solved stochastic program " << p_name << endl;;
+        cout << "Number of rows: " << smi_osi_loaded->getNumRows() << endl;
+        cout << "Number of cols: " << smi_osi_loaded->getNumCols() << endl;
+        cout << "Optimal value: " << smi_osi_loaded->getObjValue() << endl;
+    }
+
+    int numScenarios=smi.getNumScenarios();
+    OsiCpxSolverInterface *sp_osi;
+    PSCGScen *sp_wrapper;
+    int cpx_status=0;
+    double optval_sum=0.0;
+    double optval_sum_local=0.0;
+    std::vector<OsiCpxSolverInterface*> osi_cpx_scns;
+    std::vector<PSCGScen*> scn_sps;
+    for (int ii=mpiRank ; ii<numScenarios; ii+=mpiSize) {
+        //cout << "Extracting subproblem: " << ii << endl;
+        sp_osi = new OsiCpxSolverInterface( ) ;
+        osi_cpx_scns.push_back( sp_osi );
+        sp_wrapper = new PSCGScen(smi,*smi_osi_loaded,*sp_osi,ii);
+        scn_sps.push_back( sp_wrapper );
+        //cout << "Done extracting subproblem: " << ii << endl;
+        sp_osi->switchToMIP();
+        sp_wrapper->enforceIntegrality();
+        sp_osi->messageHandler()->setLogLevel(0); //Nice hack to suppress all output
+	cpx_status=CPXsetintparam( sp_osi->getEnvironmentPtr(), CPXPARAM_Threads, 1);
+	cpx_status=CPXsetintparam( sp_osi->getEnvironmentPtr(), CPXPARAM_Parallel, CPX_PARALLEL_DETERMINISTIC); //no iteration message until solution
+        sp_osi->initialSolve();
+        sp_osi->branchAndBound();
+#if 0
+        cout << "Scenario " << ii << " optimal value: " << sp_osi->getObjValue() << endl;
+        cout << "Solution is: " << endl;
+        for(int nn=0; nn<sp_osi->getNumCols(); nn++){
+            cout << " " << (sp_osi->getColSolution())[nn];
+        } 
+        cout << endl;
+#endif
+        optval_sum_local += sp_osi->getObjValue();
+    }
+    #ifdef USING_MPI
+      if(mpiSize>1){
+          MPI_Allreduce(&optval_sum_local, &optval_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      }
+    #endif
+    if(mpiSize==1){
+        optval_sum=optval_sum_local;
+    }
+    if(mpiHead){
+        time(&end_t);
+	double time_elapsed = end_t - start_t;
+        cout << "Average optimal value: " << optval_sum << endl;
+    	cout << "Elapsed time is " << time_elapsed << " seconds." << endl;
+    	cout << "*** Done! *** " << endl;
+    }
 
     return 0;
 }
 
-void SmpsIO(const char * const name )
-{
-        SmiScnModel smi;
-
-        // read SMPS model from files
-        //  <name>.core, <name>.time, and <name>.stoch
-        smi.readSmps(name);
-
-        // generate OSI solver object
-        //  here we use OsiClp
-        OsiCpxSolverInterface *clp = new OsiCpxSolverInterface();
-
-        // set solver object for SmiScnModel
-        smi.setOsiSolverHandle(*clp);
-
-        // load solver data
-        //  this step generates the deterministic equivalent
-        //  and returns an OsiSolver object
-        OsiSolverInterface *osiStoch = smi.loadOsiSolverData();
-
-        // set some nice Hints to the OSI solver
-        osiStoch->setHintParam(OsiDoPresolveInInitial,true);
-        osiStoch->setHintParam(OsiDoScale,true);
-        osiStoch->setHintParam(OsiDoCrash,true);
-
-        // solve
-#if 1
-        osiStoch->initialSolve();
-        osiStoch->branchAndBound();
-
-        // print results
-        printf("Solved stochastic program %s\n", name);
-        printf("Number of rows: %d\n",osiStoch->getNumRows());
-        printf("Number of cols: %d\n",osiStoch->getNumCols());
-        printf("Optimal value: %g\n",osiStoch->getObjValue());
-#endif
-
-        // print solution to file
-        int numScenarios=smi.getNumScenarios();
-#if 0
-        for (int i=0 ; i<numScenarios; ++i) {
-            vector< vector<double> > solnsByStage = getColSolutionsByStageForScn(smi, i);
-            cout << "Scenario " << i << endl;
-            for(size_t stg=0; stg<solnsByStage.size(); stg++){
-                cout << "\tStage " << stg + 1 << " soln: ";
-                for(size_t jj=0; jj<solnsByStage[stg].size(); jj++){
-                    cout << "  " << solnsByStage[stg][jj];
-                }
-                cout << endl;
-            }
-        }
-#endif
-
-        double optval_sum=0.0;
-        std::vector<OsiCpxSolverInterface*> osi_cpx_scns;
-        std::vector<PSCGScen*> scn_sps;
-        for (int ii=0 ; ii<numScenarios; ++ii) {
-            cout << "Extracting subproblem: " << ii << endl;
-            osi_cpx_scns.push_back( new OsiCpxSolverInterface( ) );
-            scn_sps.push_back( new PSCGScen(smi,*osiStoch,*osi_cpx_scns[ii],ii) );
-            cout << "Done extracting subproblem: " << ii << endl;
-            osi_cpx_scns[ii]->switchToMIP();
-            //for (unsigned int nn = 0; nn < smi.getIntegerLen(); nn++) {
-	    scn_sps[ii]->enforceIntegrality();
-#if 0
-            if( ii==0 ){
-                osi_cpx_scns[ii]->writeLp("extract_model.out");
-            }
-#endif
-            osi_cpx_scns[ii]->messageHandler()->setLogLevel(0); //Nice hack to suppress all output
-            osi_cpx_scns[ii]->initialSolve();
-            osi_cpx_scns[ii]->branchAndBound();
-            printf("Scenario %d optimal value: %g\n",ii,osi_cpx_scns[ii]->getObjValue());
-            cout << "Solution is: " << endl;
-            for(int nn=0; nn<osi_cpx_scns[ii]->getNumCols(); nn++){
-                cout << " " << (osi_cpx_scns[ii]->getColSolution())[nn];
-            } 
-            cout << endl;
-            optval_sum += osi_cpx_scns[ii]->getObjValue();
-        }
-        cout << "Average optimal value: " << optval_sum << endl;
-
-
-}
-
-
-// Display message on stdout and stderr
-void testingMessage( const char * const msg )
-{
-//  std::cerr <<msg;
-  cout <<endl <<"*****************************************"
-       <<endl <<msg <<endl;
-}
 
 vector<vector<double> > getColSolutionsByStageForScn(SmiScnModel &smi, int scn){
     const double * osiSoln = (smi.getOsiSolverInterface())->getColSolution();
@@ -152,8 +158,8 @@ vector<vector<double> > getColSolutionsByStageForScn(SmiScnModel &smi, int scn){
     }
 
 
-    size_t n_stages = solnsByStage.size();
-    size_t stg = n_stages;
+    int n_stages = solnsByStage.size();
+    int stg = n_stages;
     node = smi.getLeafNode(scn);
     while (node != NULL){
         stg--;

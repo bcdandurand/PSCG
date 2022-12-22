@@ -130,7 +130,7 @@ protected:
     vector<int> int_indx;
     vector< vector<int> > int_indx_by_stg;
 
-    vector<double> all_orig_cfts;
+    vector<double> all_orig_cfts; // cfts = coefficients
     vector<vector<double> > orig_cfts_by_stg;
 
     vector<double> all_orig_col_ubs;
